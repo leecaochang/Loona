@@ -100,7 +100,7 @@ async def test_metrics_do_not_invalidate_on_value_changes(runtime, loona_hass):
     [
         {"strategy": {"type": "custom:example"}},
         {"cards": []},
-        {"cards": [{"name": "{{ states('sensor.wall') }}"}]},
+        {"cards": [{"name": "{{ states(states('sensor.wall')) }}"}]},
     ],
 )
 async def test_empty_or_dynamic_scopes_bypass_entire_union(
@@ -133,6 +133,57 @@ async def test_deleted_dashboard_and_deleted_account_bypass(runtime, loona_hass)
     )
     await runtime.async_scan()
     assert any("active accounts" in problem for problem in runtime.problems)
+
+
+async def test_fixed_templates_filter_both_categories_and_dynamic_lookups_bypass(
+    runtime, dashboards, make_user, make_connection
+):
+    registry = er.async_get(runtime.hass)
+    registered = [
+        registry.async_get_or_create(
+            "sensor", "test", name, suggested_object_id=name
+        ).entity_id
+        for name in ("registered_wall", "template_only", "registered_other")
+    ]
+    wall, template_only, other = registered
+    for identifier in registered:
+        runtime.hass.states.async_set(identifier, "12")
+    await runtime.async_set_control("registry_filtering", True)
+    connection, wire = make_connection(make_user(admin=True))
+    connection.async_handle({"id": 1, "type": "subscribe_entities"})
+    fixed = {
+        "cards": [
+            {
+                "type": "custom:mushroom-template-card",
+                "primary": "{{ states('" + wall + "') }}",
+                "secondary": "{{ states('" + template_only + "') }}",
+            }
+        ]
+    }
+    await dashboards["wall-panel"].async_save(fixed)
+    await runtime.async_scan()
+    assert not runtime.scope_problem
+    assert set(wire[-1]["event"]["a"]) == {wall, template_only}
+    connection.async_handle({"id": 2, "type": "config/entity_registry/list"})
+    assert {row["entity_id"] for row in wire[-1]["result"]} == {wall, template_only}
+    await dashboards["wall-panel"].async_save(
+        {
+            "cards": [
+                {"type": "markdown", "content": "{{ states(states('" + wall + "')) }}"}
+            ]
+        }
+    )
+    await runtime.async_scan()
+    assert runtime.scope_problem
+    assert other in wire[-1]["event"]["a"]
+    connection.async_handle({"id": 3, "type": "config/entity_registry/list"})
+    assert {row["entity_id"] for row in wire[-1]["result"]} == set(registered)
+    await dashboards["wall-panel"].async_save(fixed)
+    await runtime.async_scan()
+    assert not runtime.scope_problem
+    assert other in wire[-2]["event"]["r"]
+    connection.async_handle({"id": 4, "type": "config/entity_registry/list"})
+    assert {row["entity_id"] for row in wire[-1]["result"]} == {wall, template_only}
 
 
 async def test_rules_protect_controls_and_keep_missing_reference(

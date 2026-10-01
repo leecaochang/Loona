@@ -5,7 +5,7 @@ from typing import Final
 DOMAIN: Final = "loona"
 SUBSCRIBE_ENTITIES: Final = "subscribe_entities"
 SUPPORTED_CORE_VERSIONS: Final = frozenset({"2026.9.3", "2026.9.4"})
-VERSION: Final = "0.2.0"
+VERSION: Final = "0.3.0"
 CONF_DASHBOARDS: Final = "dashboards"
 CONF_TARGET_MODE: Final = "target_mode"
 CONF_USER_IDS: Final = "user_ids"
@@ -28,6 +28,84 @@ CONTROL_DEFAULTS: Final = {
 SCAN_DEBOUNCE: Final = 1.0
 MAINTENANCE_SECONDS: Final = 60
 METRIC_SECONDS: Final = 30
+MAX_TEMPLATE_LENGTH: Final = 65536
+MAX_TEMPLATE_NODES: Final = 4096
+JINJA_STATE_FUNCTIONS: Final = frozenset(
+    {"states", "is_state", "is_state_attr", "state_attr", "has_value"}
+)
+JINJA_FILTERS: Final = frozenset(
+    {
+        "abs",
+        "capitalize",
+        "default",
+        "float",
+        "int",
+        "lower",
+        "round",
+        "string",
+        "trim",
+        "upper",
+    }
+)
+JINJA_TESTS: Final = frozenset(
+    {"boolean", "defined", "false", "none", "number", "string", "true", "undefined"}
+)
+JS_FUNCTIONS: Final = frozenset(
+    {"Boolean", "Number", "String", "parseFloat", "parseInt"}
+)
+JS_MATH_METHODS: Final = frozenset(
+    {"abs", "ceil", "floor", "max", "min", "pow", "round", "trunc"}
+)
+JS_VALUE_METHODS: Final = frozenset(
+    {"toFixed", "toString", "toLowerCase", "toUpperCase", "trim"}
+)
+JS_RESERVED_NAMES: Final = JS_FUNCTIONS | frozenset(
+    {
+        "entity",
+        "hass",
+        "states",
+        "Math",
+        "true",
+        "false",
+        "null",
+        "undefined",
+        "if",
+        "else",
+        "return",
+        "let",
+        "const",
+        "var",
+        "for",
+        "while",
+        "do",
+        "switch",
+        "case",
+        "default",
+        "break",
+        "continue",
+        "function",
+        "new",
+        "class",
+        "try",
+        "catch",
+        "finally",
+        "throw",
+        "delete",
+        "typeof",
+        "void",
+        "await",
+        "yield",
+        "with",
+        "this",
+        "import",
+        "export",
+        "debugger",
+        "extends",
+        "super",
+        "instanceof",
+        "in",
+    }
+)
 ENTITY_KEYS: Final = frozenset(
     {"entity", "entity_id", "entities", "badges", "camera_image", "image_entity"}
 )

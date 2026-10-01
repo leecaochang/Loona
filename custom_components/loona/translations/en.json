@@ -150,8 +150,8 @@
       "description": "Check the Compatibility problem sensor, the supported Home Assistant versions, and other integrations replacing entity subscriptions or registry commands. An affected filter preserves native handling when it cannot be installed. Reload browser pages after reloading Loona."
     },
     "scope": {
-      "title": "Loona is passing through full entity states",
-      "description": "Check selected dashboards and active accounts in Loona options. Save automatically generated dashboards. Runtime templates, dashboard strategies, unsupported auto-entities rules, or an empty scope prevent reliable filtering. Loona resumes filtering automatically after a complete scan. Download diagnostics for scan status."
+      "title": "Loona is passing through full data",
+      "description": "Both entity and registry filtering are bypassed while Scope problem is on, even when their switches are enabled. Check selected dashboards and active accounts in Loona options. Save automatically generated dashboards. Unsupported templates, dashboard strategies, unsupported auto-entities rules, or an empty scope prevent reliable filtering. Loona resumes filtering automatically after a complete scan. Download diagnostics for scan status."
     },
     "exclusion": {
       "title": "An exclusion removes a dashboard dependency",

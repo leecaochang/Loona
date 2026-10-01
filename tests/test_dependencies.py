@@ -100,14 +100,21 @@ def test_backend_template_sensor_does_not_pull_sources():
                 "cards": [
                     {
                         "type": "custom:button-card",
-                        "name": "[[[ return hass.states['sensor.one'].state ]]]",
+                        "name": "[[[ return hass.states['sensor.one'].state + hass.states[variables.source].state ]]]",
                     }
                 ]
             },
             "sensor.one",
         ),
         (
-            {"cards": [{"type": "markdown", "content": "{{ states('sensor.one') }}"}]},
+            {
+                "cards": [
+                    {
+                        "type": "markdown",
+                        "content": "{{ states('sensor.one') }} {{ states(states('input_text.source')) }}",
+                    }
+                ]
+            },
             "sensor.one",
         ),
         (

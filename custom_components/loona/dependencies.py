@@ -8,12 +8,7 @@ from typing import Any
 from homeassistant.core import valid_entity_id
 
 from .const import ENTITY_KEYS, TARGET_KEYS
-
-_TEMPLATE_LITERAL = re.compile(
-    r"(?:states|is_state|is_state_attr|state_attr)\s*\(\s*['\"]([a-z0-9_]+\.[a-z0-9_]+)['\"]"
-    r"|(?:hass\.)?states\s*\[\s*['\"]([a-z0-9_]+\.[a-z0-9_]+)['\"]\s*\]"
-    r"|states\.([a-z0-9_]+\.[a-z0-9_]+)"
-)
+from .templates import template_dependencies
 
 
 @dataclass(frozen=True)
@@ -87,8 +82,6 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
         elif isinstance(value, list):
             for index, item in enumerate(value):
                 references(item, f"{location}[{index}]")
-        elif isinstance(value, dict):
-            walk(value, location)
 
     def target(key: str, value: Any, location: str) -> None:
         values = value if isinstance(value, list) else [value]
@@ -136,25 +129,42 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
                     add(entity_id, f"{location}.filter.include[{index}]")
         # Exclude filters cannot remove dependencies from the safe superset.
 
-    def walk(node: Any, location: str) -> None:
+    def walk(
+        node: Any,
+        location: str,
+        card_type: str = "",
+        entity_id: str | None = None,
+        dependency_value: bool = False,
+    ) -> None:
         if isinstance(node, list):
             for index, item in enumerate(node):
-                walk(item, f"{location}[{index}]")
+                walk(
+                    item, f"{location}[{index}]", card_type, entity_id, dependency_value
+                )
             return
         if isinstance(node, str):
             if any(marker in node for marker in ("{{", "{%", "[[[")):
-                for match in _TEMPLATE_LITERAL.finditer(node):
-                    add(next(group for group in match.groups() if group), location)
-                problems.add(f"{location}: runtime template requires a complete scope")
+                result = template_dependencies(
+                    node, card_type=card_type, entity_id=entity_id
+                )
+                for identifier in result.entity_ids:
+                    add(identifier, location)
+                if dependency_value or not result.complete:
+                    problems.add(f"{location}: template dependencies cannot be scoped")
             return
         if not isinstance(node, dict):
             return
         if "strategy" in node:
             problems.add(f"{location}: dashboard strategy cannot be scoped")
-        card_type = node.get("type", "")
-        if card_type == "custom:auto-entities":
+        node_type = node.get("type")
+        if isinstance(node_type, str):
+            card_type = node_type
+            entity_id = node.get("entity")
+            if not isinstance(entity_id, str) or not valid_entity_id(entity_id):
+                entity_id = None
+        if node_type == "custom:auto-entities":
             auto_entities(node, location)
-        elif isinstance(card_type, str) and card_type.startswith("custom:"):
+        elif isinstance(node_type, str) and node_type.startswith("custom:"):
             warnings.add(f"{location}: custom card may need extra entities")
         for key, value in node.items():
             path = f"{location}.{key}"
@@ -164,7 +174,15 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
                 target(key, value, path)
             if card_type == "area" and key == "area":
                 target("area_id", value, path)
-            walk(value, path)
+            walk(
+                value,
+                path,
+                card_type,
+                entity_id,
+                key in ENTITY_KEYS | TARGET_KEYS | {"type"}
+                or card_type == "area"
+                and key == "area",
+            )
 
     walk(config, "dashboard")
     return DiscoveryResult(

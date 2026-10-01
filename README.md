@@ -79,7 +79,11 @@ Subscription counts refresh about every 30 seconds. Each selected dashboard also
 
 Loona discovers explicit entity references in nested cards, sections, badges, conditions, picture elements, camera fields, and action targets. It expands groups and supported device, area, floor, and label targets. Referenced entity IDs that are currently missing remain in the scope so their states can appear later.
 
-For `custom:auto-entities`, Loona supports include rules based on `entity_id` globs and `domain` patterns. It retains a conservative set of matches, including entities an auto-entities exclusion might hide. Other filters, runtime templates, and dashboard strategies can prevent a reliable scan.
+Loona scans supported templates without executing them. Jinja display and style templates can use literal entity references in `states`, `is_state`, `is_state_attr`, `state_attr`, and `has_value`, including conditions, local values, common numeric/text filters, and clock formatting. For `custom:button-card`, supported JavaScript includes the card's explicit `entity`, literal `states['sensor.example']` or `hass.states['sensor.example']` lookups, scalar calculations, conditions, and common number/string formatting. Every branch contributes dependencies, even when it is currently inactive.
+
+Computed entity IDs, state enumeration, unknown helpers or filters, templated entity/target fields, and code outside the supported subset prevent a complete scan. Loona passes through full data for those cases. Extra entities do not make an unsupported template complete.
+
+For `custom:auto-entities`, Loona supports include rules based on `entity_id` globs and `domain` patterns. It retains a conservative set of matches, including entities an auto-entities exclusion might hide. Other filters, template-generated entity lists, and dashboard strategies can prevent a reliable scan.
 
 When a selected dashboard fails to load or has an unsupported dynamic construct, or when the combined scope is empty, Loona passes through full entity states and registry lists for the entire selected union and reports a scope problem. It resumes filtering automatically after a complete scan. Extra entities do not override an incomplete scan.
 
@@ -93,7 +97,7 @@ This release filters entity state subscriptions and optionally registry lists. D
 
 **Entity filtering appears inactive:** ensure Enabled and Entity filtering are on, the account is selected, and Filtered subscriptions is greater than zero. Registry filtering has its own switch and does not contribute to the entity subscription count. Reload the page if it was open before setup or an integration reload. Check the Compatibility problem and Scope problem sensors and **Settings > Repairs**.
 
-**Scope problem is on:** save the selected dashboards, remove deleted dashboard or account selections, and check for templates, strategies, or unsupported auto-entities filters. Unresolved entity counts alone do not cause a bypass.
+**Scope problem is on:** save the selected dashboards, remove deleted dashboard or account selections, and check for unsupported templates, strategies, or auto-entities filters. Both filters pass through full data while this sensor is on, even when their switches are enabled. Unresolved entity counts alone do not cause a bypass.
 
 **Compatibility problem is on:** use a supported Home Assistant version and check for another integration replacing entity subscriptions or registry commands. Turn off Loona while investigating. The affected filter returns to native handling; diagnostics identify a registry compatibility failure separately.
 
