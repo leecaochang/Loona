@@ -69,7 +69,7 @@ Use Loona's **Configure** menu under **Settings > Devices & services**.
 | Extra entities | Include additional entities needed by custom cards or other sessions using a filtered account. |
 | Advanced entity rules | Include whole domains or entity patterns, or exclude entities. |
 
-For advanced rules, a domain is a name such as `light`. An entity pattern is a glob such as `sensor.room_*` or `light.*`. Loona combines discovered dependencies, extra entities, domain inclusions, and pattern inclusions; it then applies exclusions. Loona's own controls and statistics are always retained.
+Advanced rules use searchable selection lists populated from current states and the entity registry. Choose domains such as `light`, individual entity IDs, or whole-domain patterns such as `sensor.*`. Previously saved custom patterns, such as `sensor.room_*`, remain selectable even when they currently match no entities; new arbitrary text entries are not accepted. Loona combines discovered dependencies, extra entities, domain inclusions, and pattern inclusions; it then applies exclusions. Loona's own controls and statistics are always retained.
 
 Excluding an entity used by a card can break that card. Loona reports a Repair when exclusions remove discovered dashboard dependencies. Prefer extra entities or inclusions when a card needs additional states.
 

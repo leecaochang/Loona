@@ -12,7 +12,7 @@ SUPPORTED_CORE_VERSIONS: Final = frozenset(
 )
 REGISTRY_CORE_VERSIONS: Final = SUPPORTED_CORE_VERSIONS
 FRONTEND_CORE_VERSIONS: Final = frozenset({"2026.9.3", "2026.9.4"})
-VERSION: Final = "0.6.3"
+VERSION: Final = "0.6.4"
 CONF_DASHBOARDS: Final = "dashboards"
 CONF_TARGET_MODE: Final = "target_mode"
 CONF_USER_IDS: Final = "user_ids"

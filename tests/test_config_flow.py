@@ -1,8 +1,10 @@
 """Check native setup selectors, stale values, and preservation of options."""
 
 import pytest
+import voluptuous as vol
 
 from homeassistant.data_entry_flow import AbortFlow
+from homeassistant.helpers import entity_registry as er
 
 from custom_components.loona.config_flow import (
     LoonaConfigFlow,
@@ -116,15 +118,77 @@ async def test_rules_and_extra_entities_validate(loona_hass, make_entry):
     flow = LoonaOptionsFlow()
     flow.hass, flow.handler = loona_hass, entry.entry_id
     result = await flow.async_step_rules({"include_domains": ["light.bad"]})
-    assert result["errors"]["base"] == "invalid_pattern"
+    assert result["errors"]["base"] == "invalid_selection"
     result = await flow.async_step_rules({"include_globs": ["sensor.["]})
-    assert result["errors"]["base"] == "invalid_pattern"
+    assert result["errors"]["base"] == "invalid_selection"
     result = await flow.async_step_extra_entities({"extra_entities": ["sensor.future"]})
     assert result["data"]["extra_entities"] == ["sensor.future"]
     result = await flow.async_step_extra_entities({"extra_entities": ["bad value"]})
     assert result["errors"]["base"] == "invalid_selection"
     result = await flow.async_step_filters({"entity_filtering": False})
     assert result["errors"]["base"] == "not_loaded"
+
+
+async def test_rules_select_known_entities_domains_and_preserve_saved_patterns(
+    loona_hass, make_entry
+):
+    loona_hass.states.async_set("sensor.room_temperature", "20")
+    registered = er.async_get(loona_hass).async_get_or_create(
+        "light", "test", "registry-only", suggested_object_id="registry_only"
+    )
+    entry = make_entry(
+        {"dashboards": ["wall-panel"], "target_mode": "all"},
+        options={"extra_entities": ["sensor.future"],
+                 "include_domains": ["retired"],
+                 "include_globs": ["sensor.room_*", "sensor.removed"],
+                 "exclude_globs": ["light.old_*"]},
+    )
+    flow = LoonaOptionsFlow(entry.entry_id)
+    flow.hass, flow.handler = loona_hass, entry.entry_id
+    form = await flow.async_step_rules()
+    selectors = {str(key.schema): value for key, value in form["data_schema"].schema.items()}
+    assert selectors["include_domains"].config["options"] == ["light", "retired", "sensor"]
+    assert {"sensor.room_temperature", registered.entity_id, "sensor.*", "light.*",
+            "sensor.room_*", "sensor.removed"} <= set(selectors["include_globs"].config["options"])
+    assert "light.old_*" in selectors["exclude_globs"].config["options"]
+    assert "light.old_*" not in selectors["include_globs"].config["options"]
+    assert all(not value.config["custom_value"] for value in selectors.values())
+    with pytest.raises(vol.Invalid):
+        form["data_schema"]({"include_globs": ["sensor.invented"]})
+    values = form["data_schema"]({"include_domains": ["retired", "light"],
+        "include_globs": ["sensor.room_*", registered.entity_id],
+        "exclude_globs": ["sensor.*"]})
+    result = await flow.async_step_rules(values)
+    assert result["data"] == {**values, "extra_entities": ["sensor.future"]}
+    # Rebuild against current entities at submission, while retaining saved rules.
+    loona_hass.states.async_remove("sensor.room_temperature")
+    result = await flow.async_step_rules({"include_globs": ["sensor.room_temperature"]})
+    assert result["errors"]["base"] == "invalid_selection"
+    result = await flow.async_step_rules({"include_globs": ["sensor.room_*"]})
+    assert result["data"]["include_globs"] == ["sensor.room_*"]
+    result = await flow.async_step_rules({"include_domains": [], "include_globs": [], "exclude_globs": []})
+    assert result["data"] == {"extra_entities": ["sensor.future"], "include_domains": [],
+                              "include_globs": [], "exclude_globs": []}
+
+
+@pytest.mark.parametrize("values", [
+    {"include_domains": ["invented"]},
+    {"include_globs": ["sensor.invented"]},
+    {"exclude_globs": ["sensor.invented*"]},
+    {"include_domains": ["sensor", "sensor"]},
+    {"include_globs": "sensor.live"},
+    {"exclude_globs": [None]},
+    {"include_globs": [["sensor.live"]]},
+    {"include_domains": None},
+    {"unexpected": []},
+])
+async def test_rules_reject_invalid_or_forged_selections(loona_hass, make_entry, values):
+    loona_hass.states.async_set("sensor.live", "1")
+    entry = make_entry({"dashboards": ["wall-panel"], "target_mode": "all"})
+    flow = LoonaOptionsFlow(entry.entry_id)
+    flow.hass, flow.handler = loona_hass, entry.entry_id
+    result = await flow.async_step_rules(values)
+    assert result["errors"]["base"] == "invalid_selection"
 
 
 async def test_restore_initial_choices_and_empty_exceptions_preserves_other_options(loona_hass, make_entry):

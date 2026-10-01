@@ -1,6 +1,5 @@
 """Native singleton setup and options flows for Loona."""
 
-import re
 from typing import Any
 
 import voluptuous as vol
@@ -36,7 +35,23 @@ from .const import (
 )
 from .compatibility import CompatibilityError
 from .dashboard import dashboard_titles
-from .dependencies import valid_glob
+
+
+def entity_rule_choices(
+    hass: HomeAssistant, current: dict[str, Any]
+) -> dict[str, list[str]]:
+    """Offer current states, registry entries, domain globs and saved rules."""
+    entities = set(hass.states.async_entity_ids()) | set(er.async_get(hass).entities)
+    domains = {entity_id.split(".", 1)[0] for entity_id in entities}
+    patterns = entities | {f"{domain}.*" for domain in domains}
+    choices = {
+        CONF_INCLUDE_DOMAINS: domains,
+        CONF_INCLUDE_GLOBS: patterns.copy(),
+        CONF_EXCLUDE_GLOBS: patterns.copy(),
+    }
+    for key, values in choices.items():
+        values.update(current.get(key, []))
+    return {key: sorted(values) for key, values in choices.items()}
 
 
 async def human_accounts(hass: HomeAssistant) -> dict[str, str]:
@@ -337,36 +352,35 @@ class LoonaOptionsFlow(OptionsFlow):
     async def async_step_rules(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Keep optional, potentially card-breaking exclusions in Advanced."""
+        """Select known entities and domains without accepting arbitrary text."""
         errors: dict[str, str] = {}
+        choices = entity_rule_choices(self.hass, self.settings)
+        schema = vol.Schema(
+            {
+                vol.Optional(key, default=self.settings.get(key, [])):
+                    selector.SelectSelector(selector.SelectSelectorConfig(
+                        options=values,
+                        multiple=True,
+                        custom_value=False,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    ))
+                for key, values in choices.items()
+            }
+        )
         if user_input is not None:
-            domains = user_input.get(CONF_INCLUDE_DOMAINS, [])
-            globs = user_input.get(CONF_INCLUDE_GLOBS, []) + user_input.get(
-                CONF_EXCLUDE_GLOBS, []
-            )
-            if any(
-                not re.fullmatch(r"[a-z_][a-z0-9_]*", domain) for domain in domains
-            ) or any(not valid_glob(pattern) for pattern in globs):
-                errors["base"] = "invalid_pattern"
-            elif any(len(values) != len(set(values)) for values in user_input.values()):
+            try:
+                values = schema(user_input)
+            except vol.Invalid:
                 errors["base"] = "invalid_selection"
             else:
-                return self.finish(user_input)
+                if any(len(items) != len(set(items)) for items in values.values()):
+                    errors["base"] = "invalid_selection"
+                else:
+                    return self.finish(values)
         return self.async_show_form(
             step_id="rules",
             errors=errors,
-            data_schema=vol.Schema(
-                {
-                    vol.Optional(
-                        key, default=self.settings.get(key, [])
-                    ): selector.TextSelector(selector.TextSelectorConfig(multiple=True))
-                    for key in (
-                        CONF_INCLUDE_DOMAINS,
-                        CONF_INCLUDE_GLOBS,
-                        CONF_EXCLUDE_GLOBS,
-                    )
-                }
-            ),
+            data_schema=schema,
         )
 
 

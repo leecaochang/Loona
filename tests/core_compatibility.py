@@ -22,6 +22,7 @@ import orjson
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from homeassistant import auth, config_entries, const as ha_const, loader  # noqa: E402
+import voluptuous as vol  # noqa: E402
 from homeassistant.auth.models import Group, RefreshToken, User  # noqa: E402
 from homeassistant.auth.permissions.models import PermissionLookup  # noqa: E402
 from homeassistant.components import lovelace, websocket_api  # noqa: E402
@@ -345,6 +346,26 @@ async def check(hass: HomeAssistant) -> None:
         form = await options.async_init(entry.entry_id)
         assert form["type"] == "menu"
         assert "resource_exceptions" not in form["menu_options"]
+        rules = await options.async_init(entry.entry_id)
+        rules = await options.async_configure(rules["flow_id"], {"next_step_id": "rules"})
+        fields = {str(marker.schema): field for marker, field in rules["data_schema"].schema.items()}
+        assert "sensor" in fields["include_domains"].config["options"]
+        assert {"sensor.wall", "sensor.*"} <= set(fields["exclude_globs"].config["options"])
+        assert all(not field.config["custom_value"] for field in fields.values())
+        try:
+            rules["data_schema"]({"include_globs": ["sensor.invented"]})
+        except vol.Invalid:
+            pass
+        else:
+            raise AssertionError("Entity rules accepted an unknown selection")
+        await options.async_configure(rules["flow_id"], {
+            "include_domains": ["sensor"], "include_globs": ["sensor.wall"], "exclude_globs": []})
+        assert entry.options["include_domains"] == ["sensor"]
+        rules = await options.async_init(entry.entry_id)
+        rules = await options.async_configure(rules["flow_id"], {"next_step_id": "rules"})
+        await options.async_configure(rules["flow_id"], {
+            "include_domains": [], "include_globs": [], "exclude_globs": []})
+        await hass.async_block_till_done()
         preview = await options.async_init(entry.entry_id)
         preview = await options.async_configure(preview["flow_id"], {"next_step_id": "resource_preview"})
         assert preview["type"] == "form"
