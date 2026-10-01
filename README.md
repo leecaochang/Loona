@@ -77,7 +77,7 @@ Subscription counts refresh about every 30 seconds. Each selected dashboard also
 
 ## Supported dashboards and limitations
 
-Loona discovers explicit entity references in nested cards, sections, badges, conditions, picture elements, camera fields, and action targets. It expands groups and supported device, area, floor, and label targets. Referenced entity IDs that are currently missing remain in the scope so their states can appear later.
+Loona discovers explicit entity references in nested cards, sections, badges, conditions, picture elements, camera fields, and action targets. It also reads name-to-entity mappings under `entities`, including the Sunsynk power flow card's sensor configuration. It expands groups and supported device, area, floor, and label targets. Referenced entity IDs that are currently missing remain in the scope so their states can appear later.
 
 Loona scans supported templates without executing them. Jinja display and style templates can use literal entity references in `states`, `is_state`, `is_state_attr`, `state_attr`, and `has_value`, including conditions, local values, common numeric/text filters, and clock formatting. For `custom:button-card`, supported JavaScript includes the card's explicit `entity`, literal `states['sensor.example']` or `hass.states['sensor.example']` lookups, scalar calculations, conditions, and common number/string formatting. Every branch contributes dependencies, even when it is currently inactive.
 

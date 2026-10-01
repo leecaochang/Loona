@@ -137,6 +137,90 @@ def test_unknown_custom_card_reports_warning_without_blanket_bypass():
     assert result.entity_ids == {"sensor.example"}
 
 
+def test_sunsynk_entity_mapping_includes_all_explicit_dependencies():
+    # Sunsynk 7.3.3 maps logical names to IDs instead of using entity rows.
+    result = discover(
+        {
+            "type": "custom:sunsynk-power-flow-card",
+            "entities": {
+                "inverter_power_175": "sensor.inverter_power",
+                "grid_power_169": "sensor.grid_power",
+                "battery_soc_184": "sensor.battery_soc",
+                "grid_connected_status_194": "binary_sensor.grid_connected",
+                "pv1_power_186": "sensor.pv1_power",
+                "battery_rated_capacity": "number.battery_capacity",
+                "prog1_time": "time.program_1",
+                "prog1_charge": "select.program_1_charge",
+                "future_input": "sensor.future",
+                "unused": "none",
+                "constant": 100,
+                "friendly_name": "Inverter Grid L1 Power",
+            },
+            "name": "sensor.decoy",
+        },
+        DiscoveryContext(),
+    )
+    assert result.complete
+    assert result.entity_ids == {
+        "sensor.inverter_power",
+        "sensor.grid_power",
+        "sensor.battery_soc",
+        "binary_sensor.grid_connected",
+        "sensor.pv1_power",
+        "number.battery_capacity",
+        "time.program_1",
+        "select.program_1_charge",
+        "sensor.future",
+    }
+    assert result.reasons["sensor.grid_power"] == (
+        "dashboard.entities.grid_power_169",
+    )
+
+
+def test_entity_mapping_preserves_native_rows_groups_and_nested_objects():
+    result = discover(
+        {
+            "cards": [
+                {
+                    "type": "entities",
+                    "entities": [{"entity": "sensor.row", "name": "sensor.decoy"}],
+                },
+                {
+                    "type": "custom:example",
+                    "entities": {
+                        "members": ["group.room", "sensor.future"],
+                        "nested": {"entity": "sensor.nested", "name": "sensor.decoy"},
+                    },
+                },
+            ]
+        },
+        DiscoveryContext(groups={"group.room": frozenset({"light.member"})}),
+    )
+    assert result.complete
+    assert result.entity_ids == {
+        "sensor.row",
+        "group.room",
+        "light.member",
+        "sensor.future",
+        "sensor.nested",
+    }
+
+
+def test_template_in_entity_mapping_requires_bypass():
+    result = discover(
+        {
+            "type": "custom:sunsynk-power-flow-card",
+            "entities": {
+                "pv1_power_186": "sensor.pv1_power",
+                "pv2_power_187": "{{ states('input_text.entity_source') }}",
+            },
+        },
+        DiscoveryContext(),
+    )
+    assert not result.complete
+    assert result.entity_ids == {"sensor.pv1_power", "input_text.entity_source"}
+
+
 def test_auto_entities_safe_superset_and_missing_exact_reference():
     result = discover(
         {

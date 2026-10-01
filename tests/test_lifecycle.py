@@ -186,6 +186,44 @@ async def test_fixed_templates_filter_both_categories_and_dynamic_lookups_bypass
     assert {row["entity_id"] for row in wire[-1]["result"]} == {wall, template_only}
 
 
+async def test_entity_mapping_updates_existing_state_and_registry_collections(
+    runtime, dashboards, make_user, make_connection
+):
+    registry = er.async_get(runtime.hass)
+    power, other = [
+        registry.async_get_or_create(
+            "sensor", "test", name, suggested_object_id=name
+        ).entity_id
+        for name in ("mapped_power", "mapped_other")
+    ]
+    runtime.hass.states.async_set(power, "1234")
+    runtime.hass.states.async_set(other, "5678")
+    await runtime.async_set_control("registry_filtering", True)
+    connection, wire = make_connection(make_user(admin=True))
+    connection.async_handle({"id": 1, "type": "subscribe_entities"})
+    assert power not in wire[-1]["event"]["a"]
+    await dashboards["wall-panel"].async_save(
+        {
+            "cards": [
+                {"entity": "sensor.wall"},
+                {
+                    "type": "custom:sunsynk-power-flow-card",
+                    "entities": {"inverter_power_175": power},
+                },
+            ]
+        }
+    )
+    await runtime.async_scan()
+    assert not runtime.scope_problem
+    assert wire[-1]["event"]["a"][power]["s"] == "1234"
+    assert other not in wire[-1]["event"]["a"]
+    connection.async_handle({"id": 2, "type": "config/entity_registry/list"})
+    assert {row["entity_id"] for row in wire[-1]["result"]} == {power}
+    runtime.hass.states.async_set(power, "4321")
+    await runtime.hass.async_block_till_done()
+    assert wire[-1]["event"]["c"][power]["+"]["s"] == "4321"
+
+
 async def test_rules_protect_controls_and_keep_missing_reference(
     runtime, dashboards, loona_hass
 ):

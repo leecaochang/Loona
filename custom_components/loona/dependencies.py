@@ -168,6 +168,12 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
             warnings.add(f"{location}: custom card may need extra entities")
         for key, value in node.items():
             path = f"{location}.{key}"
+            if key == "entities" and isinstance(value, dict):
+                for name, reference in value.items():
+                    mapping_path = f"{path}.{name}"
+                    references(reference, mapping_path)
+                    walk(reference, mapping_path, card_type, entity_id, True)
+                continue
             if key in ENTITY_KEYS:
                 references(value, path)
             if key in TARGET_KEYS:
