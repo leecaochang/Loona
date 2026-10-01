@@ -16,7 +16,8 @@ from homeassistant.core import HomeAssistant, callback
 
 from .compatibility import CompatibilityError, HandlerEntry, HandlerTable
 from .const import (
-    RESOURCE_CARDS, RESOURCE_COMMANDS, RESOURCE_CORE_VERSIONS, RESOURCE_SHARED,
+    RESOURCE_CARDS, RESOURCE_COMMANDS, RESOURCE_COMMAND_PROFILES, RESOURCE_CONFIG_KEYS,
+    RESOURCE_CORE_VERSIONS, RESOURCE_SHARED, RESOURCE_SHARED_PATHS,
 )
 from .websocket import ScopePolicy
 
@@ -27,12 +28,14 @@ class ResourceDependencies:
 
     custom_types: frozenset[str] = frozenset()
     dynamic: bool = False
+    configuration_keys: frozenset[str] = frozenset()
 
 
 def resource_dependencies(configs: Iterable[dict[str, Any]]) -> ResourceDependencies:
     """Read configuration only; never execute or fetch arbitrary module code."""
     types: set[str] = set()
     dynamic = False
+    configuration_keys: set[str] = set()
 
     def walk(node: Any) -> None:
         nonlocal dynamic
@@ -54,8 +57,9 @@ def resource_dependencies(configs: Iterable[dict[str, Any]]) -> ResourceDependen
             dynamic = True
 
     for config in configs:
+        configuration_keys.update(key for key in RESOURCE_CONFIG_KEYS if isinstance(config.get(key), dict))
         walk(config)
-    return ResourceDependencies(frozenset(types), dynamic)
+    return ResourceDependencies(frozenset(types), dynamic, frozenset(configuration_keys))
 
 
 def matches(card_type: str, declarations: tuple[str, ...]) -> bool:
@@ -75,7 +79,8 @@ def resource_report(
     report_rows = []
     for row in rows:
         url, kind = row["url"], row["type"]
-        filename = urlsplit(url).path.rsplit("/", 1)[-1]
+        parsed = urlsplit(url)
+        filename = parsed.path.rsplit("/", 1)[-1]
         declarations = RESOURCE_CARDS.get(filename, ())
         required = {card for card in dependencies.custom_types if matches(card, declarations)}
         # Custom filenames/remotely hosted bundles are unclassified, even if a
@@ -85,11 +90,20 @@ def resource_report(
             required = set()
         if kind == "css":
             status, reason = "required", "Shared stylesheet"
-        elif local and filename in RESOURCE_SHARED:
+        elif (kind in {"module", "js"} and not parsed.scheme and not parsed.netloc
+              and parsed.path in RESOURCE_SHARED_PATHS):
+            status, reason = "required", RESOURCE_SHARED_PATHS[parsed.path]
+        elif local and kind in {"module", "js"} and filename in RESOURCE_SHARED:
             status, reason = "required", "Shared native-card and theme styling"
+        elif local and kind in {"module", "js"} and filename in RESOURCE_CONFIG_KEYS.values():
+            keys = sorted(key for key in dependencies.configuration_keys if RESOURCE_CONFIG_KEYS[key] == filename)
+            if keys:
+                status, reason = "required", "Dashboard configuration: " + ", ".join(keys)
+            else:
+                status, reason = "unclassified", "Browser settings or URL options may require this helper"
         elif required:
             status, reason = "required", "Custom types: " + ", ".join(sorted(required))
-        elif local and declarations:
+        elif local and kind in {"module", "js"} and declarations:
             status, reason = "unused", "No matching custom type in selected dashboards"
         else:
             status, reason = "unclassified", "No verified dependency mapping; omitted when enabled"
@@ -192,20 +206,27 @@ class ResourceAdapter:
             raise CompatibilityError("Native resource commands are unavailable")
         storage_type = getattr(native_resources, "ResourceStorageCollectionWebsocket", None)
         storage_handler = getattr(storage_type, "ws_list_item", None)
-        for name in RESOURCE_COMMANDS:
+        commands = RESOURCE_COMMAND_PROFILES[ha_const.__version__]
+        if any(name in table for name in RESOURCE_COMMANDS if name not in commands):
+            raise CompatibilityError("Unexpected resource command for this Core version")
+        for name in commands:
             entry = table.get(name)
             if (not isinstance(entry, tuple) or len(entry) != 2
                 or entry[0] not in (storage_handler, websocket_lovelace_resources)
-                or not isinstance(entry[1], vol.Schema)):
+                or not (isinstance(entry[1], vol.Schema)
+                        or entry[1] is False and getattr(entry[0], "_ws_schema", None) is False)):
                 raise CompatibilityError(f"Unrecognized native resource command: {name}")
+            # Older no-argument native commands use False for BASE schema only.
+            if entry[1] is False:
+                continue
             try:
                 if entry[1]({"id": 1, "type": name}) != {"id": 1, "type": name}:
                     raise ValueError("Unexpected schema defaults")
             except (vol.Invalid, ValueError) as err:
                 raise CompatibilityError("Native resource schema changed") from err
         self._table = cast(HandlerTable, table)
-        self._originals = {name: table[name] for name in RESOURCE_COMMANDS}
-        self._owned = {name: (self._list, table[name][1]) for name in RESOURCE_COMMANDS}
+        self._originals = {name: table[name] for name in commands}
+        self._owned = {name: (self._list, table[name][1]) for name in commands}
         table.update(self._owned)
 
     def check_ownership(self) -> None:

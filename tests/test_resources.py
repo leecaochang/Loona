@@ -57,6 +57,46 @@ def test_nested_types_shared_styles_dynamic_and_unclassified_preview():
     assert optional["status"] == "unclassified" and optional["forwarded"]
 
 
+def test_configured_helpers_popups_features_and_exact_bundle_tags():
+    configs = [{"kiosk_mode": {"hide_header": True}, "views": [{"cards": [
+        {"type": "conditional", "conditions": [], "card": {"type": "custom:battery-state-card"}},
+        {"type": "tile", "features": [{"type": "custom:service-call", "entries": []}]},
+        {"type": "button", "tap_action": {"browser_mod": {"service": "browser_mod.popup", "data": {
+            "content": {"type": "custom:nodalia-camera-card"}}}}},
+    ]}]}]
+    urls = ["/local/battery-state-card.js?v=2", "/local/custom-card-features.min.js",
+            "/hacsfiles/nodalia-cards/nodalia-cards.js", "/local/kiosk-mode.js",
+            "/browser_mod.js?automatically-added&2", "/local/calendar-card-pro.js"]
+    rows = [{"url": url, "type": "module"} for url in urls]
+    initial = resource_report(rows, resource_dependencies(configs))
+    assert [row["forwarded"] for row in initial["resources"]] == [True] * 5 + [False]
+    assert not initial["unresolved_custom_types"]
+    # Removing dashboard dependencies releases card bundles and kiosk becomes
+    # uncertain because browser-local settings can still require its runtime.
+    changed = resource_report(rows, resource_dependencies([{}]))
+    assert [row["status"] for row in changed["resources"]] == [
+        "unused", "unused", "unused", "unclassified", "required", "unused",
+    ]
+    unknown = resource_report(rows, resource_dependencies([{"type": "custom:nodalia-new-card"}]))
+    assert unknown["unresolved_custom_types"] == ["nodalia-new-card"]
+    assert not unknown["resources"][2]["forwarded"]
+    nested = resource_report(rows, resource_dependencies([{"card": {"kiosk_mode": {}}}]))
+    assert nested["resources"][3]["status"] == "unclassified"
+
+
+def test_helper_mapping_does_not_trust_remote_names_or_wrong_resource_kinds():
+    rows = [{"url": url, "type": kind} for url, kind in [
+        ("https://example.invalid/browser_mod.js", "module"),
+        ("//example.invalid/browser_mod.js", "module"),
+        ("/local/browser_mod.js", "module"),
+        ("/browser_mod.js", "html"),
+        ("/local/card-mod.js", "html"),
+        ("/local/kiosk-mode.js", "html"),
+    ]]
+    report = resource_report(rows, resource_dependencies([{"kiosk_mode": {}}]))
+    assert all(row["status"] == "unclassified" and not row["forwarded"] for row in report["resources"])
+
+
 @pytest.fixture
 async def resources_runtime(loona_hass, dashboards, make_entry):
     await dashboards["wall-panel"].async_save({"cards": [{"type": "custom:mini-graph-card", "entity": "sensor.wall"}]})

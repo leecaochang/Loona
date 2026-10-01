@@ -12,7 +12,7 @@ SUPPORTED_CORE_VERSIONS: Final = frozenset(
 )
 REGISTRY_CORE_VERSIONS: Final = SUPPORTED_CORE_VERSIONS
 FRONTEND_CORE_VERSIONS: Final = frozenset({"2026.9.3", "2026.9.4"})
-VERSION: Final = "0.6.1"
+VERSION: Final = "0.6.2"
 CONF_DASHBOARDS: Final = "dashboards"
 CONF_TARGET_MODE: Final = "target_mode"
 CONF_USER_IDS: Final = "user_ids"
@@ -29,8 +29,12 @@ CONTROL_ENTITIES: Final = "entity_filtering"
 CONTROL_REGISTRIES: Final = "registry_filtering"
 CONTROL_RESOURCES: Final = "resource_filtering"
 CONF_ALWAYS_FORWARD: Final = "always_forward_resources"
-RESOURCE_CORE_VERSIONS: Final = frozenset({"2026.9.3", "2026.9.4"})
+RESOURCE_CORE_VERSIONS: Final = SUPPORTED_CORE_VERSIONS
 RESOURCE_COMMANDS: Final = ("lovelace/resources", "lovelace/resources/list")
+RESOURCE_COMMAND_PROFILES: Final = {
+    version: RESOURCE_COMMANDS[:1] if version == "2024.5.5" else RESOURCE_COMMANDS
+    for version in RESOURCE_CORE_VERSIONS
+}
 # Published bundle names and the custom element families they register.
 RESOURCE_CARDS: Final = {
     "card-mod.js": ("mod-card",),
@@ -46,9 +50,34 @@ RESOURCE_CARDS: Final = {
     "layout-card.js": ("layout-card", "gap-card", "layout-break", "grid-layout", "horizontal-layout", "vertical-layout", "masonry-layout"),
     "mushroom.js": ("mushroom-",),
     "yet-another-media-player.js": ("yet-another-media-player",),
+    "battery-state-card.js": ("battery-state-card",),
+    "plotly-graph-card.js": ("plotly-graph",),
+    "my-cards.js": ("my-button", "my-slider", "my-slider-v2"),
+    "swipe-card.js": ("swipe-card",),
+    "universal-remote-card.min.js": ("android-tv-card", "universal-remote-card"),
+    "multiple-entity-row.js": ("multiple-entity-row",),
+    "energy-period-selector-plus.js": ("energy-period-selector-plus",),
+    "custom-card-features.min.js": ("custom-features-card", "service-call"),
+    "calendar-card-pro.js": ("calendar-card-pro",),
+    "config-template-card.js": ("config-template-card",),
+    "html-template-card.js": ("html-template-card",),
+    "nodalia-cards.js": (
+        "nodalia-navigation-bar", "nodalia-media-player", "nodalia-light-card",
+        "nodalia-fan-card", "nodalia-humidifier-card", "nodalia-circular-gauge-card",
+        "nodalia-graph-card", "nodalia-power-flow-card", "nodalia-cover-card",
+        "nodalia-climate-card", "nodalia-alarm-panel-card", "nodalia-advance-vacuum-card",
+        "nodalia-entity-card", "nodalia-fav-card", "nodalia-insignia-card",
+        "nodalia-person-card", "nodalia-scenes-card", "nodalia-weather-card",
+        "nodalia-calendar-card", "nodalia-notifications-card", "nodalia-vacuum-card",
+        "nodalia-news-card", "nodalia-camera-card", "nodalia-room-summary-card",
+    ),
+    "loona-deferred-card.js": ("loona-deferred-card",),
 }
 # card-mod also applies theme styles and patches native cards globally.
 RESOURCE_SHARED: Final = frozenset({"card-mod.js"})
+# Browser Mod registers this resource for Cast as well as an extra frontend module.
+RESOURCE_SHARED_PATHS: Final = {"/browser_mod.js": "Browser Mod frontend service and Cast companion"}
+RESOURCE_CONFIG_KEYS: Final = {"kiosk_mode": "kiosk-mode.js"}
 CONTROL_GRAPHS: Final = "visible_first_graphs"
 CONTROL_MOTION: Final = "pause_animations_during_loading"
 MOTION_QUIET_MS: Final = 750

@@ -27,6 +27,8 @@ from homeassistant.auth.permissions.models import PermissionLookup  # noqa: E402
 from homeassistant.components import lovelace, websocket_api  # noqa: E402
 from homeassistant.components.lovelace import const as lovelace_const  # noqa: E402
 from homeassistant.components.lovelace.dashboard import LovelaceStorage, LovelaceYAML  # noqa: E402
+from homeassistant.components.lovelace import resources as native_resources  # noqa: E402
+from homeassistant.components.lovelace.websocket import websocket_lovelace_resources  # noqa: E402
 from homeassistant.components.websocket_api import commands  # noqa: E402
 from homeassistant.components.websocket_api.connection import ActiveConnection  # noqa: E402
 from homeassistant.core import HomeAssistant  # noqa: E402
@@ -38,9 +40,11 @@ from homeassistant.helpers import (  # noqa: E402
 )
 
 from custom_components.loona.config_flow import LoonaConfigFlow  # noqa: E402
-from custom_components.loona.const import DOMAIN, FRONTEND_CORE_VERSIONS, REGISTRY_CORE_VERSIONS, RESOURCE_CORE_VERSIONS  # noqa: E402
+from custom_components.loona.const import DOMAIN, FRONTEND_CORE_VERSIONS, REGISTRY_CORE_VERSIONS, RESOURCE_COMMAND_PROFILES, RESOURCE_CORE_VERSIONS  # noqa: E402
 from custom_components.loona.dashboard import discovery_context, load_dashboard  # noqa: E402
 from custom_components.loona.diagnostics import async_get_config_entry_diagnostics  # noqa: E402
+from custom_components.loona.resources import ResourceAdapter, resource_dependencies, resource_report  # noqa: E402
+from custom_components.loona.websocket import ScopePolicy  # noqa: E402
 
 
 async def check(hass: HomeAssistant) -> None:
@@ -85,14 +89,32 @@ async def check(hass: HomeAssistant) -> None:
     boards = {None: default, "wall-panel": wall, "yaml-panel": yaml_board}
     key = getattr(lovelace_const, "LOVELACE_DATA", "lovelace")
     data_class = getattr(lovelace, "LovelaceData", None)
-    from homeassistant.components.lovelace.resources import ResourceYAMLCollection
-    collection = ResourceYAMLCollection([])
-    hass.data[key] = data_class("yaml", boards, collection, {}) if data_class else {"dashboards": boards, "resources": collection}
-    for name in ("lovelace/resources", "lovelace/resources/list"):
-        import voluptuous as vol
-        from homeassistant.components.lovelace.websocket import websocket_lovelace_resources
-        websocket_api.async_register_command(hass, name, websocket_lovelace_resources,
-            websocket_api.BASE_COMMAND_MESSAGE_SCHEMA.extend({vol.Required("type"): name}))
+    def set_collection(collection, mode):
+        hass.data[key] = data_class(mode, boards, collection, {}) if data_class else {"dashboards": boards, "resources": collection}
+
+    # Native 2024.5 setup deliberately disables the generic collection list.
+    # Later Core releases expose the resource-specific collection list and alias.
+    collection = native_resources.ResourceStorageCollection(hass, default)
+    await collection.async_load()
+    collection.loaded = True
+    set_collection(collection, "storage")
+    storage_ws = getattr(native_resources, "ResourceStorageCollectionWebsocket", None)
+    if storage_ws is None:
+        from homeassistant.helpers.collection import DictStorageCollectionWebsocket
+        DictStorageCollectionWebsocket(collection, "lovelace/resources", "resource",
+            lovelace_const.RESOURCE_CREATE_FIELDS, lovelace_const.RESOURCE_UPDATE_FIELDS).async_setup(hass, create_list=False)
+        websocket_api.async_register_command(hass, websocket_lovelace_resources)
+    else:
+        storage_ws(collection, "lovelace/resources", "resource",
+            lovelace_const.RESOURCE_CREATE_FIELDS, lovelace_const.RESOURCE_UPDATE_FIELDS).async_setup(hass)
+    resource_originals = {name: hass.data[websocket_api.DOMAIN][name]
+                          for name in ("lovelace/resources", "lovelace/resources/list")
+                          if name in hass.data[websocket_api.DOMAIN]}
+    assert tuple(resource_originals) == RESOURCE_COMMAND_PROFILES[ha_const.__version__]
+    rows = []
+    for url, kind in [("/local/battery-state-card.js", "module"), ("/local/button-card.js", "module"),
+                      ("/local/unknown.js", "module"), ("/local/style.css", "css")]:
+        rows.append(await collection.async_create_item({"url": url, "res_type": kind}))
     assert (await load_dashboard(hass, "lovelace"))["cards"][0]["entity"] == "sensor.other"
     assert (await load_dashboard(hass, "yaml-panel", force=True))["cards"][0]["entity"] == "sensor.yaml"
 
@@ -145,6 +167,38 @@ async def check(hass: HomeAssistant) -> None:
     def removals(packets):
         return next(packet["event"]["r"] for packet in reversed(packets) if "r" in packet.get("event", {}))
 
+    async def resource_request(connection, packets, name, **fields):
+        msg_id = connection.last_id + 1
+        connection.async_handle({"id": msg_id, "type": name, **fields})
+        await hass.async_block_till_done()
+        return next(packet for packet in reversed(packets) if packet.get("id") == msg_id)
+
+    # Exercise genuine YAML handlers with the aliases registered by each Core.
+    # Native YAML setup does not manufacture /list in 2024.5.
+    table = hass.data[websocket_api.DOMAIN]
+    yaml_collection = native_resources.ResourceYAMLCollection([{"url": row["url"], "type": row["type"]} for row in rows])
+    set_collection(yaml_collection, "yaml")
+    for name in resource_originals:
+        if ha_const.__version__ == "2024.5.5":
+            websocket_api.async_register_command(hass, websocket_lovelace_resources)
+        else:
+            websocket_api.async_register_command(hass, name, websocket_lovelace_resources,
+                websocket_api.BASE_COMMAND_MESSAGE_SCHEMA.extend({"type": name}))
+    errors = []
+    yaml_adapter = ResourceAdapter(hass, ScopePolicy(all_users=True),
+        lambda items: resource_report(items, resource_dependencies([{"card": {"type": "custom:battery-state-card"}}])), errors.append)
+    yaml_native = {name: table[name] for name in resource_originals}
+    yaml_adapter.install()
+    yaml_client, yaml_output = client(admin)
+    for name in resource_originals:
+        packet = await resource_request(yaml_client, yaml_output, name)
+        assert packet["success"] and packet["result"] == [yaml_collection.async_items()[0], yaml_collection.async_items()[3]]
+        assert table[name][1] is yaml_native[name][1]
+    yaml_adapter.uninstall()
+    assert not errors and all(table[name] is handler for name, handler in yaml_native.items())
+    table.update(resource_originals)
+    set_collection(collection, "storage")
+
     runtime = None
     try:
         assert await hass.config_entries.async_setup(entry.entry_id)
@@ -152,6 +206,30 @@ async def check(hass: HomeAssistant) -> None:
         runtime = entry.runtime_data
         assert not runtime.compatibility_problem, runtime.compatibility_problem
         assert not runtime.scope_problem, runtime.problems
+        assert not runtime.resource_compatibility_problem, runtime.resource_compatibility_problem
+        resource_client, resource_output = client(admin)
+        await runtime.async_set_control("resource_filtering", True)
+        for name in resource_originals:
+            assert (await resource_request(resource_client, resource_output, name))["result"] == [rows[3]]
+            assert table[name][1] is resource_originals[name][1]
+        non_admin = await hass.auth.async_create_user("Resource reader", group_ids=["system-users"])
+        reader, reader_output = client(non_admin)
+        denied = await resource_request(reader, reader_output, "lovelace/resources/create", url="/local/denied.js", res_type="module")
+        assert not denied["success"] and denied["error"]["code"] == "unauthorized"
+        with patch("custom_components.loona.runtime.SCAN_DEBOUNCE", 0):
+            await wall.async_save({"cards": [{"entity": "sensor.wall"}, {"entity": "sensor.denied"},
+                {"type": "conditional", "conditions": [], "card": {"type": "custom:battery-state-card", "entity": "sensor.wall"}},
+                {"type": "button", "tap_action": {"action": "fire-dom-event", "browser_mod": {"service": "browser_mod.popup", "data": {"content": {"type": "custom:button-card", "entity": "sensor.wall"}}}}}]})
+            await asyncio.sleep(0.02)
+            await hass.async_block_till_done()
+        for name in resource_originals:
+            assert (await resource_request(reader, reader_output, name))["result"] == [rows[0], rows[1], rows[3]]
+        installed = await collection.async_create_item({"url": "/local/new.js", "res_type": "module"})
+        assert installed not in (await resource_request(reader, reader_output, next(iter(resource_originals))))["result"]
+        await runtime.async_set_control("resource_filtering", False)
+        assert (await resource_request(reader, reader_output, next(iter(resource_originals))))["result"] == collection.async_items()
+        await wall.async_save({"cards": [{"entity": "sensor.wall"}, {"entity": "sensor.denied"}]})
+        await runtime.async_scan()
         expected = {"enabled", "entity_filtering"}
         if ha_const.__version__ in RESOURCE_CORE_VERSIONS:
             expected.add("resource_filtering")
@@ -271,7 +349,7 @@ async def check(hass: HomeAssistant) -> None:
         preview = await options.async_configure(preview["flow_id"], {"next_step_id": "resource_preview"})
         assert preview["type"] == "form"
         fields = {str(marker.schema) for marker in preview["data_schema"].schema}
-        assert fields == ({"resource_filtering"} if ha_const.__version__ in RESOURCE_CORE_VERSIONS else set())
+        assert fields == {"resource_filtering", "always_forward_resources"}
         await options.async_configure(preview["flow_id"], {})
         form = await options.async_configure(form["flow_id"], {"next_step_id": "filters"})
         assert {str(marker.schema) for marker in form["data_schema"].schema} == expected - {"enabled"}
@@ -330,6 +408,7 @@ async def check(hass: HomeAssistant) -> None:
         assert await hass.config_entries.async_unload(entry.entry_id)
         assert hass.data[websocket_api.DOMAIN]["subscribe_entities"] is native
         assert all(hass.data[websocket_api.DOMAIN][name] is handler for name, handler in registry_originals.items())
+        assert all(table[name] is handler for name, handler in resource_originals.items())
         assert not runtime._unsubscribers and not runtime._listeners
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
@@ -369,7 +448,10 @@ async def main() -> None:
             await hass.async_block_till_done()
             await hass.async_stop(force=True)
     logging.getLogger().removeHandler(capture)
-    assert not errors, errors
+    # The native permission-denial regression emits this expected error.
+    expected_denial = "Error handling message: Unauthorized (unauthorized) Resource reader"
+    assert errors.count(expected_denial) == 1, errors
+    assert not [error for error in errors if error != expected_denial], errors
 
 
 if __name__ == "__main__":
