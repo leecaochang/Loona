@@ -2,7 +2,6 @@
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-import json
 from typing import Any, cast
 
 import voluptuous as vol
@@ -23,6 +22,7 @@ from homeassistant.helpers import (
     device_registry as dr,
     entity_registry as er,
 )
+from homeassistant.util.json import json_loads_object
 
 from .compatibility import CompatibilityError, HandlerEntry, HandlerTable
 from .const import SUPPORTED_CORE_VERSIONS
@@ -171,7 +171,9 @@ class _ListConnection:
         """Preserve errors, envelopes, fields, and native enabled-entry semantics."""
         try:
             message = (
-                json.loads(payload) if isinstance(payload, (bytes, str)) else payload
+                cast(dict[str, Any], json_loads_object(payload))
+                if isinstance(payload, (bytes, str))
+                else payload
             )
             if (
                 message.get("type") != "result"

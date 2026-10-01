@@ -91,6 +91,40 @@ Unknown custom card types can still use their explicit references. Cards that ca
 
 This release filters entity state subscriptions and optionally registry lists. Dashboard JavaScript and CSS resources, history, services, themes, and other Home Assistant APIs remain available normally.
 
+## Performance measurements
+
+The reproducible synthetic benchmark uses 10,000 sensor states and registry entries, 1,000 devices, 100 areas, 10 floors, and 100 labels. Its selected scope contains the first 200 sensors with their metadata relationships. Each state has a name, power unit/class, and a 64-byte padding attribute. A burst changes 1,000 evenly spaced sensors, including 20 in the selected scope.
+
+Measurements below were taken with Loona 0.3.1, Core 2026.9.4, Python 3.14.6, and stock JS websocket client 9.6.0 on Node 22.23.2, running on an Apple M2 Ultra with 64 GiB RAM and macOS. Timings are medians of five samples after one warmup; Core serialization caches are warm. The full snapshot baseline uses Loona's disabled policy, and the live-update baseline uses an explicitly unfiltered native subscription.
+
+| Measurement | Full data | Filtered data |
+| --- | ---: | ---: |
+| State snapshot entities | 10,000 | 200 |
+| State snapshot JSON bytes | 2,640,912 | 52,860 |
+| Full entity registry JSON bytes | 5,305,763 | 105,877 |
+| Compact entity registry JSON bytes | 1,269,116 | 25,496 |
+| Logical state events in the update burst | 1,000 | 20 |
+| Update burst JSON bytes | 143,178 | 2,865 |
+| Stock client snapshot processing | 12.45 ms | 0.23 ms |
+| Stock client update burst processing | 2,263.44 ms | 0.74 ms |
+
+JSON sizes include each logical event/result envelope before transport compression; they exclude websocket framing and grouped-message separators. Client timings cover JSON decoding and stock state collection updates on Node. They exclude network time, dashboard rendering, and tablet interaction. The approximately 98% reduction in these payloads is specific to this fixture, and is not a measured reduction in compressed network traffic or total CPU usage.
+
+Registry filtering still parses the complete native list before selecting rows. In this fixture, a full entity-registry request took 2.86 ms with filtering bypassed and 13.19 ms with filtering active. Loona 0.3.1 uses Core's JSON decoder to reduce that filtering cost; the preceding decoder measured 28.24 ms on the same fixture. Smaller responses trade additional server processing for less data to transfer and process on the client.
+
+To reproduce from a checkout with uv and Node.js installed, install the pinned development dependencies and run:
+
+```sh
+uv venv --python 3.14 venv
+uv pip install --python venv/bin/python -r pyproject.toml --extra test
+npm ci
+LOONA_BENCHMARK=1 LOONA_BENCHMARK_OUTPUT=/tmp/loona-benchmark.json venv/bin/python -m pytest tests/test_benchmark.py -q -s
+```
+
+The benchmark creates an isolated in-memory Home Assistant fixture and writes aggregate results. It requires no Home Assistant login or running server. The ordinary test suite runs a smaller fixture to verify the measurements and final stock-client state.
+
+For a real-browser comparison, use the same dashboard, account, network, and browser with a warm cache. Compare several page loads and normal card interactions with Loona's Enabled switch on and off, then restore it to on. Check that values update and service buttons work in both modes. Record the device model, browser/app version, and observed load times separately from the protocol measurements above. Real-browser rendering and interaction measurements remain outstanding.
+
 ## Troubleshooting
 
 **A card is missing data:** turn off Enabled to check whether filtering is responsible. Verify that its dashboard is selected, then add any dependencies calculated by the card under Extra entities. Check advanced exclusions and press Rescan dashboards if needed.
