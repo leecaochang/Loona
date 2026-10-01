@@ -94,7 +94,6 @@ async def test_options_preserve_unrelated_fields_and_stale_labels(
         "extra_entities",
         "rules",
         "resource_preview",
-        "resource_exceptions",
     }
     result = await flow.async_step_dashboards()
     selector = next(iter(result["data_schema"].schema.values()))

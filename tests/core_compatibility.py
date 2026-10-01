@@ -266,6 +266,13 @@ async def check(hass: HomeAssistant) -> None:
         options = hass.config_entries.options
         form = await options.async_init(entry.entry_id)
         assert form["type"] == "menu"
+        assert "resource_exceptions" not in form["menu_options"]
+        preview = await options.async_init(entry.entry_id)
+        preview = await options.async_configure(preview["flow_id"], {"next_step_id": "resource_preview"})
+        assert preview["type"] == "form"
+        fields = {str(marker.schema) for marker in preview["data_schema"].schema}
+        assert fields == ({"resource_filtering"} if ha_const.__version__ in RESOURCE_CORE_VERSIONS else set())
+        await options.async_configure(preview["flow_id"], {})
         form = await options.async_configure(form["flow_id"], {"next_step_id": "filters"})
         assert {str(marker.schema) for marker in form["data_schema"].schema} == expected - {"enabled"}
         await options.async_configure(form["flow_id"], {key: False for key in expected - {"enabled"}})

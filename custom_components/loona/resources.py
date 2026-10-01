@@ -83,9 +83,7 @@ def resource_report(
         local = url.startswith(("/local/", "/hacsfiles/")) and not url.startswith("//")
         if not local or kind not in {"module", "js"}:
             required = set()
-        if url in exceptions:
-            status, reason = "required", "Always forward exception"
-        elif kind == "css":
+        if kind == "css":
             status, reason = "required", "Shared stylesheet"
         elif local and filename in RESOURCE_SHARED:
             status, reason = "required", "Shared native-card and theme styling"
@@ -97,7 +95,10 @@ def resource_report(
             status, reason = "unclassified", "No verified dependency mapping; omitted when enabled"
         if local and kind in {"module", "js"}:
             found.update(required)
-        report_rows.append({**row, "status": status, "reason": reason})
+        report_rows.append({
+            **row, "status": status, "reason": reason,
+            "forwarded": status == "required" or url in exceptions,
+        })
     return {
         "resources": report_rows,
         "counts": {status: sum(row["status"] == status for row in report_rows)
@@ -156,7 +157,7 @@ class _ResourceConnection:
                     raise CompatibilityError("Native resource list shape changed")
                 report = self.adapter.report(result)
                 result = [row for row, item in zip(result, report["resources"], strict=True)
-                          if item["status"] == "required"]
+                          if item["forwarded"]]
         except (CompatibilityError, ValueError, TypeError, KeyError) as err:
             self.adapter.fail(CompatibilityError(str(err)))
         self.connection.send_result(msg_id, result)

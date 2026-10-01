@@ -53,7 +53,8 @@ def test_nested_types_shared_styles_dynamic_and_unclassified_preview():
     assert report["dynamic_configuration"]
     assert report["stale_exceptions"] == ["/local/deleted.js"]
     assert all("status" not in row for row in rows)
-    assert resource_report(rows, dependencies, ["/local/helper.js"])["resources"][6]["status"] == "required"
+    optional = resource_report(rows, dependencies, ["/local/helper.js"])["resources"][6]
+    assert optional["status"] == "unclassified" and optional["forwarded"]
 
 
 @pytest.fixture
@@ -141,14 +142,15 @@ async def test_preview_exceptions_dashboard_edits_and_redaction(resources_runtim
     flow = LoonaOptionsFlow(runtime.entry.entry_id)
     flow.hass, flow.handler = runtime.hass, runtime.entry.entry_id
     form = await flow.async_step_resource_preview()
-    assert "unused: /local/button-card.js" in form["description_placeholders"]["preview"]
+    assert "/local/mini-graph-card-bundle.js?v=1" in form["description_placeholders"]["required"]
+    assert "/local/button-card.js" not in form["description_placeholders"]["required"]
     assert not runtime.controls["resource_filtering"]
     form = await flow.async_step_resource_exceptions()
-    assert form["data_schema"]({}) == {"always_forward_resources": []}
+    assert form["data_schema"]({}) == {"resource_filtering": False, "always_forward_resources": []}
     result = await flow.async_step_resource_exceptions({"always_forward_resources": ["/local/helper.js"]})
     runtime.hass.config_entries.async_update_entry(runtime.entry, options=result["data"])
     await runtime.async_scan()
-    assert (await runtime.async_resource_preview())["resources"][-1]["status"] == "required"
+    assert (await runtime.async_resource_preview())["resources"][-1]["forwarded"]
     board = runtime.hass.data[LOVELACE_DATA].dashboards["wall-panel"]
     await board.async_save({"cards": [{"type": "custom:button-card", "entity": "sensor.wall"}]})
     await runtime.async_scan()
@@ -157,6 +159,89 @@ async def test_preview_exceptions_dashboard_edits_and_redaction(resources_runtim
     assert statuses["/local/mini-graph-card-bundle.js?v=1"] == "unused"
     diagnostics = await async_get_config_entry_diagnostics(runtime.hass, runtime.entry)
     assert "/local/helper.js" not in str(diagnostics)
+
+
+async def test_native_optional_checkboxes_required_rows_and_master(
+    resources_runtime, make_user, make_connection,
+):
+    runtime, collection = resources_runtime
+    flow = LoonaOptionsFlow(runtime.entry.entry_id)
+    flow.hass, flow.handler = runtime.hass, runtime.entry.entry_id
+    connection, output = make_connection(make_user(admin=True))
+    form = await flow.async_step_resource_preview()
+    schema = {str(key.schema): value for key, value in form["data_schema"].schema.items()}
+    picker = schema["always_forward_resources"]
+    assert picker.config["mode"] == "list" and picker.config["multiple"]
+    assert {choice["value"] for choice in picker.config["options"]} == {
+        "/local/button-card.js", "/local/helper.js",
+    }
+    assert form["data_schema"]({})["always_forward_resources"] == []
+    assert "/local/shared.css" in form["description_placeholders"]["required"]
+    result = await flow.async_step_resource_preview({
+        "resource_filtering": True, "always_forward_resources": ["/local/helper.js"],
+    })
+    runtime.hass.config_entries.async_update_entry(runtime.entry, options=result["data"])
+    await runtime.async_scan()
+    assert runtime.controls["resource_filtering"]
+    assert len((await request(runtime.hass, connection, output))["result"]) == 3
+    form = await flow.async_step_resource_preview()
+    assert form["data_schema"]({})["always_forward_resources"] == ["/local/helper.js"]
+    assert runtime.resource_preview["resources"][-1]["status"] == "unclassified"
+    # Optional resources remain editable after being enabled.
+    result = await flow.async_step_resource_preview({"always_forward_resources": []})
+    runtime.hass.config_entries.async_update_entry(runtime.entry, options=result["data"])
+    await runtime.async_scan()
+    reduced = (await request(runtime.hass, connection, output))["result"]
+    assert {row["url"] for row in reduced} == {
+        "/local/mini-graph-card-bundle.js?v=1", "/local/shared.css",
+    }
+    await flow.async_step_resource_preview({"resource_filtering": False})
+    assert not runtime.controls["resource_filtering"]
+    assert (await request(runtime.hass, connection, output))["result"] == collection.async_items()
+
+
+async def test_required_transitions_preserve_explicit_choices_and_new_optional_defaults(resources_runtime):
+    runtime, collection = resources_runtime
+    flow = LoonaOptionsFlow(runtime.entry.entry_id)
+    flow.hass, flow.handler = runtime.hass, runtime.entry.entry_id
+    runtime.hass.config_entries.async_update_entry(runtime.entry, options={
+        "always_forward_resources": ["/local/button-card.js"],
+    })
+    board = runtime.hass.data[LOVELACE_DATA].dashboards["wall-panel"]
+    await board.async_save({"cards": [{"type": "custom:button-card", "entity": "sensor.wall"}]})
+    await runtime.async_scan()
+    form = await flow.async_step_resource_preview()
+    assert form["data_schema"]({})["always_forward_resources"] == []
+    # A required module is never a checkbox, even with a saved optional choice.
+    picker = next(value for value in form["data_schema"].schema.values() if getattr(value, "selector_type", None) == "select")
+    assert "/local/button-card.js" not in {item["value"] for item in picker.config["options"]}
+    result = await flow.async_step_resource_preview({"always_forward_resources": []})
+    assert result["data"]["always_forward_resources"] == ["/local/button-card.js"]
+    await board.async_save({"cards": [{"type": "entity", "entity": "sensor.wall"}]})
+    await runtime.async_scan()
+    new = await collection.async_create_item({"url": "/local/new-optional.js", "res_type": "module"})
+    form = await flow.async_step_resource_preview()
+    selected = form["data_schema"]({})["always_forward_resources"]
+    assert selected == ["/local/button-card.js"]
+    assert new["url"] not in selected
+    # Clearing optional choices cannot turn off shared required styling.
+    result = await flow.async_step_resource_preview({"always_forward_resources": []})
+    runtime.hass.config_entries.async_update_entry(runtime.entry, options=result["data"])
+    await runtime.async_scan()
+    assert [row["url"] for row in runtime.resource_preview["resources"] if row["forwarded"]] == ["/local/shared.css"]
+
+
+async def test_preview_is_read_only_when_resource_adapter_unavailable(resources_runtime):
+    runtime, _ = resources_runtime
+    runtime.resource_adapter.uninstall()
+    runtime.resource_adapter = None
+    flow = LoonaOptionsFlow(runtime.entry.entry_id)
+    flow.hass, flow.handler = runtime.hass, runtime.entry.entry_id
+    form = await flow.async_step_resource_preview()
+    assert not form["data_schema"].schema
+    assert "unavailable" in form["description_placeholders"]["notes"]
+    invalid = await flow.async_step_resource_preview({"resource_filtering": True})
+    assert invalid["errors"] == {"base": "invalid_selection"}
 
 
 async def test_delayed_native_result_rechecks_policy_and_survives_unload(

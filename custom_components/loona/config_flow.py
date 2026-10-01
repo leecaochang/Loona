@@ -239,7 +239,6 @@ class LoonaOptionsFlow(OptionsFlow):
                 "extra_entities",
                 "rules",
                 "resource_preview",
-                "resource_exceptions",
             ],
         )
 
@@ -374,9 +373,7 @@ class LoonaOptionsFlow(OptionsFlow):
     async def async_step_resource_preview(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Read-only dependency preview in a native options form."""
-        if user_input is not None:
-            return self.finish({})
+        """Show fixed requirements and optional resource checkboxes together."""
         runtime = getattr(self.config_entry, "runtime_data", None)
         if runtime is None:
             return self.async_abort(reason="not_loaded")
@@ -384,47 +381,76 @@ class LoonaOptionsFlow(OptionsFlow):
             report = await runtime.async_resource_preview()
         except CompatibilityError:
             return self.async_abort(reason="resources_unavailable")
-        lines = [f"{row['status']}: {row['url']} ({row['type']}) - {row['reason']}"
-                 for row in report["resources"]]
+        required = {row["url"] for row in report["resources"] if row["status"] == "required"}
+        choices = {
+            row["url"]: f"{row['url']} ({row['type']}, {row['status']})"
+            for row in report["resources"] if row["status"] != "required"
+        }
+        current = self.settings.get(CONF_ALWAYS_FORWARD, [])
+        for url in report["stale_exceptions"]:
+            choices[url] = f"{url} (unavailable; uncheck to remove)"
+        editable = CONTROL_RESOURCES in runtime.available_controls
+        errors = {}
+        if user_input is not None:
+            selected = user_input.get(
+                CONF_ALWAYS_FORWARD, [url for url in current if url in choices]
+            )
+            if (not isinstance(selected, list)
+                or any(not isinstance(value, str) for value in selected)
+                or len(selected) != len(set(selected))
+                or not set(selected) <= choices.keys() | required):
+                errors["base"] = "invalid_selection"
+            elif set(user_input) - {CONF_ALWAYS_FORWARD, CONTROL_RESOURCES}:
+                errors["base"] = "invalid_selection"
+            elif not editable:
+                if user_input:
+                    errors["base"] = "invalid_selection"
+                else:
+                    return self.finish({})
+            elif CONTROL_RESOURCES in user_input and not isinstance(user_input[CONTROL_RESOURCES], bool):
+                errors["base"] = "invalid_selection"
+            else:
+                if CONTROL_RESOURCES in user_input:
+                    await runtime.async_set_control(CONTROL_RESOURCES, user_input[CONTROL_RESOURCES])
+                # Preserve prior explicit choices while they are required. They
+                # become editable again if the dashboard stops requiring them.
+                saved = (set(selected) - required) | (set(current) & required)
+                return self.finish({CONF_ALWAYS_FORWARD: sorted(saved)})
+        fixed = [
+            f"- `{row['url']}` ({row['type']}) - {row['reason']}"
+            for row in report["resources"] if row["status"] == "required"
+        ]
+        notes = []
         if report["unresolved_custom_types"]:
-            lines.append("Unresolved custom types: " + ", ".join(report["unresolved_custom_types"]))
+            notes.append("Unresolved custom types: " + ", ".join(report["unresolved_custom_types"]))
         if report["dynamic_configuration"]:
-            lines.append("Templates or strategies can hide additional resource dependencies.")
+            notes.append("Templates or strategies may need additional resources.")
         if report["stale_exceptions"]:
-            lines.append("Unavailable exceptions: " + ", ".join(report["stale_exceptions"]))
+            notes.append("Some saved resources are unavailable. Uncheck them to remove their saved selection.")
+        if not editable:
+            notes.append("Resource filtering is unavailable on this Home Assistant version or while its adapter has a compatibility problem.")
+        schema: dict[Any, Any] = {}
+        if editable:
+            schema[vol.Required(CONTROL_RESOURCES, default=runtime.controls[CONTROL_RESOURCES])] = selector.BooleanSelector()
+            if choices:
+                schema[vol.Optional(
+                    CONF_ALWAYS_FORWARD,
+                    default=[url for url in current if url in choices],
+                )] = selector.SelectSelector(selector.SelectSelectorConfig(
+                    options=[selector.SelectOptionDict(value=url, label=label)
+                             for url, label in choices.items()],
+                    multiple=True, mode=selector.SelectSelectorMode.LIST,
+                ))
         return self.async_show_form(
-            step_id="resource_preview", data_schema=vol.Schema({}),
-            description_placeholders={"preview": "\n\n".join(lines) or "No Lovelace resources registered."},
+            step_id="resource_preview", errors=errors, data_schema=vol.Schema(schema),
+            description_placeholders={
+                "required": "\n".join(fixed) or "No required Lovelace resources detected.",
+                "notes": "\n\n".join(notes),
+            },
         )
 
     async def async_step_resource_exceptions(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Optional exemptions using actual collection URLs and resource types."""
-        runtime = getattr(self.config_entry, "runtime_data", None)
-        if runtime is None:
-            return self.async_abort(reason="not_loaded")
-        try:
-            report = await runtime.async_resource_preview()
-        except CompatibilityError:
-            return self.async_abort(reason="resources_unavailable")
-        choices = {row["url"]: f"{row['url']} ({row['type']})" for row in report["resources"]}
-        current = self.settings.get(CONF_ALWAYS_FORWARD, [])
-        for url in current:
-            choices.setdefault(url, f"{url} (unavailable)")
-        errors = {}
-        if user_input is not None:
-            selected = user_input.get(CONF_ALWAYS_FORWARD, [])
-            if (not isinstance(selected, list) or any(not isinstance(value, str) for value in selected)
-                or len(selected) != len(set(selected)) or not set(selected) <= choices.keys()):
-                errors["base"] = "invalid_selection"
-            else:
-                return self.finish({CONF_ALWAYS_FORWARD: selected})
-        return self.async_show_form(
-            step_id="resource_exceptions", errors=errors,
-            data_schema=vol.Schema({vol.Optional(CONF_ALWAYS_FORWARD, default=current):
-                selector.SelectSelector(selector.SelectSelectorConfig(
-                    options=[selector.SelectOptionDict(value=url, label=label) for url, label in choices.items()],
-                    multiple=True, mode=selector.SelectSelectorMode.DROPDOWN,
-                ))}),
-        )
+        """Route older flow links to the combined resource settings form."""
+        return await self.async_step_resource_preview(user_input)
