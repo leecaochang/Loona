@@ -5,7 +5,7 @@ from typing import Final
 DOMAIN: Final = "loona"
 SUBSCRIBE_ENTITIES: Final = "subscribe_entities"
 SUPPORTED_CORE_VERSIONS: Final = frozenset({"2026.9.3", "2026.9.4"})
-VERSION: Final = "0.3.2"
+VERSION: Final = "0.4.1"
 CONF_DASHBOARDS: Final = "dashboards"
 CONF_TARGET_MODE: Final = "target_mode"
 CONF_USER_IDS: Final = "user_ids"
@@ -20,10 +20,22 @@ DEFAULT_DASHBOARD: Final = "lovelace"
 CONTROL_MASTER: Final = "enabled"
 CONTROL_ENTITIES: Final = "entity_filtering"
 CONTROL_REGISTRIES: Final = "registry_filtering"
+CONTROL_GRAPHS: Final = "visible_first_graphs"
+GRAPH_CONTEXT: Final = "loona_graph_loading"
+GRAPH_SUBSCRIBE: Final = "loona/subscribe_graph_loading"
+GRAPH_QUIET_MS: Final = 750
+GRAPH_POLL_MS: Final = 100
+GRAPH_TRACE_LIMIT: Final = 200
+GRAPH_PROFILES: Final = {
+    "sensor": {"height": 120, "size": 3, "columns": 6, "rows": 2},
+    "custom:mini-graph-card": {"height": 150, "size": 3, "columns": 6, "rows": 3},
+    "custom:apexcharts-card": {"height": 250, "size": 5, "columns": 6, "rows": 5},
+}
 CONTROL_DEFAULTS: Final = {
     CONTROL_MASTER: True,
     CONTROL_ENTITIES: True,
     CONTROL_REGISTRIES: False,
+    CONTROL_GRAPHS: False,
 }
 SCAN_DEBOUNCE: Final = 1.0
 MAINTENANCE_SECONDS: Final = 60

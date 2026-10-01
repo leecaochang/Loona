@@ -51,6 +51,7 @@ from .const import (
     TARGET_ALL,
     VERSION,
 )
+from .graph_loading import GraphLoadingAdapter
 from .dashboard import (
     dashboard_titles,
     discovery_context,
@@ -84,6 +85,8 @@ class LoonaRuntime:
         self.scan_duration = 0.0
         self.adapter: SubscriptionAdapter | None = None
         self.registry_adapter: RegistryAdapter | None = None
+        self.graph_adapter: GraphLoadingAdapter | None = None
+        self.graph_compatibility_problem: str | None = None
         self.registry_scope = RegistryScope()
         self.device_id: str | None = None
         self.dashboard_devices: dict[str, str] = {}
@@ -114,7 +117,11 @@ class LoonaRuntime:
 
     @property
     def compatibility_problem(self) -> str | None:
-        return self.entity_compatibility_problem or self.registry_compatibility_problem
+        return (
+            self.entity_compatibility_problem
+            or self.registry_compatibility_problem
+            or self.graph_compatibility_problem
+        )
 
     @callback
     def async_add_listener(self, listener: Callable[[], None]) -> Callable[[], None]:
@@ -195,6 +202,13 @@ class LoonaRuntime:
             self.registry_compatibility_problem = str(err)
         else:
             self.registry_adapter = registry_adapter
+        graph_adapter = GraphLoadingAdapter(self)
+        try:
+            graph_adapter.install()
+        except CompatibilityError as err:
+            self.graph_compatibility_problem = str(err)
+        else:
+            self.graph_adapter = graph_adapter
         self._update_issues()
 
     @callback
@@ -474,6 +488,9 @@ class LoonaRuntime:
         if self.registry_adapter:
             self.registry_adapter.uninstall()
             self.registry_adapter = None
+        if self.graph_adapter:
+            self.graph_adapter.uninstall()
+            self.graph_adapter = None
         self._listeners.clear()
         for key in ("compatibility", "scope", "exclusion"):
             ir.async_delete_issue(self.hass, DOMAIN, f"{self.entry.entry_id}_{key}")

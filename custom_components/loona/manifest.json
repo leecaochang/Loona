@@ -1,12 +1,19 @@
 {
   "domain": "loona",
   "name": "Loona",
-  "version": "0.3.2",
+  "version": "0.4.1",
   "config_flow": true,
   "integration_type": "service",
   "iot_class": "local_push",
-  "dependencies": ["config", "lovelace", "websocket_api"],
-  "codeowners": ["@leecaochang"],
+  "dependencies": [
+    "config",
+    "lovelace",
+    "websocket_api",
+    "frontend"
+  ],
+  "codeowners": [
+    "@leecaochang"
+  ],
   "documentation": "https://github.com/leecaochang/Loona",
   "issue_tracker": "https://github.com/leecaochang/Loona/issues",
   "requirements": []

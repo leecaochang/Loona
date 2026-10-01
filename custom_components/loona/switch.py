@@ -7,7 +7,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import CONTROL_ENTITIES, CONTROL_MASTER, CONTROL_REGISTRIES
+from .const import CONTROL_ENTITIES, CONTROL_GRAPHS, CONTROL_MASTER, CONTROL_REGISTRIES
 from .entity import LoonaEntity
 from .runtime import LoonaConfigEntry, LoonaRuntime
 
@@ -24,6 +24,7 @@ async def async_setup_entry(
                 (CONTROL_MASTER, "Enabled"),
                 (CONTROL_ENTITIES, "Entity filtering"),
                 (CONTROL_REGISTRIES, "Registry filtering"),
+                (CONTROL_GRAPHS, "Visible-first graphs"),
             )
         ]
     )

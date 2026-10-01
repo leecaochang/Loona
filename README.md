@@ -1,6 +1,6 @@
 # Loona
 
-Loona reduces the entity states sent to Home Assistant dashboards. Select the dashboards and accounts to filter, then continue using your existing dashboards at your normal Home Assistant address.
+Loona reduces the entity states sent to Home Assistant dashboards and can prioritize visible graphs during loading. Select the dashboards and accounts to filter, then continue using your existing dashboards at your normal Home Assistant address.
 
 Loona is experimental. This release supports Home Assistant Core **2026.9.3 and 2026.9.4**. On other versions, Loona reports a compatibility problem and leaves native subscriptions unchanged. Support for earlier versions has not yet been established.
 
@@ -28,9 +28,10 @@ Open the **Loona** device under **Settings > Devices & services** to find these 
 
 | Control | What it does |
 | --- | --- |
-| Enabled | Master switch. Turn it off to restore full entity states and registry lists to subscriptions managed by Loona. |
+| Enabled | Master switch. Turn it off to restore full entity states and registry lists, and release graphs waiting to load. |
 | Entity filtering | Turns entity state filtering on or off while keeping the master switch independent. Both switches must be on for filtering. |
 | Registry filtering | Limits entity, device, area, floor, and label lists to dashboard dependencies and related metadata. Off by default. The Enabled switch must also be on. |
+| Visible-first graphs | Starts visible graphs immediately, then creates off-screen graphs one at a time after visible activity settles. Off by default. The Enabled switch must also be on. |
 | Rescan dashboards | Reloads the selected configurations and rebuilds the scope. Use this for troubleshooting; ordinary dashboard changes are handled automatically. |
 
 Switch states survive Home Assistant restarts. Switch changes update existing subscriptions managed by Loona without requiring a page reload. Turning filtering back on also applies to those subscriptions automatically.
@@ -51,7 +52,7 @@ Use Loona's **Configure** menu under **Settings > Devices & services**.
 | --- | --- |
 | Dashboards | Change which dashboards contribute to the shared scope. |
 | Targets | Change the selected accounts or choose all accounts. |
-| Filters | Change the Entity filtering and Registry filtering controls shown on the Loona device. |
+| Filters and graph loading | Change the filtering and visible-first graph controls shown on the Loona device. |
 | Extra entities | Include additional entities needed by custom cards or other sessions using a filtered account. |
 | Advanced entity rules | Include whole domains or entity patterns, or exclude entities. |
 
@@ -90,6 +91,16 @@ When a selected dashboard fails to load or has an unsupported dynamic construct,
 Unknown custom card types can still use their explicit references. Cards that calculate additional entity names or inspect `hass.states` may need extra entities or domain inclusions. Loona cannot infer every custom card's runtime dependencies.
 
 This release filters entity state subscriptions and optionally registry lists. Dashboard JavaScript and CSS resources, history, services, themes, and other Home Assistant APIs remain available normally.
+
+## Visible-first graphs
+
+Turn on **Visible-first graphs** on the Loona device and reload a selected dashboard using a targeted account. Loona registers its frontend module automatically; no resource entry, card wrapper, or duplicate dashboard is required. Saved dashboard configuration remains unchanged. The feature supports native sensor cards with `graph: line`, `custom:mini-graph-card`, and `custom:apexcharts-card` created through Home Assistant's native card container, including native stacks. Other cards and panel layouts use ordinary creation.
+
+A graph already visible, or scrolled into view while earlier cards are still loading, starts immediately. Off-screen graphs wait for observable visible rendering and Home Assistant requests to settle, followed by a 750 ms quiet interval, then start one at a time during idle time. Custom cards have no universal finished-loading event, so this is a completion heuristic. Slow or continuous activity can delay background work; scrolling a graph into view still takes priority. This schedules card creation rather than filtering history requests or JavaScript resources.
+
+Queued graphs use temporary placeholders with estimated sizes until the native card replaces them. Dashboard preview and editing create real cards immediately. Turning the graph switch or Enabled off releases pending graphs and restores ordinary creation; cards already created remain loaded. Turning it on affects subsequent card creation, so reload the view for a comparison. Initial installation, integration reloads, and upgrades require a browser page reload.
+
+For troubleshooting, `window.loonaGraphLoadingReport()` shows queued and created graphs, and `console.table(window.loonaGraphLoadingTrace())` shows a bounded creation trace. These browser diagnostics do not measure total dashboard load time.
 
 ## Performance measurements
 

@@ -23,7 +23,7 @@
       "no_accounts": "Select at least one active account.",
       "invalid_selection": "Choose current, unique values from the available selections.",
       "invalid_pattern": "Use domains such as light and entity globs such as sensor.room_* without spaces or unmatched brackets.",
-      "not_loaded": "Loona must be loaded before changing its filter control."
+      "not_loaded": "Loona must be loaded before changing these controls."
     },
     "abort": {
       "already_configured": "Only one Loona integration can be configured."
@@ -36,7 +36,7 @@
         "menu_options": {
           "dashboards": "Dashboards",
           "targets": "Targets",
-          "filters": "Filters",
+          "filters": "Filters and graph loading",
           "extra_entities": "Extra entities",
           "rules": "Advanced entity rules"
         }
@@ -57,11 +57,12 @@
         }
       },
       "filters": {
-        "title": "Filters",
-        "description": "The Enabled switch must be on for either filter. Registry filtering limits entity, device, area, floor, and label metadata to the selected dashboards. It is off by default because editors and entity pickers may need full metadata. Changes refresh existing managed subscriptions.",
+        "title": "Filters and graph loading",
+        "description": "The Enabled switch must be on for these options. Registry filtering limits dashboard metadata and is off by default because editors may need full lists. Visible-first graphs is also off by default: visible graphs start immediately, then off-screen graphs load after visible rendering and requests settle. Changes apply to open pages; reload the view to compare graph loading.",
         "data": {
           "entity_filtering": "Entity filtering",
-          "registry_filtering": "Registry filtering"
+          "registry_filtering": "Registry filtering",
+          "visible_first_graphs": "Visible-first graphs"
         }
       },
       "extra_entities": {
@@ -86,7 +87,7 @@
       "no_accounts": "Select at least one active account.",
       "invalid_selection": "Choose current, unique values from the available selections.",
       "invalid_pattern": "Use domains such as light and entity globs such as sensor.room_* without spaces or unmatched brackets.",
-      "not_loaded": "Loona must be loaded before changing its filter control."
+      "not_loaded": "Loona must be loaded before changing these controls."
     }
   },
   "entity": {
@@ -99,6 +100,9 @@
       },
       "registry_filtering": {
         "name": "Registry filtering"
+      },
+      "visible_first_graphs": {
+        "name": "Visible-first graphs"
       }
     },
     "button": {
@@ -147,7 +151,7 @@
   "issues": {
     "compatibility": {
       "title": "Loona cannot safely apply filtering",
-      "description": "Check the Compatibility problem sensor, the supported Home Assistant versions, and other integrations replacing entity subscriptions or registry commands. An affected filter preserves native handling when it cannot be installed. Reload browser pages after reloading Loona."
+      "description": "Check the Compatibility problem sensor, the supported Home Assistant versions, and other integrations replacing entity, registry, or config commands. An affected feature preserves native handling when it cannot be installed. Reload browser pages after reloading Loona."
     },
     "scope": {
       "title": "Loona is passing through full data",

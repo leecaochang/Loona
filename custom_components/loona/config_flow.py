@@ -23,6 +23,7 @@ from .const import (
     CONF_INCLUDE_GLOBS,
     CONF_EXCLUDE_GLOBS,
     CONTROL_ENTITIES,
+    CONTROL_GRAPHS,
     CONTROL_REGISTRIES,
     DOMAIN,
     TARGET_ALL,
@@ -268,6 +269,10 @@ class LoonaOptionsFlow(OptionsFlow):
                     await runtime.async_set_control(
                         CONTROL_REGISTRIES, user_input[CONTROL_REGISTRIES]
                     )
+                if CONTROL_GRAPHS in user_input:
+                    await runtime.async_set_control(
+                        CONTROL_GRAPHS, user_input[CONTROL_GRAPHS]
+                    )
                 return self.finish({})
         current = runtime.controls[CONTROL_ENTITIES] if runtime else True
         return self.async_show_form(
@@ -283,6 +288,10 @@ class LoonaOptionsFlow(OptionsFlow):
                         default=runtime.controls[CONTROL_REGISTRIES]
                         if runtime
                         else False,
+                    ): selector.BooleanSelector(),
+                    vol.Required(
+                        CONTROL_GRAPHS,
+                        default=runtime.controls[CONTROL_GRAPHS] if runtime else False,
                     ): selector.BooleanSelector(),
                 }
             ),

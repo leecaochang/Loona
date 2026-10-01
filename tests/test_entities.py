@@ -10,7 +10,7 @@ from custom_components.loona.const import DOMAIN
 
 
 async def test_native_platforms_and_dashboard_selection_cleanup(
-    loona_hass, make_entry, dashboards
+    loona_hass, make_entry, dashboards, frontend_http
 ):
     loona_hass.states.async_set("sensor.wall", "1")
     entry = make_entry({"dashboards": ["wall-panel"], "target_mode": "all"})
@@ -18,10 +18,11 @@ async def test_native_platforms_and_dashboard_selection_cleanup(
         assert await async_setup_entry(loona_hass, entry)
     await loona_hass.async_block_till_done()
     runtime = entry.runtime_data
+    assert runtime.controls["visible_first_graphs"] is False
     entities = er.async_entries_for_config_entry(
         er.async_get(loona_hass), entry.entry_id
     )
-    assert len(entities) == 15
+    assert len(entities) == 16
     assert {entity.domain for entity in entities} == {
         "sensor",
         "switch",
@@ -47,11 +48,12 @@ async def test_native_platforms_and_dashboard_selection_cleanup(
     flow = LoonaOptionsFlow()
     flow.hass, flow.handler = loona_hass, entry.entry_id
     result = await flow.async_step_filters(
-        {"entity_filtering": False, "registry_filtering": True}
+        {"entity_filtering": False, "registry_filtering": True, "visible_first_graphs": True}
     )
     assert result["data"] == {}
     assert not runtime.controls["entity_filtering"]
     assert runtime.controls["registry_filtering"]
+    assert runtime.controls["visible_first_graphs"]
     assert runtime.registry_adapter is not None, runtime.registry_compatibility_problem
     assert runtime.registry_adapter.policy.enabled is False
     adapter = runtime.adapter
@@ -66,7 +68,7 @@ async def test_native_platforms_and_dashboard_selection_cleanup(
     entities = er.async_entries_for_config_entry(
         er.async_get(loona_hass), entry.entry_id
     )
-    assert len(entities) == 15
+    assert len(entities) == 16
     assert not any(
         ":dashboard:wall-panel" in identifier
         for device in dr.async_child_entries_for_config_entry(

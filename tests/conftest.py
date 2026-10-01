@@ -162,6 +162,23 @@ def make_entry(loona_hass):
 
 
 @pytest.fixture
+def frontend_http(loona_hass):
+    """Use native HTTP static registration and native frontend module ownership."""
+    from homeassistant.components import frontend
+    from homeassistant.components.http import HomeAssistantHTTP
+    from homeassistant.components.http.cors import setup_cors
+
+    loona_hass.http = HomeAssistantHTTP(
+        loona_hass, None, None, None, ["127.0.0.1"], 0, [], "modern"
+    )
+    setup_cors(loona_hass.http.app, [])
+    loona_hass.data[frontend.DATA_EXTRA_MODULE_URL] = frontend.UrlManager(
+        lambda operation, url: None, []
+    )
+    return loona_hass.http
+
+
+@pytest.fixture
 async def dashboards(loona_hass):
     """Use genuine native storage dashboards and their invalidation events."""
     from homeassistant.components.lovelace import LovelaceData

@@ -4,6 +4,7 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN
+from .graph_loading import async_register_frontend
 from .runtime import LoonaConfigEntry, LoonaRuntime
 
 _PLATFORMS = (Platform.SWITCH, Platform.SENSOR, Platform.BINARY_SENSOR, Platform.BUTTON)
@@ -15,6 +16,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: LoonaConfigEntry) -> boo
     entry.runtime_data = runtime
     try:
         await runtime.async_start()
+        runtime._unsubscribers.append(await async_register_frontend(hass))
         await hass.config_entries.async_forward_entry_setups(entry, _PLATFORMS)
         await runtime.async_scan()
     except Exception:
