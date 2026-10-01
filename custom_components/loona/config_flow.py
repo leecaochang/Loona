@@ -444,7 +444,12 @@ class LoonaOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="resource_preview", errors=errors, data_schema=vol.Schema(schema),
             description_placeholders={
+                # Keep HTML out of the translation's ICU message syntax.
+                "required_start": "<details><summary>",
+                "required_summary_end": "</summary>",
+                "required_end": "</details>",
                 "required": "\n".join(fixed) or "No required Lovelace resources detected.",
+                "required_count": str(len(fixed)),
                 "notes": "\n\n".join(notes),
             },
         )

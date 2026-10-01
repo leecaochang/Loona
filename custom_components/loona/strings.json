@@ -86,7 +86,7 @@
       },
       "resource_preview": {
         "title": "Resource dependencies",
-        "description": "Required resources stay enabled automatically and have no checkbox.\n\n{required}\n\n{notes}\n\nEnable Resource filtering to apply the optional selections below. Checked resources also load; unchecked resources are omitted. New optional resources default to unchecked. When Resource filtering is off, Home Assistant loads its full resource list. Loona's Enabled switch must also be on. Save your choices, then hard-reload the browser page.",
+        "description": "{required_start}Required resources ({required_count}){required_summary_end}\n\nRequired resources stay enabled automatically and have no checkbox.\n\n{required}\n\n{required_end}\n\n{notes}\n\nEnable Resource filtering to apply the optional selections below. Checked resources also load; unchecked resources are omitted. New optional resources default to unchecked. When Resource filtering is off, Home Assistant loads its full resource list. Loona's Enabled switch must also be on. Save your choices, then hard-reload the browser page.",
         "data": {
           "resource_filtering": "Resource filtering",
           "always_forward_resources": "Optional resources to load"
