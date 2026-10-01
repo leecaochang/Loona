@@ -4,8 +4,15 @@ from typing import Final
 
 DOMAIN: Final = "loona"
 SUBSCRIBE_ENTITIES: Final = "subscribe_entities"
-SUPPORTED_CORE_VERSIONS: Final = frozenset({"2026.9.3", "2026.9.4"})
-VERSION: Final = "0.4.2"
+SUPPORTED_CORE_VERSIONS: Final = frozenset(
+    {
+        "2024.5.5", "2024.12.5", "2025.6.3", "2026.1.3", "2026.8.3",
+        "2026.9.3", "2026.9.4",
+    }
+)
+REGISTRY_CORE_VERSIONS: Final = frozenset({"2026.9.3", "2026.9.4"})
+FRONTEND_CORE_VERSIONS: Final = frozenset({"2026.9.3", "2026.9.4"})
+VERSION: Final = "0.5.0"
 CONF_DASHBOARDS: Final = "dashboards"
 CONF_TARGET_MODE: Final = "target_mode"
 CONF_USER_IDS: Final = "user_ids"

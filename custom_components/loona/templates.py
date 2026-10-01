@@ -369,6 +369,6 @@ def template_dependencies(
             if sum(1 for _ in tree.find_all(nodes.Node)) > MAX_TEMPLATE_NODES:
                 raise ValueError("Template is too complex")
             _Jinja(found).visit(tree)
-    except ValueError, SyntaxError, TemplateSyntaxError, RecursionError:
+    except (ValueError, SyntaxError, TemplateSyntaxError, RecursionError):
         return TemplateDependencies(frozenset(found), False)
     return TemplateDependencies(frozenset(found), True)

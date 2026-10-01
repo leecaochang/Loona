@@ -8,7 +8,6 @@ import voluptuous as vol
 
 from homeassistant import const as ha_const
 from homeassistant.components import frontend, websocket_api
-from homeassistant.components.http import StaticPathConfig
 from homeassistant.components.websocket_api import commands
 from homeassistant.core import HomeAssistant, callback
 
@@ -31,7 +30,7 @@ from .const import (
     GRAPH_QUIET_MS,
     GRAPH_SUBSCRIBE,
     GRAPH_TRACE_LIMIT,
-    SUPPORTED_CORE_VERSIONS,
+    FRONTEND_CORE_VERSIONS,
     TARGET_ALL,
     VERSION,
 )
@@ -46,6 +45,18 @@ _ASSET_REGISTERED = "loona_graph_asset_registered"
 
 async def async_register_frontend(hass: HomeAssistant) -> Callable[[], None]:
     """Register a native extra module once, without editing resource storage."""
+    try:
+        from homeassistant.components.http import StaticPathConfig
+    except ImportError as err:
+        raise CompatibilityError("Frontend static path API is unavailable") from err
+    if not all(callable(api) for api in (
+        StaticPathConfig,
+        getattr(hass.http, "async_register_static_paths", None),
+        getattr(frontend, "add_extra_js_url", None),
+        getattr(frontend, "remove_extra_js_url", None),
+    )):
+        raise CompatibilityError("Frontend registration APIs are unavailable")
+
     if not hass.data.get(_ASSET_REGISTERED):
         await hass.http.async_register_static_paths(
             [
@@ -131,7 +142,7 @@ class GraphLoadingAdapter:
 
     def install(self) -> None:
         """Decline unfamiliar versions, handlers, schemas, or another policy owner."""
-        if ha_const.__version__ not in SUPPORTED_CORE_VERSIONS:
+        if ha_const.__version__ not in FRONTEND_CORE_VERSIONS:
             raise CompatibilityError("Graph loading requires a tested Core version")
         table = cast(HandlerTable, self.hass.data.get(websocket_api.DOMAIN, {}))
         if not isinstance(table, dict):

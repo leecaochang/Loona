@@ -1,7 +1,7 @@
 """Delegate entity subscriptions and reconcile scope changes without reconnects.
 
-Only the synchronous Core 2026.9.3 and .4 handler is supported. Preparing, publishing,
-and retiring subscriptions must remain in one event-loop turn without awaits.
+Delegate to the native synchronous handler on admitted Core releases. Preparing,
+publishing, and retiring subscriptions stay in one event-loop turn without awaits.
 """
 
 from collections.abc import Callable

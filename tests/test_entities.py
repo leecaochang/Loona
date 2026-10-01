@@ -83,3 +83,34 @@ async def test_native_platforms_and_dashboard_selection_cleanup(
     await entry._async_process_on_unload(loona_hass)
     assert not runtime._listeners
     await asyncio.sleep(0)
+
+
+async def test_missing_optional_frontend_api_keeps_entity_filtering_operational(
+    loona_hass, make_entry, dashboards, frontend_http, make_user, make_connection
+):
+    from unittest.mock import patch
+
+    # These dependencies are represented by the native fixtures above.
+    loona_hass.config.components.update({"lovelace", "frontend"})
+    loona_hass.states.async_set("sensor.wall", "1")
+    loona_hass.states.async_set("sensor.other", "2")
+    entry = make_entry({"dashboards": ["wall-panel"], "target_mode": "all"})
+    with patch.object(frontend_http, "async_register_static_paths", None):
+        async with entry.setup_lock:
+            assert await async_setup_entry(loona_hass, entry)
+    await loona_hass.async_block_till_done()
+    runtime = entry.runtime_data
+    try:
+        assert runtime.available_controls == {"enabled", "entity_filtering", "registry_filtering"}
+        assert runtime.graph_adapter is None and runtime.graph_compatibility_problem
+        assert runtime.adapter is not None
+        assert not runtime.scope_problem, runtime.problems
+        connection, wire = make_connection(make_user(admin=True))
+        connection.async_handle({"id": 1, "type": "subscribe_entities"})
+        assert "sensor.wall" in wire[-1]["event"]["a"]
+        assert "sensor.other" not in wire[-1]["event"]["a"]
+        entities = er.async_entries_for_config_entry(er.async_get(loona_hass), entry.entry_id)
+        assert not any(entity.unique_id.endswith((":visible_first_graphs", ":pause_animations_during_loading")) for entity in entities)
+    finally:
+        assert await async_unload_entry(loona_hass, entry)
+        await entry._async_process_on_unload(loona_hass)

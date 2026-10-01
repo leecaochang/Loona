@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.entity import Entity
 
 from .const import DOMAIN
@@ -26,6 +27,11 @@ class LoonaEntity(Entity):
     @property
     def device_info(self) -> Any:
         if self.dashboard is not None:
+            relation = (
+                {"parent_device_id": self.runtime.device_id}
+                if hasattr(dr, "ChildDeviceEntry")
+                else {"via_device": (DOMAIN, self.runtime.entry.entry_id)}
+            )
             return {
                 "identifiers": {
                     (
@@ -33,7 +39,7 @@ class LoonaEntity(Entity):
                         f"{self.runtime.entry.entry_id}:dashboard:{self.dashboard}",
                     )
                 },
-                "parent_device_id": self.runtime.device_id,
+                **relation,
             }
         return {"identifiers": {(DOMAIN, self.runtime.entry.entry_id)}}
 

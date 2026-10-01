@@ -3,7 +3,7 @@
 from homeassistant.components.button import ButtonEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .entity import LoonaEntity
 from .runtime import LoonaConfigEntry
@@ -12,7 +12,7 @@ from .runtime import LoonaConfigEntry
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: LoonaConfigEntry,
-    async_add_entities: AddConfigEntryEntitiesCallback,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
     async_add_entities([LoonaRescan(entry.runtime_data, "rescan", "Rescan dashboards")])
 

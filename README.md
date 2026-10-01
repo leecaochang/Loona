@@ -2,7 +2,18 @@
 
 Loona reduces the entity states sent to Home Assistant dashboards and can prioritize visible graphs and temporarily pause continuous animations during loading. Select the dashboards and accounts to filter, then continue using your existing dashboards at your normal Home Assistant address.
 
-Loona is experimental. This release supports Home Assistant Core **2026.9.3 and 2026.9.4**. On other versions, Loona reports a compatibility problem and leaves native subscriptions unchanged. Support for earlier versions has not yet been established.
+Loona is experimental. Feature availability depends on your Home Assistant version and successful native API checks.
+
+## Home Assistant compatibility
+
+| Core version | Available features |
+| --- | --- |
+| **2024.5.5, 2024.12.5, 2025.6.3, 2026.1.3, 2026.8.3** | Entity filtering, dashboard/account selection, advanced entity rules, controls, diagnostics and statistics. |
+| **2026.9.3, 2026.9.4** | All of the above, plus registry filtering, visible-first graphs and animation pausing. |
+
+Only the listed releases are admitted; this is not a claim that every intervening release is supported. On unlisted releases, the entity adapter reports a compatibility problem and preserves native subscriptions. The HACS installation minimum is **2024.5.5**.
+
+Loona offers only available feature switches and options. The absence of an optional feature on an older supported release is expected and does not trigger a compatibility problem. Older releases do not load Loona's graph or animation modules. Native handlers, schemas, ownership and permission behavior are checked before entity filtering is installed; unexpected changes leave the affected feature bypassed.
 
 ## Install
 
@@ -24,7 +35,7 @@ Loona preserves clients that explicitly request their own entity list or native 
 
 ## Controls
 
-Open the **Loona** device under **Settings > Devices & services** to find these controls. They can also be used in normal Home Assistant automations.
+Open the **Loona** device under **Settings > Devices & services** to find the controls available on your version. They can also be used in normal Home Assistant automations.
 
 | Control | What it does |
 | --- | --- |
@@ -75,7 +86,7 @@ The Loona device provides these sensors. Counts and percentages are gauges that 
 | Last successful scan | Time of the most recent complete scope scan. |
 | Scan duration | Duration of the latest scan in milliseconds. |
 
-Subscription counts refresh about every 30 seconds. Each selected dashboard also has a child device with **Discovered entities** and **Unresolved entities** sensors. These count that dashboard's dependencies before advanced rules; unresolved IDs have neither a registry entry nor a current state. They do not measure traffic for an individual dashboard.
+Subscription counts refresh about every 30 seconds. Each selected dashboard also has a related device with **Discovered entities** and **Unresolved entities** sensors. On Core 2026.9 these use native child devices; older releases use the native via-device relationship. These count that dashboard's dependencies before advanced rules; unresolved IDs have neither a registry entry nor a current state. They do not measure traffic for an individual dashboard.
 
 ## Supported dashboards and limitations
 
@@ -162,3 +173,10 @@ Download diagnostics from the integration menu when reporting a problem at [Loon
 ## License
 
 [MIT](LICENSE).
+
+
+## Compatibility testing
+
+The native backend acceptance runner is `tests/core_compatibility.py`. It exercises real Core setup and unload, storage and YAML dashboard loading, inherited area/floor/label discovery, native options and switch services, selected accounts, permissions, live state updates, scope replacement, bypass and persisted controls. The GitHub Actions compatibility matrix installs each admitted Core with its shipped package constraints and matching frontend, then runs this test with the appropriate Python version. The regular test suite also runs the acceptance runner on the development Core. Frontend scheduling and animation tests remain tied to the verified current frontend.
+
+To reproduce a matrix entry, install its Core and matching frontend in an isolated environment using `.github/workflows/compatibility.yml`, then run `python tests/core_compatibility.py` from the repository. The development test extra pins Core 2026.9.4 and therefore requires Python 3.14.2 or newer; the integration itself supports Python 3.12 on its admitted older releases.

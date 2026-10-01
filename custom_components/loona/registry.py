@@ -25,7 +25,7 @@ from homeassistant.helpers import (
 from homeassistant.util.json import json_loads_object
 
 from .compatibility import CompatibilityError, HandlerEntry, HandlerTable
-from .const import SUPPORTED_CORE_VERSIONS
+from .const import REGISTRY_CORE_VERSIONS
 from .dependencies import DiscoveryResult
 from .websocket import ScopePolicy
 
@@ -232,7 +232,7 @@ class RegistryAdapter:
         if self._table is not None:
             self.check_ownership()
             return
-        if ha_const.__version__ not in SUPPORTED_CORE_VERSIONS:
+        if ha_const.__version__ not in REGISTRY_CORE_VERSIONS:
             raise CompatibilityError(
                 f"Unsupported registry Core version: {ha_const.__version__}"
             )

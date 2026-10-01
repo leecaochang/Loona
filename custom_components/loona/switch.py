@@ -5,7 +5,7 @@ from typing import Any
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import CONTROL_ENTITIES, CONTROL_GRAPHS, CONTROL_MASTER, CONTROL_MOTION, CONTROL_REGISTRIES
 from .entity import LoonaEntity
@@ -15,7 +15,7 @@ from .runtime import LoonaConfigEntry, LoonaRuntime
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: LoonaConfigEntry,
-    async_add_entities: AddConfigEntryEntitiesCallback,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
     async_add_entities(
         [
@@ -27,6 +27,7 @@ async def async_setup_entry(
                 (CONTROL_GRAPHS, "Visible-first graphs"),
                 (CONTROL_MOTION, "Pause animations during loading"),
             )
+            if key in entry.runtime_data.available_controls
         ]
     )
 
@@ -39,6 +40,10 @@ class LoonaSwitch(LoonaEntity, SwitchEntity):
     def __init__(self, runtime: LoonaRuntime, key: str, name: str) -> None:
         super().__init__(runtime, key, name)
         self.key = key
+
+    @property
+    def available(self) -> bool:
+        return self.key in self.runtime.available_controls
 
     @property
     def is_on(self) -> bool:

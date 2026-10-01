@@ -1,0 +1,54 @@
+name: Native Core compatibility
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - core: '2024.5.5'
+            python: '3.12'
+          - core: '2024.12.5'
+            python: '3.12'
+          - core: '2025.6.3'
+            python: '3.13'
+          - core: '2026.1.3'
+            python: '3.13'
+          - core: '2026.8.3'
+            python: '3.14'
+          - core: '2026.9.3'
+            python: '3.14'
+          - core: '2026.9.4'
+            python: '3.14'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: astral-sh/setup-uv@v6
+      - name: Install pinned Core and frontend
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LOONA_CORE: ${{ matrix.core }}
+        run: |
+          gh api "repos/home-assistant/core/contents/homeassistant/package_constraints.txt?ref=$LOONA_CORE" --jq '.content' | base64 --decode > /tmp/loona-constraints.txt
+          uv venv .compat-venv
+          case "$LOONA_CORE" in
+            2024.*) loona_extra=("josepy==1.14.0" "pycares==4.11.0") ;;
+            2025.6.3) loona_extra=("pycares==4.11.0") ;;
+            *) loona_extra=() ;;
+          esac
+          uv pip install --python .compat-venv/bin/python -c /tmp/loona-constraints.txt "homeassistant==$LOONA_CORE" "${loona_extra[@]}"
+          loona_frontend=$(.compat-venv/bin/python -c 'import importlib.util,json,pathlib; p=pathlib.Path(importlib.util.find_spec("homeassistant").origin).parent/"components/frontend/manifest.json"; print(json.loads(p.read_text())["requirements"][0])')
+          uv pip install --python .compat-venv/bin/python -c /tmp/loona-constraints.txt "$loona_frontend"
+      - name: Check native integration lifecycle and filtering
+        run: .compat-venv/bin/python tests/core_compatibility.py

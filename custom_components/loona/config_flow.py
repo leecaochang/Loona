@@ -23,6 +23,7 @@ from .const import (
     CONF_INCLUDE_GLOBS,
     CONF_EXCLUDE_GLOBS,
     CONTROL_ENTITIES,
+    CONTROL_MASTER,
     CONTROL_GRAPHS,
     CONTROL_MOTION,
     CONTROL_REGISTRIES,
@@ -153,7 +154,7 @@ class LoonaConfigFlow(ConfigFlow, domain=DOMAIN):
     @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
         """Use in-place options updates to preserve managed subscriptions."""
-        return LoonaOptionsFlow()
+        return LoonaOptionsFlow(config_entry.entry_id)
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -194,6 +195,18 @@ class LoonaConfigFlow(ConfigFlow, domain=DOMAIN):
 
 class LoonaOptionsFlow(OptionsFlow):
     """Update one category while preserving every other saved option."""
+
+    def __init__(self, entry_id: str | None = None) -> None:
+        super().__init__()
+        self._entry_id = entry_id
+
+    @property
+    def config_entry(self) -> ConfigEntry:
+        """Resolve through native entries on older and current options managers."""
+        entry = self.hass.config_entries.async_get_entry(self._entry_id or self.handler)
+        if entry is None:
+            raise ValueError("Loona config entry no longer exists")
+        return entry
 
     @property
     def settings(self) -> dict[str, Any]:
@@ -263,45 +276,20 @@ class LoonaOptionsFlow(OptionsFlow):
             if runtime is None:
                 errors["base"] = "not_loaded"
             else:
-                await runtime.async_set_control(
-                    CONTROL_ENTITIES, user_input[CONTROL_ENTITIES]
-                )
-                if CONTROL_REGISTRIES in user_input:
-                    await runtime.async_set_control(
-                        CONTROL_REGISTRIES, user_input[CONTROL_REGISTRIES]
-                    )
-                if CONTROL_GRAPHS in user_input:
-                    await runtime.async_set_control(
-                        CONTROL_GRAPHS, user_input[CONTROL_GRAPHS]
-                    )
-                if CONTROL_MOTION in user_input:
-                    await runtime.async_set_control(
-                        CONTROL_MOTION, user_input[CONTROL_MOTION]
-                    )
+                if set(user_input) - (runtime.available_controls - {CONTROL_MASTER}):
+                    raise ValueError("Unsupported Loona control")
+                for key, enabled in user_input.items():
+                    await runtime.async_set_control(key, enabled)
                 return self.finish({})
-        current = runtime.controls[CONTROL_ENTITIES] if runtime else True
         return self.async_show_form(
-            step_id="filters",
-            errors=errors,
+            step_id="filters", errors=errors,
             data_schema=vol.Schema(
                 {
-                    vol.Required(
-                        CONTROL_ENTITIES, default=current
-                    ): selector.BooleanSelector(),
-                    vol.Required(
-                        CONTROL_REGISTRIES,
-                        default=runtime.controls[CONTROL_REGISTRIES]
-                        if runtime
-                        else False,
-                    ): selector.BooleanSelector(),
-                    vol.Required(
-                        CONTROL_GRAPHS,
-                        default=runtime.controls[CONTROL_GRAPHS] if runtime else False,
-                    ): selector.BooleanSelector(),
-                    vol.Required(
-                        CONTROL_MOTION,
-                        default=runtime.controls[CONTROL_MOTION] if runtime else False,
-                    ): selector.BooleanSelector(),
+                    vol.Required(key, default=runtime.controls[key]): selector.BooleanSelector()
+                    for key in (
+                        CONTROL_ENTITIES, CONTROL_REGISTRIES, CONTROL_GRAPHS, CONTROL_MOTION
+                    )
+                    if runtime is not None and key in runtime.available_controls
                 }
             ),
         )

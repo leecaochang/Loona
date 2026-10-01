@@ -12,7 +12,7 @@ from homeassistant.const import PERCENTAGE, UnitOfTime
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.entity import EntityCategory
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .entity import LoonaEntity
 from .runtime import LoonaConfigEntry, LoonaRuntime
@@ -31,7 +31,7 @@ _METRICS = {
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: LoonaConfigEntry,
-    async_add_entities: AddConfigEntryEntitiesCallback,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
     runtime = entry.runtime_data
     async_add_entities(

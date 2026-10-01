@@ -1,5 +1,6 @@
 """Redacted downloadable scope diagnostics for native HA administrators."""
 
+from homeassistant import const as ha_const
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.redact import async_redact_data
 
@@ -13,6 +14,8 @@ async def async_get_config_entry_diagnostics(
     """Keep account IDs, entity IDs, patterns, paths, and scan locations private."""
     runtime = entry.runtime_data
     data = {
+        "core_version": ha_const.__version__,
+        "available_controls": sorted(runtime.available_controls),
         "settings": runtime.settings,
         "controls": runtime.controls,
         "metrics": runtime.metrics(),

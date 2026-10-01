@@ -1,4 +1,4 @@
-"""Isolate the private websocket adapter verified against HA 2026.9.3 and .4."""
+"""Validate native entity subscription hooks on the tested Core releases."""
 
 from typing import Literal, cast
 

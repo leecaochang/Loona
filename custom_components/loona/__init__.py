@@ -3,6 +3,7 @@
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
+from .compatibility import CompatibilityError
 from .const import DOMAIN
 from .graph_loading import async_register_frontend
 from .runtime import LoonaConfigEntry, LoonaRuntime
@@ -16,7 +17,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: LoonaConfigEntry) -> boo
     entry.runtime_data = runtime
     try:
         await runtime.async_start()
-        runtime._unsubscribers.append(await async_register_frontend(hass))
+        if runtime.graph_adapter is not None:
+            try:
+                unsubscribe = await async_register_frontend(hass)
+            except CompatibilityError as err:
+                runtime.graph_compatibility_problem = str(err)
+                runtime.graph_adapter.uninstall()
+                runtime.graph_adapter = None
+                runtime._update_issues()
+            else:
+                runtime._unsubscribers.append(unsubscribe)
         await hass.config_entries.async_forward_entry_setups(entry, _PLATFORMS)
         await runtime.async_scan()
     except Exception:

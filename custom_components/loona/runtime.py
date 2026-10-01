@@ -6,9 +6,9 @@ from datetime import datetime, timedelta
 from fnmatch import fnmatchcase
 import logging
 from time import perf_counter
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
-from homeassistant import auth
+from homeassistant import auth, const as ha_const
 from homeassistant.components.lovelace.const import EVENT_LOVELACE_UPDATED
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_PANELS_UPDATED, EVENT_STATE_CHANGED
@@ -42,6 +42,10 @@ from .const import (
     CONF_USER_IDS,
     CONTROL_DEFAULTS,
     CONTROL_ENTITIES,
+    CONTROL_GRAPHS,
+    CONTROL_MOTION,
+    REGISTRY_CORE_VERSIONS,
+    FRONTEND_CORE_VERSIONS,
     CONTROL_MASTER,
     CONTROL_REGISTRIES,
     DOMAIN,
@@ -190,25 +194,27 @@ class LoonaRuntime:
             self.entity_compatibility_problem = str(err)
         else:
             self.adapter = adapter
-        registry_adapter = RegistryAdapter(
-            self.hass,
-            self._policy(CONTROL_REGISTRIES),
-            self.registry_scope,
-            self._registry_failed,
-        )
-        try:
-            registry_adapter.install()
-        except CompatibilityError as err:
-            self.registry_compatibility_problem = str(err)
-        else:
-            self.registry_adapter = registry_adapter
-        graph_adapter = GraphLoadingAdapter(self)
-        try:
-            graph_adapter.install()
-        except CompatibilityError as err:
-            self.graph_compatibility_problem = str(err)
-        else:
-            self.graph_adapter = graph_adapter
+        if ha_const.__version__ in REGISTRY_CORE_VERSIONS:
+            registry_adapter = RegistryAdapter(
+                self.hass,
+                self._policy(CONTROL_REGISTRIES),
+                self.registry_scope,
+                self._registry_failed,
+            )
+            try:
+                registry_adapter.install()
+            except CompatibilityError as err:
+                self.registry_compatibility_problem = str(err)
+            else:
+                self.registry_adapter = registry_adapter
+        if ha_const.__version__ in FRONTEND_CORE_VERSIONS:
+            graph_adapter = GraphLoadingAdapter(self)
+            try:
+                graph_adapter.install()
+            except CompatibilityError as err:
+                self.graph_compatibility_problem = str(err)
+            else:
+                self.graph_adapter = graph_adapter
         self._update_issues()
 
     @callback
@@ -347,9 +353,10 @@ class LoonaRuntime:
             }
             self.reasons = {key: tuple(sorted(value)) for key, value in reasons.items()}
             self.entity_ids = frozenset(reasons)
-            self.registry_scope = registry_scope(
-                self.hass, self.entity_ids, results.values()
-            )
+            if ha_const.__version__ in REGISTRY_CORE_VERSIONS:
+                self.registry_scope = registry_scope(
+                    self.hass, self.entity_ids, results.values()
+                )
             self._policy_settings = settings
             self.problems, self.warnings = (
                 tuple(sorted(set(problems))),
@@ -371,12 +378,20 @@ class LoonaRuntime:
         assert self.device_id is not None
         registry, titles = dr.async_get(self.hass), dashboard_titles(self.hass)
         for key in self.selected_dashboards:
-            self.dashboard_devices[key] = registry.async_get_or_create_child(
-                config_entry_id=self.entry.entry_id,
-                identifiers={(DOMAIN, f"{self.entry.entry_id}:dashboard:{key}")},
-                name=titles.get(key, key),
-                parent_device_id=self.device_id,
-            ).id
+            identifiers = {(DOMAIN, f"{self.entry.entry_id}:dashboard:{key}")}
+            create_child = getattr(registry, "async_get_or_create_child", None)
+            if create_child is not None:
+                device = create_child(
+                    config_entry_id=self.entry.entry_id, identifiers=identifiers,
+                    name=titles.get(key, key), parent_device_id=self.device_id,
+                )
+            else:
+                device = registry.async_get_or_create(
+                    config_entry_id=self.entry.entry_id, identifiers=identifiers,
+                    name=titles.get(key, key),
+                    via_device=(DOMAIN, self.entry.entry_id),
+                )
+            self.dashboard_devices[key] = device.id
 
     def _policy(self, control: str = CONTROL_ENTITIES) -> ScopePolicy:
         settings = self._policy_settings
@@ -414,9 +429,21 @@ class LoonaRuntime:
         self._update_issues()
         self.notify()
 
+    @property
+    def available_controls(self) -> frozenset[str]:
+        """Offer controls only for adapters admitted and installed on this Core."""
+        controls = {CONTROL_MASTER}
+        if self.adapter is not None:
+            controls.add(CONTROL_ENTITIES)
+        if self.registry_adapter is not None:
+            controls.add(CONTROL_REGISTRIES)
+        if self.graph_adapter is not None:
+            controls.update((CONTROL_GRAPHS, CONTROL_MOTION))
+        return frozenset(controls)
+
     async def async_set_control(self, key: str, enabled: bool) -> None:
         """Persist a single source of truth and reconcile existing listeners."""
-        if key not in CONTROL_DEFAULTS or not isinstance(enabled, bool):
+        if key not in self.available_controls or not isinstance(enabled, bool):
             raise ValueError("Invalid Loona control")
         async with self._control_lock:
             candidate = {**self.controls, key: enabled}
@@ -496,4 +523,8 @@ class LoonaRuntime:
             ir.async_delete_issue(self.hass, DOMAIN, f"{self.entry.entry_id}_{key}")
 
 
-type LoonaConfigEntry = ConfigEntry[LoonaRuntime]
+if TYPE_CHECKING:
+    type LoonaConfigEntry = ConfigEntry[LoonaRuntime]
+else:
+    # Core 2024.5 ConfigEntry is not generic at runtime.
+    LoonaConfigEntry = ConfigEntry

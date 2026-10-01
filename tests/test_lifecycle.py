@@ -377,3 +377,29 @@ async def test_stop_cancels_inflight_dashboard_load(runtime, dashboards):
             await task
     assert runtime._scan_task.done()
     assert not runtime._unsubscribers
+
+
+async def test_upgrade_preserves_legacy_dashboard_device_id(
+    loona_hass, make_entry, dashboards
+):
+    entry = make_entry(settings())
+    registry = dr.async_get(loona_hass)
+    parent = registry.async_get_or_create(
+        config_entry_id=entry.entry_id, identifiers={(DOMAIN, entry.entry_id)}, name="Loona"
+    )
+    legacy = registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, f"{entry.entry_id}:dashboard:wall-panel")},
+        name="Wall", via_device_id=parent.id,
+    )
+    # Native unload clears registrations from the previous integration run.
+    registry.async_config_entry_unloaded(entry.entry_id)
+    runtime = LoonaRuntime(loona_hass, entry)
+    try:
+        await runtime.async_start()
+        assert runtime.dashboard_devices["wall-panel"] == legacy.id
+        child = registry.async_get(legacy.id)
+        assert isinstance(child, dr.ChildDeviceEntry)
+        assert child.parent_device_id == parent.id
+    finally:
+        await runtime.async_stop()

@@ -3,7 +3,7 @@
 from collections import defaultdict
 from typing import Any
 
-from homeassistant.components.lovelace.const import LOVELACE_DATA
+from homeassistant.components.lovelace import const as lovelace_const
 from homeassistant.components.lovelace.dashboard import LovelaceConfig
 from homeassistant.core import HomeAssistant, valid_entity_id
 from homeassistant.helpers import (
@@ -18,13 +18,12 @@ from .dependencies import DiscoveryContext
 
 def dashboard_objects(hass: HomeAssistant) -> dict[str, LovelaceConfig]:
     """Normalize the effective default exactly as native lovelace/config does."""
-    data = hass.data.get(LOVELACE_DATA)
+    data: Any = hass.data.get(getattr(lovelace_const, "LOVELACE_DATA", "lovelace"))
     if data is None:
         return {}
-    dashboards = {
-        key: value for key, value in data.dashboards.items() if key is not None
-    }
-    default = data.dashboards.get(DEFAULT_DASHBOARD) or data.dashboards.get(None)
+    native = data["dashboards"] if isinstance(data, dict) else data.dashboards
+    dashboards = {key: value for key, value in native.items() if key is not None}
+    default = native.get(DEFAULT_DASHBOARD) or native.get(None)
     if default is not None:
         dashboards[DEFAULT_DASHBOARD] = default
     return dashboards
@@ -74,13 +73,17 @@ def discovery_context(hass: HomeAssistant) -> DiscoveryContext:
     for entry in entities.entities.values():
         if entry.device_id:
             targets["device_id"][entry.device_id].add(entry.entity_id)
-        area_id = er.async_get_effective_area_id(hass, entry)
+        area_helper = getattr(er, "async_get_effective_area_id", None)
+        device = devices.async_get(entry.device_id) if entry.device_id else None
+        area_id = (
+            area_helper(hass, entry) if area_helper is not None
+            else entry.area_id or (device.area_id if device else None)
+        )
         area = areas.async_get_area(area_id) if area_id else None
         if area_id:
             targets["area_id"][area_id].add(entry.entity_id)
         if area and area.floor_id:
             targets["floor_id"][area.floor_id].add(entry.entity_id)
-        device = devices.async_get(entry.device_id) if entry.device_id else None
         labels = set(entry.labels)
         if device:
             labels.update(device.labels)
