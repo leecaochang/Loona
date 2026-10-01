@@ -14,7 +14,10 @@ async def async_setup_entry(
     entry: LoonaConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    async_add_entities([LoonaRescan(entry.runtime_data, "rescan", "Rescan dashboards")])
+    async_add_entities([
+        LoonaRescan(entry.runtime_data, "rescan", "Rescan dashboards"),
+        LoonaResetStatistics(entry.runtime_data, "reset_live_statistics", "Reset live statistics"),
+    ])
 
 
 class LoonaRescan(LoonaEntity, ButtonEntity):
@@ -25,3 +28,13 @@ class LoonaRescan(LoonaEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         await self.runtime.async_scan(force=True)
+
+
+class LoonaResetStatistics(LoonaEntity, ButtonEntity):
+    """Clear live totals and rates without altering entity-count gauges."""
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_icon = "mdi:counter"
+
+    async def async_press(self) -> None:
+        self.runtime.async_reset_live_statistics()

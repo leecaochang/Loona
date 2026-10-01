@@ -29,6 +29,7 @@ async def async_get_config_entry_diagnostics(
         "graph_compatibility_problem": runtime.graph_compatibility_problem,
         "resource_preview": preview,
         "resource_compatibility_problem": runtime.resource_compatibility_problem,
+        "statistics_card_problem": runtime.statistics_card_problem,
         "registry_scope_counts": {
             key: len(getattr(runtime.registry_scope, key))
             for key in ("entities", "devices", "areas", "floors", "labels")

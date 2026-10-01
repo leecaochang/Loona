@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from homeassistant.components import websocket_api
+from homeassistant.auth.permissions.const import POLICY_READ
 from homeassistant.components.websocket_api import messages
 from homeassistant.const import EVENT_STATE_CHANGED
 from homeassistant.core import (
@@ -26,6 +27,7 @@ from .compatibility import (
     inspect_command,
 )
 from .const import SUBSCRIBE_ENTITIES
+from .statistics import LiveStatistics
 
 type Payload = bytes | str | dict[str, Any]
 type SubscriptionKey = tuple[websocket_api.ActiveConnection, int]
@@ -109,6 +111,8 @@ class _Subscription:
     relay: _SubscriptionRelay
     native_unsubscribe: Callable[[], Any]
     possible_ids: set[str]
+    initial_counts: dict[str, int] | None = None
+    resource_counts: dict[str, int] | None = None
     owned_unsubscribe: Callable[[], None] | None = None
 
     def stop(self) -> None:
@@ -120,9 +124,10 @@ class _Subscription:
 class SubscriptionAdapter:
     """Own one command replacement and its tracked unscoped subscriptions."""
 
-    def __init__(self, hass: HomeAssistant, policy: ScopePolicy) -> None:
+    def __init__(self, hass: HomeAssistant, policy: ScopePolicy, statistics: LiveStatistics | None = None) -> None:
         self.hass = hass
         self.policy = policy
+        self.statistics = statistics
         self._table: HandlerTable | None = None
         self._original: HandlerEntry | None = None
         self._owned_entry: HandlerEntry | None = None
@@ -163,13 +168,23 @@ class SubscriptionAdapter:
 
     @callback
     def _track_creations(self, event: Event[EventStateChangedData]) -> None:
-        """Track new IDs for bypassed clients, without inspecting state payloads."""
-        if event.data["old_state"] is not None:
-            return
+        """Count eligible logical changes and track new IDs for bypassed clients."""
         entity_id = event.data["entity_id"]
         for record in self._records.values():
-            if record.scope is None:
+            if event.data["old_state"] is None and record.scope is None:
                 record.possible_ids.add(entity_id)
+            statistics = self.statistics
+            user = record.connection.user
+            if (statistics is None or entity_id in statistics.ignored
+                or not record.relay.active
+                or record.connection.subscriptions.get(record.request["id"]) is not record.owned_unsubscribe
+                or not (self.policy.all_users or user.id in self.policy.user_ids)):
+                continue
+            permissions = user.permissions
+            if (not user.is_admin and not permissions.access_all_entities(POLICY_READ)
+                and not permissions.check_entity(entity_id, POLICY_READ)):
+                continue
+            statistics.record(record.scope is None or entity_id in record.scope)
 
     @callback
     def _handle(
@@ -225,8 +240,17 @@ class SubscriptionAdapter:
                 connection.subscriptions.pop(msg_id, None)
             else:
                 connection.subscriptions[msg_id] = previous_callback
+        counts = None
+        if initial and self.statistics is not None:
+            user = connection.user
+            permissions = user.permissions
+            allowed = {entity_id for entity_id in self.hass.states.async_entity_ids()
+                       if user.is_admin or permissions.access_all_entities(POLICY_READ)
+                       or permissions.check_entity(entity_id, POLICY_READ)}
+            counts = {"available": len(allowed), "sent": len(allowed if scope is None else allowed & scope)}
         return _Subscription(
-            connection, dict(request), scope, relay, native_unsubscribe, possible_ids
+            connection, dict(request), scope, relay, native_unsubscribe, possible_ids,
+            counts,
         )
 
     def _publish(
@@ -242,6 +266,8 @@ class SubscriptionAdapter:
         key = (connection, msg_id)
         if previous is not None:
             previous.stop()
+            candidate.initial_counts = previous.initial_counts
+            candidate.resource_counts = previous.resource_counts
         if managed:
 
             @callback
@@ -299,6 +325,22 @@ class SubscriptionAdapter:
         self.policy = policy
         for previous, candidate in staged:
             self._publish(candidate, previous=previous, managed=True)
+
+    def initial_counts(self, connection: websocket_api.ActiveConnection) -> dict[str, int] | None:
+        """Return the latest ordinary initial snapshot for this exact socket."""
+        return next((record.initial_counts for record in reversed(tuple(self._records.values()))
+                     if record.connection is connection and record.initial_counts is not None), None)
+
+    def observe_resources(self, connection: websocket_api.ActiveConnection, available: int, sent: int) -> None:
+        """Attach counts to owned listeners, which are released on socket close."""
+        for record in self._records.values():
+            if record.connection is connection and record.resource_counts is None:
+                record.resource_counts = {"available": available, "sent": sent}
+
+    def resource_counts(self, connection: websocket_api.ActiveConnection) -> dict[str, int] | None:
+        """Resource lists preceding an owned subscription are not attributed."""
+        return next((record.resource_counts for record in self._records.values()
+                     if record.connection is connection and record.resource_counts is not None), None)
 
     @callback
     def uninstall(self) -> None:

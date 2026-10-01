@@ -16,6 +16,13 @@
           "target_mode": "Target mode",
           "user_ids": "Accounts"
         }
+      },
+      "statistics_card": {
+        "title": "Loona statistics dashboard",
+        "description": "Optionally install the Loona statistics card and create a separate administrator-only dashboard. View live update rates, running totals and dependency details. You can add or remove this dashboard later under Configure > Statistics dashboard. Existing dashboards are preserved.",
+        "data": {
+          "statistics_card": "Install Loona statistics dashboard"
+        }
       }
     },
     "error": {
@@ -39,7 +46,9 @@
           "filters": "Filters and performance",
           "extra_entities": "Extra entities",
           "rules": "Advanced entity rules",
-          "resource_preview": "Resource dependencies"
+          "resource_preview": "Resource dependencies",
+          "dependency_preview": "Entity dependencies",
+          "statistics_card": "Statistics dashboard"
         }
       },
       "dashboards": {
@@ -91,6 +100,20 @@
           "resource_filtering": "Resource filtering",
           "always_forward_resources": "Optional resources to load"
         }
+      },
+      "statistics_card": {
+        "title": "Loona statistics dashboard",
+        "description": "Install a separate administrator-only dashboard with the Loona statistics card. Turn this off to remove the generated dashboard. Edited dashboards are preserved and must be removed manually. Reload the browser after installation or removal. The card is also available as custom:loona-statistics-card for your own dashboards.\n\n{detail}",
+        "data": {
+          "statistics_card": "Install Loona statistics dashboard"
+        }
+      },
+      "dependency_preview": {
+        "title": "Entity dependencies",
+        "description": "{summary}\n\n{detail}\n\nThis preview is read-only. When the scope is incomplete or filtering is disabled, Home Assistant sends full entity data.",
+        "data": {
+          "entity": "Entity"
+        }
       }
     },
     "error": {
@@ -98,7 +121,8 @@
       "no_accounts": "Select at least one active account.",
       "invalid_selection": "Choose current, unique values from the available selections.",
       "invalid_pattern": "Use domains such as light and entity globs such as sensor.room_* without spaces or unmatched brackets.",
-      "not_loaded": "Loona must be loaded before changing these controls."
+      "not_loaded": "Loona must be loaded before changing these controls.",
+      "card_setup_failed": "The statistics dashboard could not be changed. See the details above."
     },
     "abort": {
       "not_loaded": "Loona must be loaded to preview resources.",
@@ -129,6 +153,9 @@
     "button": {
       "rescan": {
         "name": "Rescan dashboards"
+      },
+      "reset_live_statistics": {
+        "name": "Reset live statistics"
       }
     },
     "binary_sensor": {
@@ -166,6 +193,21 @@
       },
       "unresolved_entities": {
         "name": "Unresolved entities"
+      },
+      "forwarded_rate": {
+        "name": "Entity updates forwarded per second"
+      },
+      "avoided_rate": {
+        "name": "Entity updates avoided per second"
+      },
+      "update_reduction": {
+        "name": "Live entity update reduction"
+      },
+      "forwarded_updates": {
+        "name": "Entity updates forwarded"
+      },
+      "avoided_updates": {
+        "name": "Entity updates avoided"
       }
     }
   },

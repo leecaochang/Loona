@@ -23,7 +23,7 @@ async def test_native_platforms_and_dashboard_selection_cleanup(
     entities = er.async_entries_for_config_entry(
         er.async_get(loona_hass), entry.entry_id
     )
-    assert len(entities) == 18
+    assert len(entities) == 24
     assert {entity.domain for entity in entities} == {
         "sensor",
         "switch",
@@ -70,7 +70,7 @@ async def test_native_platforms_and_dashboard_selection_cleanup(
     entities = er.async_entries_for_config_entry(
         er.async_get(loona_hass), entry.entry_id
     )
-    assert len(entities) == 18
+    assert len(entities) == 24
     assert not any(
         ":dashboard:wall-panel" in identifier
         for device in dr.async_child_entries_for_config_entry(

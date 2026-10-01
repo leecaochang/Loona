@@ -127,6 +127,8 @@ async def check(hass: HomeAssistant) -> None:
     form = await flow.async_step_user(form["data_schema"]({"dashboards": ["wall-panel"]}))
     assert form["step_id"] == "targets"
     result = await flow.async_step_targets(form["data_schema"]({"target_mode": "all"}))
+    assert result["step_id"] == "statistics_card"
+    result = await flow.async_step_statistics_card(result["data_schema"]({"statistics_card": False}))
     kwargs = dict(domain=DOMAIN, data=result["data"], options={}, version=1, minor_version=1,
                   title="Loona", source="user", unique_id=DOMAIN)
     parameters = config_entries.ConfigEntry.__init__.__code__.co_varnames
@@ -251,7 +253,7 @@ async def check(hass: HomeAssistant) -> None:
         rows = er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
         controls = {row.unique_id.rsplit(":", 1)[-1]: row.entity_id for row in rows if row.domain == "switch"}
         assert set(controls) == expected
-        assert len(rows) == 12 + len(expected)
+        assert len(rows) == 18 + len(expected)
         assert all(hass.states.get(row.entity_id) is not None for row in rows)
         assert {row.entity_id for row in rows} <= runtime.entity_ids
         child = dr.async_get(hass).async_get(runtime.dashboard_devices["wall-panel"])
@@ -342,6 +344,16 @@ async def check(hass: HomeAssistant) -> None:
         assert any("sensor.wall" in packet.get("event", {}).get("c", {}) for packet in output[before:])
         assert all("sensor.denied" not in packet.get("event", {}).get("c", {}) for packet in limited_output)
 
+        connection.async_handle({"id": 2, "type": "loona/statistics", "search": "sensor.wall"})
+        assert output[-1]["result"]["dependencies"][0]["entity_id"] == "sensor.wall"
+        restricted.async_handle({"id": 2, "type": "loona/statistics"})
+        assert limited_output[-1]["success"] is False
+        assert runtime.live_statistics.forwarded > 0 and runtime.live_statistics.avoided > 0
+        reset = next(row.entity_id for row in rows if row.unique_id.endswith(":reset_live_statistics"))
+        await hass.services.async_call("button", "press", {"entity_id": reset}, blocking=True)
+        await hass.async_block_till_done()
+        assert set(runtime.live_statistics.metrics().values()) == {0}
+
         options = hass.config_entries.options
         form = await options.async_init(entry.entry_id)
         assert form["type"] == "menu"
@@ -431,6 +443,7 @@ async def check(hass: HomeAssistant) -> None:
         assert all(hass.data[websocket_api.DOMAIN][name] is handler for name, handler in registry_originals.items())
         assert all(table[name] is handler for name, handler in resource_originals.items())
         assert not runtime._unsubscribers and not runtime._listeners
+        assert "loona/statistics" not in table and "loona/page_load" not in table
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
         runtime = entry.runtime_data
@@ -469,10 +482,13 @@ async def main() -> None:
             await hass.async_block_till_done()
             await hass.async_stop(force=True)
     logging.getLogger().removeHandler(capture)
-    # The native permission-denial regression emits this expected error.
-    expected_denial = "Error handling message: Unauthorized (unauthorized) Resource reader"
-    assert errors.count(expected_denial) == 1, errors
-    assert not [error for error in errors if error != expected_denial], errors
+    # These native permission-denial regressions each emit one expected error.
+    expected_denials = {
+        "Error handling message: Unauthorized (unauthorized) Resource reader",
+        "Error handling message: Unauthorized (unauthorized) Limited",
+    }
+    assert all(errors.count(error) == 1 for error in expected_denials), errors
+    assert not [error for error in errors if error not in expected_denials], errors
 
 
 if __name__ == "__main__":

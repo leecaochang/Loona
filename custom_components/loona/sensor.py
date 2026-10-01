@@ -25,6 +25,11 @@ _METRICS = {
     "filtered_subscriptions": "Filtered subscriptions",
     "last_scan": "Last successful scan",
     "scan_duration": "Scan duration",
+    "forwarded_rate": "Entity updates forwarded per second",
+    "avoided_rate": "Entity updates avoided per second",
+    "update_reduction": "Live entity update reduction",
+    "forwarded_updates": "Entity updates forwarded",
+    "avoided_updates": "Entity updates avoided",
 }
 
 
@@ -109,10 +114,15 @@ class LoonaSensor(LoonaEntity, SensorEntity):
             self._attr_device_class = SensorDeviceClass.TIMESTAMP
         else:
             self._attr_state_class = SensorStateClass.MEASUREMENT
-        if key == "reduction_estimate":
+        if key in ("reduction_estimate", "update_reduction"):
             self._attr_native_unit_of_measurement = PERCENTAGE
         elif key == "scan_duration":
             self._attr_native_unit_of_measurement = UnitOfTime.MILLISECONDS
+        elif key in ("forwarded_rate", "avoided_rate"):
+            self._attr_native_unit_of_measurement = "updates/s"
+        elif key in ("forwarded_updates", "avoided_updates"):
+            self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+            self._attr_native_unit_of_measurement = "updates"
 
     @property
     def native_value(self) -> Any:

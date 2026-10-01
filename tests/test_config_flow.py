@@ -36,6 +36,8 @@ async def test_two_step_setup_targets_admin(loona_hass, dashboards):
     assert form["step_id"] == "targets"
     values = form["data_schema"]({"target_mode": "selected", "user_ids": [admin.id]})
     result = await flow.async_step_targets(values)
+    assert result["step_id"] == "statistics_card"
+    result = await flow.async_step_statistics_card({"statistics_card": False})
     assert result["data"] == {
         "dashboards": ["lovelace", "wall-panel"],
         "target_mode": "selected",
@@ -96,6 +98,8 @@ async def test_options_preserve_unrelated_fields_and_stale_labels(
         "extra_entities",
         "rules",
         "resource_preview",
+        "dependency_preview",
+        "statistics_card",
     }
     result = await flow.async_step_dashboards()
     selector = next(iter(result["data_schema"].schema.values()))

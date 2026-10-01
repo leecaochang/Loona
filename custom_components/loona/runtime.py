@@ -57,6 +57,7 @@ from .const import (
     SCAN_DEBOUNCE,
     TARGET_ALL,
     VERSION,
+    CONF_STATISTICS_CARD,
 )
 from .graph_loading import GraphLoadingAdapter
 from .dashboard import (
@@ -70,6 +71,8 @@ from .resources import (ResourceAdapter, ResourceDependencies, async_resource_ro
                         resource_dependencies, resource_report)
 from .registry import RegistryAdapter, RegistryScope, registry_scope
 from .websocket import ScopePolicy, SubscriptionAdapter
+from .statistics import LiveStatistics
+from .statistics_card import StatisticsCard, StatisticsCardError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -84,6 +87,7 @@ class LoonaRuntime:
         self.controls = dict(CONTROL_DEFAULTS)
         self.entity_ids: frozenset[str] = frozenset()
         self.reasons: dict[str, tuple[str, ...]] = {}
+        self.excluded_reasons: dict[str, tuple[str, ...]] = {}
         self.dashboards: dict[str, DiscoveryResult] = {}
         self.unresolved: dict[str, frozenset[str]] = {}
         self.problems: tuple[str, ...] = ()
@@ -92,6 +96,9 @@ class LoonaRuntime:
         self.registry_compatibility_problem: str | None = None
         self.last_scan: datetime | None = None
         self.scan_duration = 0.0
+        self.live_statistics = LiveStatistics()
+        self.statistics_card = StatisticsCard(hass, entry.entry_id)
+        self.statistics_card_problem: str | None = None
         self.adapter: SubscriptionAdapter | None = None
         self.registry_adapter: RegistryAdapter | None = None
         self.graph_adapter: GraphLoadingAdapter | None = None
@@ -136,6 +143,7 @@ class LoonaRuntime:
             or self.registry_compatibility_problem
             or self.graph_compatibility_problem
             or self.resource_compatibility_problem
+            or self.statistics_card_problem
         )
 
     @callback
@@ -198,7 +206,7 @@ class LoonaRuntime:
             )
         )
         await self.async_scan()
-        adapter = SubscriptionAdapter(self.hass, self._policy())
+        adapter = SubscriptionAdapter(self.hass, self._policy(), self.live_statistics)
         try:
             adapter.install()
         except CompatibilityError as err:
@@ -231,6 +239,7 @@ class LoonaRuntime:
             resource_adapter = ResourceAdapter(
                 self.hass, self._policy(CONTROL_RESOURCES), self.resource_report,
                 self._resources_failed,
+                self._observe_resource_load,
             )
             try:
                 resource_adapter.install()
@@ -239,6 +248,20 @@ class LoonaRuntime:
             else:
                 self.resource_adapter = resource_adapter
         self._update_issues()
+
+    async def async_update_statistics_card(self) -> None:
+        """Install optional presentation independently of the filtering adapters."""
+        enabled = self.settings.get(CONF_STATISTICS_CARD, False)
+        if enabled == self.statistics_card.enabled:
+            return
+        try:
+            await self.statistics_card.set_enabled(enabled)
+        except StatisticsCardError as err:
+            self.statistics_card_problem = str(err)
+        else:
+            self.statistics_card_problem = None
+        self._update_issues()
+        self.notify()
 
     def resource_report(self, rows: list[dict[str, Any]]) -> dict[str, Any]:
         """Evaluate every newly installed resource using the published union."""
@@ -252,6 +275,10 @@ class LoonaRuntime:
     async def async_resource_preview(self) -> dict[str, Any]:
         """Read the current native collection for the administrator preview."""
         return self.resource_report(await async_resource_rows(self.hass))
+
+    def _observe_resource_load(self, connection: Any, available: int, sent: int) -> None:
+        if self.adapter is not None:
+            self.adapter.observe_resources(connection, available, sent)
 
     @callback
     def _resources_failed(self, error: CompatibilityError) -> None:
@@ -282,6 +309,13 @@ class LoonaRuntime:
 
     @callback
     def _metrics(self, now: datetime) -> None:
+        self.live_statistics.sample()
+        self.notify()
+
+    @callback
+    def async_reset_live_statistics(self) -> None:
+        """Reset this runtime's counters and rates, preserving all controls."""
+        self.live_statistics.reset()
         self.notify()
 
     @callback
@@ -330,6 +364,7 @@ class LoonaRuntime:
             problems: list[str] = []
             warnings: list[str] = []
             reasons: dict[str, set[str]] = {}
+            excluded: dict[str, tuple[str, ...]] = {}
             for key in settings.get(CONF_DASHBOARDS, ()):
                 try:
                     config = await load_dashboard(self.hass, key, force=force)
@@ -374,11 +409,13 @@ class LoonaRuntime:
                         entity_id in result.entity_ids for result in results.values()
                     ):
                         warnings.append("An exclusion removes a dashboard dependency")
-                    del reasons[entity_id]
+                    excluded[entity_id] = tuple(sorted(reasons.pop(entity_id)))
             if not reasons:
                 problems.append("The dashboard scope is empty")
-            for entity_id in protected_entities(self.hass, self.entry.entry_id):
+            self.live_statistics.ignored = protected_entities(self.hass, self.entry.entry_id)
+            for entity_id in self.live_statistics.ignored:
                 reasons.setdefault(entity_id, set()).add("Loona control or statistic")
+                excluded.pop(entity_id, None)
             if settings.get(CONF_TARGET_MODE) != TARGET_ALL:
                 users = {
                     user.id
@@ -402,6 +439,7 @@ class LoonaRuntime:
                 for key, result in results.items()
             }
             self.reasons = {key: tuple(sorted(value)) for key, value in reasons.items()}
+            self.excluded_reasons = excluded
             self.entity_ids = frozenset(reasons)
             if ha_const.__version__ in REGISTRY_CORE_VERSIONS:
                 self.registry_scope = registry_scope(
@@ -558,6 +596,7 @@ class LoonaRuntime:
         current = set(self.hass.states.async_entity_ids())
         scoped = len(current & self.entity_ids)
         return {
+            **self.live_statistics.metrics(),
             "union_entities": len(self.entity_ids),
             "current_scope": scoped,
             "reduction_estimate": round(100 * (1 - scoped / len(current)), 1)
@@ -599,6 +638,7 @@ class LoonaRuntime:
             self.graph_adapter.uninstall()
             self.graph_adapter = None
         self._listeners.clear()
+        self.statistics_card.unload()
         for key in ("compatibility", "scope", "exclusion", "resources"):
             ir.async_delete_issue(self.hass, DOMAIN, f"{self.entry.entry_id}_{key}")
 

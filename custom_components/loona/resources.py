@@ -170,8 +170,11 @@ class _ResourceConnection:
                 ):
                     raise CompatibilityError("Native resource list shape changed")
                 report = self.adapter.report(result)
+                available = len(result)
                 result = [row for row, item in zip(result, report["resources"], strict=True)
                           if item["forwarded"]]
+                if self.adapter.observe is not None:
+                    self.adapter.observe(self.connection, available, len(result))
         except (CompatibilityError, ValueError, TypeError, KeyError) as err:
             self.adapter.fail(CompatibilityError(str(err)))
         self.connection.send_result(msg_id, result)
@@ -184,8 +187,10 @@ class ResourceAdapter:
         self, hass: HomeAssistant, policy: ScopePolicy,
         report: Callable[[list[dict[str, Any]]], dict[str, Any]],
         on_failure: Callable[[CompatibilityError], None],
+        observe: Callable[[Any, int, int], None] | None = None,
     ) -> None:
         self.hass, self.policy, self.report, self.on_failure = hass, policy, report, on_failure
+        self.observe = observe
         self._table: HandlerTable | None = None
         self._originals: dict[str, HandlerEntry] = {}
         self._owned: dict[str, HandlerEntry] = {}
