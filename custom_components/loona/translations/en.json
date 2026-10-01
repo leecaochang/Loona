@@ -58,9 +58,10 @@
       },
       "filters": {
         "title": "Filters",
-        "description": "Both Entity filtering and the Enabled switch must be on. Changes apply to existing subscriptions managed by Loona.",
+        "description": "The Enabled switch must be on for either filter. Registry filtering limits entity, device, area, floor, and label metadata to the selected dashboards. It is off by default because editors and entity pickers may need full metadata. Changes refresh existing managed subscriptions.",
         "data": {
-          "entity_filtering": "Entity filtering"
+          "entity_filtering": "Entity filtering",
+          "registry_filtering": "Registry filtering"
         }
       },
       "extra_entities": {
@@ -95,6 +96,9 @@
       },
       "entity_filtering": {
         "name": "Entity filtering"
+      },
+      "registry_filtering": {
+        "name": "Registry filtering"
       }
     },
     "button": {
@@ -142,8 +146,8 @@
   },
   "issues": {
     "compatibility": {
-      "title": "Loona cannot safely apply entity filtering",
-      "description": "Check the Compatibility problem sensor, the supported Home Assistant versions, and other integrations that replace entity subscriptions. Loona preserves native handling when it cannot install its filter. Reload browser pages after reloading Loona."
+      "title": "Loona cannot safely apply filtering",
+      "description": "Check the Compatibility problem sensor, the supported Home Assistant versions, and other integrations replacing entity subscriptions or registry commands. An affected filter preserves native handling when it cannot be installed. Reload browser pages after reloading Loona."
     },
     "scope": {
       "title": "Loona is passing through full entity states",

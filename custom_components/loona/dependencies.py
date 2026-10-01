@@ -33,6 +33,7 @@ class DiscoveryResult:
     reasons: dict[str, tuple[str, ...]]
     problems: tuple[str, ...]
     warnings: tuple[str, ...]
+    targets: dict[str, frozenset[str]] = field(default_factory=dict)
 
     @property
     def complete(self) -> bool:
@@ -66,6 +67,7 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
     reasons: dict[str, set[str]] = {}
     problems: set[str] = set()
     warnings: set[str] = set()
+    targets: dict[str, set[str]] = {key: set() for key in TARGET_KEYS}
 
     def add(
         entity_id: str, location: str, ancestry: frozenset[str] = frozenset()
@@ -93,6 +95,7 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
         for identifier in values:
             if not isinstance(identifier, str):
                 continue
+            targets[key].add(identifier)
             for entity_id in context.targets.get(key, {}).get(identifier, ()):
                 add(entity_id, location)
 
@@ -169,4 +172,5 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
         {key: tuple(sorted(value)) for key, value in reasons.items()},
         tuple(sorted(problems)),
         tuple(sorted(warnings)),
+        {key: frozenset(values) for key, values in targets.items()},
     )

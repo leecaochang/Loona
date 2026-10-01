@@ -28,11 +28,16 @@ Open the **Loona** device under **Settings > Devices & services** to find these 
 
 | Control | What it does |
 | --- | --- |
-| Enabled | Master switch. Turn it off to restore full entity states to subscriptions managed by Loona. |
+| Enabled | Master switch. Turn it off to restore full entity states and registry lists to subscriptions managed by Loona. |
 | Entity filtering | Turns entity state filtering on or off while keeping the master switch independent. Both switches must be on for filtering. |
+| Registry filtering | Limits entity, device, area, floor, and label lists to dashboard dependencies and related metadata. Off by default. The Enabled switch must also be on. |
 | Rescan dashboards | Reloads the selected configurations and rebuilds the scope. Use this for troubleshooting; ordinary dashboard changes are handled automatically. |
 
-Switch states survive Home Assistant restarts. Switching either control off updates existing subscriptions managed by Loona without requiring a page reload. Turning filtering back on also applies to those subscriptions automatically.
+Switch states survive Home Assistant restarts. Switch changes update existing subscriptions managed by Loona without requiring a page reload. Turning filtering back on also applies to those subscriptions automatically.
+
+Registry filtering includes parent devices, areas, floors, labels, and direct dashboard targets, even when a target has no entities. Entity display lists preserve Home Assistant's enabled-entry behavior. Registry changes and filter changes refresh existing managed registry subscriptions. Registry filtering works independently of Entity filtering and passes through full metadata when the dashboard scope is incomplete.
+
+Editors, entity pickers, and administration pages may need metadata outside the selected dashboards. Turn off Registry filtering, use an unfiltered account, or turn off Enabled when using those features. Registry mutation commands and their permission checks remain native.
 
 Dashboard edits, relevant registry changes, entity additions and removals, and group membership changes trigger automatic scans. Changes are grouped briefly before scanning. YAML file changes are checked about once a minute; the rescan button applies them sooner.
 
@@ -46,7 +51,7 @@ Use Loona's **Configure** menu under **Settings > Devices & services**.
 | --- | --- |
 | Dashboards | Change which dashboards contribute to the shared scope. |
 | Targets | Change the selected accounts or choose all accounts. |
-| Filters | Change the same Entity filtering control shown on the Loona device. |
+| Filters | Change the Entity filtering and Registry filtering controls shown on the Loona device. |
 | Extra entities | Include additional entities needed by custom cards or other sessions using a filtered account. |
 | Advanced entity rules | Include whole domains or entity patterns, or exclude entities. |
 
@@ -76,21 +81,21 @@ Loona discovers explicit entity references in nested cards, sections, badges, co
 
 For `custom:auto-entities`, Loona supports include rules based on `entity_id` globs and `domain` patterns. It retains a conservative set of matches, including entities an auto-entities exclusion might hide. Other filters, runtime templates, and dashboard strategies can prevent a reliable scan.
 
-When a selected dashboard fails to load or has an unsupported dynamic construct, or when the combined scope is empty, Loona passes through full entity states for the entire selected union and reports a scope problem. It resumes filtering automatically after a complete scan. Extra entities do not override an incomplete scan.
+When a selected dashboard fails to load or has an unsupported dynamic construct, or when the combined scope is empty, Loona passes through full entity states and registry lists for the entire selected union and reports a scope problem. It resumes filtering automatically after a complete scan. Extra entities do not override an incomplete scan.
 
 Unknown custom card types can still use their explicit references. Cards that calculate additional entity names or inspect `hass.states` may need extra entities or domain inclusions. Loona cannot infer every custom card's runtime dependencies.
 
-This release filters entity state subscriptions. Registry metadata, dashboard JavaScript and CSS resources, history, services, themes, and other Home Assistant APIs remain available normally.
+This release filters entity state subscriptions and optionally registry lists. Dashboard JavaScript and CSS resources, history, services, themes, and other Home Assistant APIs remain available normally.
 
 ## Troubleshooting
 
 **A card is missing data:** turn off Enabled to check whether filtering is responsible. Verify that its dashboard is selected, then add any dependencies calculated by the card under Extra entities. Check advanced exclusions and press Rescan dashboards if needed.
 
-**Filtering appears inactive:** ensure both switches are on, the account is selected, and Filtered subscriptions is greater than zero. Reload the page if it was open before setup or an integration reload. Check the Compatibility problem and Scope problem sensors and **Settings > Repairs**.
+**Entity filtering appears inactive:** ensure Enabled and Entity filtering are on, the account is selected, and Filtered subscriptions is greater than zero. Registry filtering has its own switch and does not contribute to the entity subscription count. Reload the page if it was open before setup or an integration reload. Check the Compatibility problem and Scope problem sensors and **Settings > Repairs**.
 
 **Scope problem is on:** save the selected dashboards, remove deleted dashboard or account selections, and check for templates, strategies, or unsupported auto-entities filters. Unresolved entity counts alone do not cause a bypass.
 
-**Compatibility problem is on:** use a supported Home Assistant version and check for another integration replacing the same subscription command. Turn off Loona while investigating. A compatibility failure prevents Loona from installing or updating its filter.
+**Compatibility problem is on:** use a supported Home Assistant version and check for another integration replacing entity subscriptions or registry commands. Turn off Loona while investigating. The affected filter returns to native handling; diagnostics identify a registry compatibility failure separately.
 
 **Settings or another dashboard shows fewer entities:** that session uses a filtered account and shares its selected dashboard union. Add the needed entities, choose an unfiltered account, or turn off Loona's master switch.
 

@@ -43,6 +43,7 @@ from .const import (
     CONTROL_DEFAULTS,
     CONTROL_ENTITIES,
     CONTROL_MASTER,
+    CONTROL_REGISTRIES,
     DOMAIN,
     MAINTENANCE_SECONDS,
     METRIC_SECONDS,
@@ -57,6 +58,7 @@ from .dashboard import (
     protected_entities,
 )
 from .dependencies import DiscoveryResult, discover
+from .registry import RegistryAdapter, RegistryScope, registry_scope
 from .websocket import ScopePolicy, SubscriptionAdapter
 
 _LOGGER = logging.getLogger(__name__)
@@ -76,10 +78,13 @@ class LoonaRuntime:
         self.unresolved: dict[str, frozenset[str]] = {}
         self.problems: tuple[str, ...] = ()
         self.warnings: tuple[str, ...] = ()
-        self.compatibility_problem: str | None = None
+        self.entity_compatibility_problem: str | None = None
+        self.registry_compatibility_problem: str | None = None
         self.last_scan: datetime | None = None
         self.scan_duration = 0.0
         self.adapter: SubscriptionAdapter | None = None
+        self.registry_adapter: RegistryAdapter | None = None
+        self.registry_scope = RegistryScope()
         self.device_id: str | None = None
         self.dashboard_devices: dict[str, str] = {}
         self._store: Store[dict[str, bool]] = Store(
@@ -106,6 +111,10 @@ class LoonaRuntime:
     @property
     def scope_problem(self) -> bool:
         return bool(self.problems)
+
+    @property
+    def compatibility_problem(self) -> str | None:
+        return self.entity_compatibility_problem or self.registry_compatibility_problem
 
     @callback
     def async_add_listener(self, listener: Callable[[], None]) -> Callable[[], None]:
@@ -171,9 +180,21 @@ class LoonaRuntime:
         try:
             adapter.install()
         except CompatibilityError as err:
-            self.compatibility_problem = str(err)
+            self.entity_compatibility_problem = str(err)
         else:
             self.adapter = adapter
+        registry_adapter = RegistryAdapter(
+            self.hass,
+            self._policy(CONTROL_REGISTRIES),
+            self.registry_scope,
+            self._registry_failed,
+        )
+        try:
+            registry_adapter.install()
+        except CompatibilityError as err:
+            self.registry_compatibility_problem = str(err)
+        else:
+            self.registry_adapter = registry_adapter
         self._update_issues()
 
     @callback
@@ -312,6 +333,9 @@ class LoonaRuntime:
             }
             self.reasons = {key: tuple(sorted(value)) for key, value in reasons.items()}
             self.entity_ids = frozenset(reasons)
+            self.registry_scope = registry_scope(
+                self.hass, self.entity_ids, results.values()
+            )
             self._policy_settings = settings
             self.problems, self.warnings = (
                 tuple(sorted(set(problems))),
@@ -340,28 +364,41 @@ class LoonaRuntime:
                 parent_device_id=self.device_id,
             ).id
 
-    def _policy(self) -> ScopePolicy:
+    def _policy(self, control: str = CONTROL_ENTITIES) -> ScopePolicy:
         settings = self._policy_settings
         return ScopePolicy(
             entity_ids=self.entity_ids,
             user_ids=frozenset(settings.get(CONF_USER_IDS, ())),
             all_users=settings.get(CONF_TARGET_MODE) == TARGET_ALL,
-            enabled=self.controls[CONTROL_MASTER] and self.controls[CONTROL_ENTITIES],
+            enabled=self.controls[CONTROL_MASTER] and self.controls[control],
             complete=not self.problems,
         )
 
     @callback
     def _apply_policy(self) -> None:
-        if self.adapter is None:
-            return
-        try:
-            self.adapter.set_policy(self._policy())
-        except CompatibilityError as err:
-            self.compatibility_problem = str(err)
-            self.adapter.uninstall()
-            self.adapter = None
-        else:
-            self.compatibility_problem = None
+        if self.adapter is not None:
+            try:
+                self.adapter.set_policy(self._policy())
+            except CompatibilityError as err:
+                self.entity_compatibility_problem = str(err)
+                self.adapter.uninstall()
+                self.adapter = None
+            else:
+                self.entity_compatibility_problem = None
+        if self.registry_adapter is not None:
+            try:
+                self.registry_adapter.set_policy(
+                    self._policy(CONTROL_REGISTRIES), self.registry_scope
+                )
+            except CompatibilityError as err:
+                self.registry_adapter.fail(err)
+
+    @callback
+    def _registry_failed(self, error: CompatibilityError) -> None:
+        self.registry_compatibility_problem = str(error)
+        self.registry_adapter = None
+        self._update_issues()
+        self.notify()
 
     async def async_set_control(self, key: str, enabled: bool) -> None:
         """Persist a single source of truth and reconcile existing listeners."""
@@ -434,6 +471,9 @@ class LoonaRuntime:
         if self.adapter:
             self.adapter.uninstall()
             self.adapter = None
+        if self.registry_adapter:
+            self.registry_adapter.uninstall()
+            self.registry_adapter = None
         self._listeners.clear()
         for key in ("compatibility", "scope", "exclusion"):
             ir.async_delete_issue(self.hass, DOMAIN, f"{self.entry.entry_id}_{key}")

@@ -59,7 +59,9 @@ async def test_dashboard_save_group_change_and_state_lifecycle_automatically_res
         await asyncio.sleep(0.02)
         await loona_hass.async_block_till_done()
         assert runtime.entity_ids == {"group.room", "light.first"}
-        loona_hass.states.async_set("group.room", "off", {"entity_id": ["light.second"]})
+        loona_hass.states.async_set(
+            "group.room", "off", {"entity_id": ["light.second"]}
+        )
         await loona_hass.async_block_till_done()
         await asyncio.sleep(0.02)
         await loona_hass.async_block_till_done()
@@ -205,6 +207,25 @@ async def test_controls_persist_and_unload_restores_native(
     assert not new._policy().enabled
     await new.async_stop()
     assert not new._unsubscribers and not new._listeners
+
+
+async def test_registry_control_defaults_persistence_and_independent_policy(runtime):
+    assert runtime.registry_adapter is not None
+    assert not runtime.controls["registry_filtering"]
+    assert not runtime.registry_adapter.policy.enabled
+    await runtime.async_set_control("registry_filtering", True)
+    await runtime.async_set_control("entity_filtering", False)
+    assert runtime.registry_adapter.policy.enabled
+    assert not runtime.adapter.policy.enabled
+    await runtime.async_stop()
+    new = LoonaRuntime(runtime.hass, runtime.entry)
+    await new.async_start()
+    try:
+        assert new.controls["registry_filtering"]
+        assert new.registry_adapter.policy.enabled
+        assert not new.adapter.policy.enabled
+    finally:
+        await new.async_stop()
 
 
 async def test_unsupported_version_leaves_native_hook_and_reports_problem(

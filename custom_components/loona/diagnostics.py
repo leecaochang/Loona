@@ -17,6 +17,11 @@ async def async_get_config_entry_diagnostics(
         "controls": runtime.controls,
         "metrics": runtime.metrics(),
         "compatibility_problem": runtime.compatibility_problem,
+        "registry_compatibility_problem": runtime.registry_compatibility_problem,
+        "registry_scope_counts": {
+            key: len(getattr(runtime.registry_scope, key))
+            for key in ("entities", "devices", "areas", "floors", "labels")
+        },
         "scope_complete": not runtime.problems,
         "problems": runtime.problems,
         "warnings": runtime.warnings,

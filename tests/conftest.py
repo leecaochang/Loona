@@ -1,11 +1,14 @@
 """Use real HA state, permission, schema, dispatch, and connection classes."""
 
+import ctypes
 import json
 import logging
 from pathlib import Path
+import sys
 from types import MappingProxyType
 
 import pytest
+import orjson
 
 from homeassistant.auth.models import Group, User
 from homeassistant.auth.permissions.models import PermissionLookup
@@ -29,6 +32,21 @@ async def hass(tmp_path):
     yield instance
     await instance.async_block_till_done()
     await instance.async_stop(force=True)
+
+
+def pytest_configure():
+    """Keep orjson 3.11.9's heap type alive until the test process exits.
+
+    Fragment instances do not retain their heap type in this pinned release.
+    Native registry storage can outlive module cleanup during focused tests.
+    A process-lifetime type reference avoids dereferencing a freed type without
+    replacing native serialization or changing production dependencies.
+    """
+    if sys.implementation.name == "cpython" and orjson.__version__ == "3.11.9":
+        incref = ctypes.pythonapi.Py_IncRef
+        incref.argtypes = [ctypes.py_object]
+        incref.restype = None
+        incref(orjson.Fragment)
 
 
 @pytest.fixture
@@ -94,6 +112,23 @@ async def loona_hass(hass):
     hass.auth = await auth.auth_manager_from_config(hass, [], [])
     hass.config_entries = config_entries.ConfigEntries(hass, {})
     await hass.config_entries.async_initialize()
+    from homeassistant.components.config import (
+        area_registry,
+        device_registry,
+        entity_registry,
+        floor_registry,
+        label_registry,
+    )
+
+    for module in (
+        area_registry,
+        device_registry,
+        entity_registry,
+        floor_registry,
+        label_registry,
+    ):
+        module.async_setup(hass)
+    hass.config.components.update({"config", "websocket_api"})
     Path(hass.config.path("custom_components")).symlink_to(
         Path(__file__).resolve().parents[1] / "custom_components",
         target_is_directory=True,
