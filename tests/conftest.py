@@ -184,6 +184,8 @@ async def dashboards(loona_hass):
     from homeassistant.components.lovelace import LovelaceData
     from homeassistant.components.lovelace.const import LOVELACE_DATA
     from homeassistant.components.lovelace.dashboard import LovelaceStorage
+    from homeassistant.components.lovelace.resources import ResourceStorageCollection, ResourceStorageCollectionWebsocket
+    from homeassistant.components.lovelace.const import RESOURCE_CREATE_FIELDS, RESOURCE_UPDATE_FIELDS
 
     default = LovelaceStorage(loona_hass, None)
     wall = LovelaceStorage(
@@ -195,7 +197,12 @@ async def dashboards(loona_hass):
     await wall.async_save(
         {"views": [{"cards": [{"type": "entity", "entity": "sensor.wall"}]}]}
     )
+    collection = ResourceStorageCollection(loona_hass, default)
+    await collection.async_get_info()
+    ResourceStorageCollectionWebsocket(
+        collection, "lovelace/resources", "resource", RESOURCE_CREATE_FIELDS, RESOURCE_UPDATE_FIELDS,
+    ).async_setup(loona_hass)
     loona_hass.data[LOVELACE_DATA] = LovelaceData(
-        "storage", {None: default, "wall-panel": wall}, None, {}
+        "storage", {None: default, "wall-panel": wall}, collection, {}
     )
     return {"lovelace": default, "wall-panel": wall}

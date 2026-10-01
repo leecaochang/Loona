@@ -38,7 +38,9 @@
           "targets": "Targets",
           "filters": "Filters and performance",
           "extra_entities": "Extra entities",
-          "rules": "Advanced entity rules"
+          "rules": "Advanced entity rules",
+          "resource_preview": "Resource dependency preview",
+          "resource_exceptions": "Advanced resource exceptions"
         }
       },
       "dashboards": {
@@ -58,12 +60,13 @@
       },
       "filters": {
         "title": "Filters and performance",
-        "description": "The Enabled switch must be on for these options. Registry filtering limits dashboard metadata and is off by default because editors may need full lists. Visible-first graphs is also off by default: visible graphs start immediately, then off-screen graphs load after visible rendering and requests settle. Changes apply to open pages; reload the view to compare graph loading. Pause animations during loading temporarily pauses continuous dashboard motion and restores it automatically. It defaults to off.",
+        "description": "The Enabled switch must be on for these options. Registry filtering limits dashboard metadata and is off by default because editors may need full lists. Visible-first graphs is also off by default: visible graphs start immediately, then off-screen graphs load after visible rendering and requests settle. Changes apply to open pages; reload the view to compare graph loading. Pause animations during loading temporarily pauses continuous dashboard motion and restores it automatically. It defaults to off. Resource filtering defaults to off. It limits Lovelace modules for selected accounts to the dashboard union, shared styles and optional exceptions. Review Resource dependency preview first. Unclassified modules are omitted and may require an Always forward exception. Hard-reload pages after changing this filter; already loaded modules cannot be unloaded.",
         "data": {
           "entity_filtering": "Entity filtering",
           "registry_filtering": "Registry filtering",
           "visible_first_graphs": "Visible-first graphs",
-          "pause_animations_during_loading": "Pause animations during loading"
+          "pause_animations_during_loading": "Pause animations during loading",
+          "resource_filtering": "Resource filtering"
         }
       },
       "extra_entities": {
@@ -81,6 +84,17 @@
           "include_globs": "Include entity patterns",
           "exclude_globs": "Exclude entity patterns"
         }
+      },
+      "resource_preview": {
+        "title": "Resource dependency preview",
+        "description": "This preview does not enable filtering or delete resources. Supported bundle names use the standard local/HACS filenames. Custom filenames, helper libraries and generated card types may need an exception. Required resources are retained, unused and unclassified modules are omitted when enabled.\n\n{preview}"
+      },
+      "resource_exceptions": {
+        "title": "Advanced resource exceptions",
+        "description": "Optional resources to always forward to selected accounts. The default is empty. Exempt a module here if it provides an unclassified card, custom icons or a shared helper that your dashboard needs. Preserve the exact URL, including its query string.",
+        "data": {
+          "always_forward_resources": "Always forward"
+        }
       }
     },
     "error": {
@@ -89,6 +103,10 @@
       "invalid_selection": "Choose current, unique values from the available selections.",
       "invalid_pattern": "Use domains such as light and entity globs such as sensor.room_* without spaces or unmatched brackets.",
       "not_loaded": "Loona must be loaded before changing these controls."
+    },
+    "abort": {
+      "not_loaded": "Loona must be loaded to preview resources.",
+      "resources_unavailable": "The native Lovelace resource collection is unavailable."
     }
   },
   "entity": {
@@ -107,6 +125,9 @@
       },
       "pause_animations_during_loading": {
         "name": "Pause animations during loading"
+      },
+      "resource_filtering": {
+        "name": "Resource filtering"
       }
     },
     "button": {
@@ -164,6 +185,10 @@
     "exclusion": {
       "title": "An exclusion removes a dashboard dependency",
       "description": "Review Advanced entity rules in Loona options. Removing a referenced entity can break a card. Remove the exclusion or turn off Loona to restore its state."
+    },
+    "resources": {
+      "title": "Loona resource dependencies need attention",
+      "description": "Resource filtering omits unclassified modules. Open Resource dependency preview in Loona options to inspect unresolved custom types, dynamic configuration, unclassified modules and missing exceptions. If a card, icon or helper is missing, turn off Resource filtering, add its resource under Advanced resource exceptions if needed, then hard-reload. Saved resource registrations are preserved."
     }
   }
 }

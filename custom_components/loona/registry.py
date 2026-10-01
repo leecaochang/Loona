@@ -126,7 +126,7 @@ def registry_scope(
             labels.update(device.labels)
             for key in (
                 ("parent_device_id",)
-                if isinstance(device, dr.ChildDeviceEntry)
+                if isinstance(device, getattr(dr, "ChildDeviceEntry", ()))
                 else ("via_device_id",)
             ):
                 if parent := getattr(device, key, None):

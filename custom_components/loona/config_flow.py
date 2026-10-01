@@ -16,6 +16,8 @@ from homeassistant.helpers import entity_registry as er, selector
 
 from .const import (
     CONF_DASHBOARDS,
+    CONF_ALWAYS_FORWARD,
+    CONTROL_RESOURCES,
     CONF_TARGET_MODE,
     CONF_USER_IDS,
     CONF_EXTRA_ENTITIES,
@@ -32,6 +34,7 @@ from .const import (
     TARGET_SELECTED,
     TARGET_MODES,
 )
+from .compatibility import CompatibilityError
 from .dashboard import dashboard_titles
 from .dependencies import valid_glob
 
@@ -215,9 +218,13 @@ class LoonaOptionsFlow(OptionsFlow):
 
     def finish(self, changes: dict[str, Any]) -> ConfigFlowResult:
         """Do not reset unrelated fields or duplicate persisted switch states."""
-        return self.async_create_entry(
-            title="", data={**self.config_entry.options, **changes}
-        )
+        data = {**self.config_entry.options, **changes}
+        for key, value in changes.items():
+            if (key in self.config_entry.data and value == self.config_entry.data[key]) or (
+                key == CONF_ALWAYS_FORWARD and not value and key not in self.config_entry.data
+            ):
+                data.pop(key, None)
+        return self.async_create_entry(title="", data=data)
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -231,6 +238,8 @@ class LoonaOptionsFlow(OptionsFlow):
                 "filters",
                 "extra_entities",
                 "rules",
+                "resource_preview",
+                "resource_exceptions",
             ],
         )
 
@@ -287,7 +296,7 @@ class LoonaOptionsFlow(OptionsFlow):
                 {
                     vol.Required(key, default=runtime.controls[key]): selector.BooleanSelector()
                     for key in (
-                        CONTROL_ENTITIES, CONTROL_REGISTRIES, CONTROL_GRAPHS, CONTROL_MOTION
+                        CONTROL_ENTITIES, CONTROL_REGISTRIES, CONTROL_RESOURCES, CONTROL_GRAPHS, CONTROL_MOTION
                     )
                     if runtime is not None and key in runtime.available_controls
                 }
@@ -359,4 +368,63 @@ class LoonaOptionsFlow(OptionsFlow):
                     )
                 }
             ),
+        )
+
+
+    async def async_step_resource_preview(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Read-only dependency preview in a native options form."""
+        if user_input is not None:
+            return self.finish({})
+        runtime = getattr(self.config_entry, "runtime_data", None)
+        if runtime is None:
+            return self.async_abort(reason="not_loaded")
+        try:
+            report = await runtime.async_resource_preview()
+        except CompatibilityError:
+            return self.async_abort(reason="resources_unavailable")
+        lines = [f"{row['status']}: {row['url']} ({row['type']}) - {row['reason']}"
+                 for row in report["resources"]]
+        if report["unresolved_custom_types"]:
+            lines.append("Unresolved custom types: " + ", ".join(report["unresolved_custom_types"]))
+        if report["dynamic_configuration"]:
+            lines.append("Templates or strategies can hide additional resource dependencies.")
+        if report["stale_exceptions"]:
+            lines.append("Unavailable exceptions: " + ", ".join(report["stale_exceptions"]))
+        return self.async_show_form(
+            step_id="resource_preview", data_schema=vol.Schema({}),
+            description_placeholders={"preview": "\n\n".join(lines) or "No Lovelace resources registered."},
+        )
+
+    async def async_step_resource_exceptions(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Optional exemptions using actual collection URLs and resource types."""
+        runtime = getattr(self.config_entry, "runtime_data", None)
+        if runtime is None:
+            return self.async_abort(reason="not_loaded")
+        try:
+            report = await runtime.async_resource_preview()
+        except CompatibilityError:
+            return self.async_abort(reason="resources_unavailable")
+        choices = {row["url"]: f"{row['url']} ({row['type']})" for row in report["resources"]}
+        current = self.settings.get(CONF_ALWAYS_FORWARD, [])
+        for url in current:
+            choices.setdefault(url, f"{url} (unavailable)")
+        errors = {}
+        if user_input is not None:
+            selected = user_input.get(CONF_ALWAYS_FORWARD, [])
+            if (not isinstance(selected, list) or any(not isinstance(value, str) for value in selected)
+                or len(selected) != len(set(selected)) or not set(selected) <= choices.keys()):
+                errors["base"] = "invalid_selection"
+            else:
+                return self.finish({CONF_ALWAYS_FORWARD: selected})
+        return self.async_show_form(
+            step_id="resource_exceptions", errors=errors,
+            data_schema=vol.Schema({vol.Optional(CONF_ALWAYS_FORWARD, default=current):
+                selector.SelectSelector(selector.SelectSelectorConfig(
+                    options=[selector.SelectOptionDict(value=url, label=label) for url, label in choices.items()],
+                    multiple=True, mode=selector.SelectSelectorMode.DROPDOWN,
+                ))}),
         )

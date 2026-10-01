@@ -10,9 +10,9 @@ SUPPORTED_CORE_VERSIONS: Final = frozenset(
         "2026.9.3", "2026.9.4",
     }
 )
-REGISTRY_CORE_VERSIONS: Final = frozenset({"2026.9.3", "2026.9.4"})
+REGISTRY_CORE_VERSIONS: Final = SUPPORTED_CORE_VERSIONS
 FRONTEND_CORE_VERSIONS: Final = frozenset({"2026.9.3", "2026.9.4"})
-VERSION: Final = "0.5.0"
+VERSION: Final = "0.6.0"
 CONF_DASHBOARDS: Final = "dashboards"
 CONF_TARGET_MODE: Final = "target_mode"
 CONF_USER_IDS: Final = "user_ids"
@@ -27,6 +27,28 @@ DEFAULT_DASHBOARD: Final = "lovelace"
 CONTROL_MASTER: Final = "enabled"
 CONTROL_ENTITIES: Final = "entity_filtering"
 CONTROL_REGISTRIES: Final = "registry_filtering"
+CONTROL_RESOURCES: Final = "resource_filtering"
+CONF_ALWAYS_FORWARD: Final = "always_forward_resources"
+RESOURCE_CORE_VERSIONS: Final = frozenset({"2026.9.3", "2026.9.4"})
+RESOURCE_COMMANDS: Final = ("lovelace/resources", "lovelace/resources/list")
+# Published bundle names and the custom element families they register.
+RESOURCE_CARDS: Final = {
+    "card-mod.js": ("mod-card",),
+    "bubble-card.js": ("bubble-card",),
+    "button-card.js": ("button-card",),
+    "mini-graph-card-bundle.js": ("mini-graph-card",),
+    "apexcharts-card.js": ("apexcharts-card",),
+    "sunsynk-power-flow-card.js": ("sunsynk-power-flow-card",),
+    "lovelace-horizon-card.js": ("horizon-card",),
+    "stack-in-card.js": ("stack-in-card",),
+    "vertical-stack-in-card.js": ("vertical-stack-in-card",),
+    "auto-entities.js": ("auto-entities",),
+    "layout-card.js": ("layout-card", "gap-card", "layout-break", "grid-layout", "horizontal-layout", "vertical-layout", "masonry-layout"),
+    "mushroom.js": ("mushroom-",),
+    "yet-another-media-player.js": ("yet-another-media-player",),
+}
+# card-mod also applies theme styles and patches native cards globally.
+RESOURCE_SHARED: Final = frozenset({"card-mod.js"})
 CONTROL_GRAPHS: Final = "visible_first_graphs"
 CONTROL_MOTION: Final = "pause_animations_during_loading"
 MOTION_QUIET_MS: Final = 750
@@ -52,6 +74,7 @@ CONTROL_DEFAULTS: Final = {
     CONTROL_MASTER: True,
     CONTROL_ENTITIES: True,
     CONTROL_REGISTRIES: False,
+    CONTROL_RESOURCES: False,
     CONTROL_GRAPHS: False,
     CONTROL_MOTION: False,
 }

@@ -93,6 +93,8 @@ async def test_options_preserve_unrelated_fields_and_stale_labels(
         "filters",
         "extra_entities",
         "rules",
+        "resource_preview",
+        "resource_exceptions",
     }
     result = await flow.async_step_dashboards()
     selector = next(iter(result["data_schema"].schema.values()))
@@ -124,3 +126,15 @@ async def test_rules_and_extra_entities_validate(loona_hass, make_entry):
     assert result["errors"]["base"] == "invalid_selection"
     result = await flow.async_step_filters({"entity_filtering": False})
     assert result["errors"]["base"] == "not_loaded"
+
+
+async def test_restore_initial_choices_and_empty_exceptions_preserves_other_options(loona_hass, make_entry):
+    entry = make_entry(
+        {"dashboards": ["wall-panel"], "target_mode": "all", "user_ids": []},
+        options={"dashboards": ["temporary"], "always_forward_resources": ["/local/helper.js"],
+                 "extra_entities": ["sensor.future"]},
+    )
+    flow = LoonaOptionsFlow(entry.entry_id)
+    flow.hass, flow.handler = loona_hass, entry.entry_id
+    result = flow.finish({"dashboards": ["wall-panel"], "always_forward_resources": []})
+    assert result["data"] == {"extra_entities": ["sensor.future"]}

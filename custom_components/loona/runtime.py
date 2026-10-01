@@ -34,6 +34,9 @@ from homeassistant.util import dt as dt_util
 from .compatibility import CompatibilityError
 from .const import (
     CONF_DASHBOARDS,
+    CONF_ALWAYS_FORWARD,
+    CONTROL_RESOURCES,
+    RESOURCE_CORE_VERSIONS,
     CONF_EXCLUDE_GLOBS,
     CONF_EXTRA_ENTITIES,
     CONF_INCLUDE_DOMAINS,
@@ -63,6 +66,8 @@ from .dashboard import (
     protected_entities,
 )
 from .dependencies import DiscoveryResult, discover
+from .resources import (ResourceAdapter, ResourceDependencies, async_resource_rows,
+                        resource_dependencies, resource_report)
 from .registry import RegistryAdapter, RegistryScope, registry_scope
 from .websocket import ScopePolicy, SubscriptionAdapter
 
@@ -92,6 +97,11 @@ class LoonaRuntime:
         self.graph_adapter: GraphLoadingAdapter | None = None
         self.graph_compatibility_problem: str | None = None
         self.registry_scope = RegistryScope()
+        self.resource_dependencies = ResourceDependencies()
+        self.resource_complete = False
+        self.resource_adapter: ResourceAdapter | None = None
+        self.resource_compatibility_problem: str | None = None
+        self.resource_preview: dict[str, Any] = {}
         self.device_id: str | None = None
         self.dashboard_devices: dict[str, str] = {}
         self._store: Store[dict[str, bool]] = Store(
@@ -125,6 +135,7 @@ class LoonaRuntime:
             self.entity_compatibility_problem
             or self.registry_compatibility_problem
             or self.graph_compatibility_problem
+            or self.resource_compatibility_problem
         )
 
     @callback
@@ -215,7 +226,39 @@ class LoonaRuntime:
                 self.graph_compatibility_problem = str(err)
             else:
                 self.graph_adapter = graph_adapter
+        if (ha_const.__version__ in RESOURCE_CORE_VERSIONS
+            and self.resource_compatibility_problem is None):
+            resource_adapter = ResourceAdapter(
+                self.hass, self._policy(CONTROL_RESOURCES), self.resource_report,
+                self._resources_failed,
+            )
+            try:
+                resource_adapter.install()
+            except CompatibilityError as err:
+                self.resource_compatibility_problem = str(err)
+            else:
+                self.resource_adapter = resource_adapter
         self._update_issues()
+
+    def resource_report(self, rows: list[dict[str, Any]]) -> dict[str, Any]:
+        """Evaluate every newly installed resource using the published union."""
+        self.resource_preview = resource_report(
+            rows, self.resource_dependencies,
+            self._policy_settings.get(CONF_ALWAYS_FORWARD, ()),
+        )
+        self._update_issues()
+        return self.resource_preview
+
+    async def async_resource_preview(self) -> dict[str, Any]:
+        """Read the current native collection for the administrator preview."""
+        return self.resource_report(await async_resource_rows(self.hass))
+
+    @callback
+    def _resources_failed(self, error: CompatibilityError) -> None:
+        self.resource_compatibility_problem = str(error)
+        self.resource_adapter = None
+        self._update_issues()
+        self.notify()
 
     @callback
     def _invalidate(self, event: Event) -> None:
@@ -283,14 +326,15 @@ class LoonaRuntime:
             settings = self.settings
             context = discovery_context(self.hass)
             results: dict[str, DiscoveryResult] = {}
+            configs: list[dict[str, Any]] = []
             problems: list[str] = []
             warnings: list[str] = []
             reasons: dict[str, set[str]] = {}
             for key in settings.get(CONF_DASHBOARDS, ()):
                 try:
-                    result = discover(
-                        await load_dashboard(self.hass, key, force=force), context
-                    )
+                    config = await load_dashboard(self.hass, key, force=force)
+                    configs.append(config)
+                    result = discover(config, context)
                 except Exception as err:
                     # Failed boards are retained as incomplete, never silently dropped.
                     _LOGGER.debug("Dashboard load failed (%s)", type(err).__name__)
@@ -344,6 +388,12 @@ class LoonaRuntime:
                 targets = set(settings.get(CONF_USER_IDS, ()))
                 if not targets or not targets <= users:
                     problems.append("Select current active accounts in Loona options")
+            resource_error = None
+            try:
+                resource_rows = await async_resource_rows(self.hass)
+            except CompatibilityError as err:
+                resource_error = err
+                resource_rows = None
             if revision != self._revision:
                 continue
             self.dashboards = results
@@ -357,6 +407,10 @@ class LoonaRuntime:
                 self.registry_scope = registry_scope(
                     self.hass, self.entity_ids, results.values()
                 )
+            self.resource_dependencies = resource_dependencies(configs)
+            self.resource_complete = bool(results) and len(configs) == len(results) and not any(
+                "Select current active accounts" in problem for problem in problems
+            )
             self._policy_settings = settings
             self.problems, self.warnings = (
                 tuple(sorted(set(problems))),
@@ -365,6 +419,14 @@ class LoonaRuntime:
             self.scan_duration = round((perf_counter() - started) * 1000, 2)
             if not self.problems:
                 self.last_scan = dt_util.utcnow()
+            self.resource_preview = {}
+            if resource_rows is not None:
+                self.resource_report(resource_rows)
+            elif resource_error and ha_const.__version__ in RESOURCE_CORE_VERSIONS:
+                if self.resource_adapter is not None:
+                    self.resource_adapter.fail(resource_error)
+                else:
+                    self.resource_compatibility_problem = str(resource_error)
             self._sync_devices()
             self._apply_policy()
             self._update_issues()
@@ -400,7 +462,7 @@ class LoonaRuntime:
             user_ids=frozenset(settings.get(CONF_USER_IDS, ())),
             all_users=settings.get(CONF_TARGET_MODE) == TARGET_ALL,
             enabled=self.controls[CONTROL_MASTER] and self.controls[control],
-            complete=not self.problems,
+            complete=self.resource_complete if control == CONTROL_RESOURCES else not self.problems,
         )
 
     @callback
@@ -422,6 +484,12 @@ class LoonaRuntime:
             except CompatibilityError as err:
                 self.registry_adapter.fail(err)
 
+        if self.resource_adapter is not None:
+            try:
+                self.resource_adapter.set_policy(self._policy(CONTROL_RESOURCES))
+            except CompatibilityError as err:
+                self.resource_adapter.fail(err)
+
     @callback
     def _registry_failed(self, error: CompatibilityError) -> None:
         self.registry_compatibility_problem = str(error)
@@ -437,6 +505,8 @@ class LoonaRuntime:
             controls.add(CONTROL_ENTITIES)
         if self.registry_adapter is not None:
             controls.add(CONTROL_REGISTRIES)
+        if self.resource_adapter is not None:
+            controls.add(CONTROL_RESOURCES)
         if self.graph_adapter is not None:
             controls.update((CONTROL_GRAPHS, CONTROL_MOTION))
         return frozenset(controls)
@@ -458,6 +528,13 @@ class LoonaRuntime:
         for key, active in (
             ("compatibility", self.compatibility_problem is not None),
             ("scope", bool(self.problems)),
+            ("resources", bool(
+                self.controls[CONTROL_MASTER] and self.controls[CONTROL_RESOURCES]
+                and (self.resource_preview.get("unresolved_custom_types")
+                     or self.resource_preview.get("dynamic_configuration")
+                     or self.resource_preview.get("stale_exceptions")
+                     or self.resource_preview.get("counts", {}).get("unclassified"))
+            )),
             (
                 "exclusion",
                 any("exclusion removes" in warning for warning in self.warnings),
@@ -515,11 +592,14 @@ class LoonaRuntime:
         if self.registry_adapter:
             self.registry_adapter.uninstall()
             self.registry_adapter = None
+        if self.resource_adapter:
+            self.resource_adapter.uninstall()
+            self.resource_adapter = None
         if self.graph_adapter:
             self.graph_adapter.uninstall()
             self.graph_adapter = None
         self._listeners.clear()
-        for key in ("compatibility", "scope", "exclusion"):
+        for key in ("compatibility", "scope", "exclusion", "resources"):
             ir.async_delete_issue(self.hass, DOMAIN, f"{self.entry.entry_id}_{key}")
 
 

@@ -1,6 +1,6 @@
 # Loona
 
-Loona reduces the entity states sent to Home Assistant dashboards and can prioritize visible graphs and temporarily pause continuous animations during loading. Select the dashboards and accounts to filter, then continue using your existing dashboards at your normal Home Assistant address.
+Loona reduces the entity states sent to Home Assistant dashboards, can filter dashboard resource modules, and can prioritize visible graphs and temporarily pause continuous animations during loading. Select the dashboards and accounts to filter, then continue using your existing dashboards at your normal Home Assistant address.
 
 Loona is experimental. Feature availability depends on your Home Assistant version and successful native API checks.
 
@@ -8,8 +8,8 @@ Loona is experimental. Feature availability depends on your Home Assistant versi
 
 | Core version | Available features |
 | --- | --- |
-| **2024.5.5, 2024.12.5, 2025.6.3, 2026.1.3, 2026.8.3** | Entity filtering, dashboard/account selection, advanced entity rules, controls, diagnostics and statistics. |
-| **2026.9.3, 2026.9.4** | All of the above, plus registry filtering, visible-first graphs and animation pausing. |
+| **2024.5.5, 2024.12.5, 2025.6.3, 2026.1.3, 2026.8.3** | Entity and registry filtering, resource dependency preview, dashboard/account selection, advanced entity rules, controls, diagnostics and statistics. |
+| **2026.9.3, 2026.9.4** | All of the above, plus optional resource filtering, visible-first graphs and animation pausing. |
 
 Only the listed releases are admitted; this is not a claim that every intervening release is supported. On unlisted releases, the entity adapter reports a compatibility problem and preserves native subscriptions. The HACS installation minimum is **2024.5.5**.
 
@@ -39,9 +39,10 @@ Open the **Loona** device under **Settings > Devices & services** to find the co
 
 | Control | What it does |
 | --- | --- |
-| Enabled | Master switch. Turn it off to restore full entity states and registry lists, release graphs waiting to load, and restore paused animations. |
+| Enabled | Master switch. Turn it off to restore full entity states, registry lists and subsequent resource lists, release graphs waiting to load, and restore paused animations. |
 | Entity filtering | Turns entity state filtering on or off while keeping the master switch independent. Both switches must be on for filtering. |
 | Registry filtering | Limits entity, device, area, floor, and label lists to dashboard dependencies and related metadata. Off by default. The Enabled switch must also be on. |
+| Resource filtering | Optional, defaults to off. Forward required Lovelace modules, shared stylesheets and exceptions for selected accounts. Review the dependency preview first and hard-reload after changing it. |
 | Visible-first graphs | Starts visible graphs immediately, then creates off-screen graphs one at a time after visible activity settles. Off by default. The Enabled switch must also be on. |
 | Pause animations during loading | Temporarily pauses continuous card animations while a selected dashboard loads, then restores them automatically. Off by default. The Enabled switch must also be on. |
 | Rescan dashboards | Reloads the selected configurations and rebuilds the scope. Use this for troubleshooting; ordinary dashboard changes are handled automatically. |
@@ -102,7 +103,21 @@ When a selected dashboard fails to load or has an unsupported dynamic construct,
 
 Unknown custom card types can still use their explicit references. Cards that calculate additional entity names or inspect `hass.states` may need extra entities or domain inclusions. Loona cannot infer every custom card's runtime dependencies.
 
-This release filters entity state subscriptions and optionally registry lists. Dashboard JavaScript and CSS resources, history, services, themes, and other Home Assistant APIs remain available normally.
+This release filters entity state subscriptions and optionally registry lists and Lovelace resource lists. History, services, themes and other Home Assistant APIs retain native handling.
+
+## Resource dependency preview and filtering
+
+Open **Loona > Configure > Resource dependency preview** to inspect the selected dashboards' combined JavaScript and CSS needs. This read-only form shows each registered URL and type, whether it is required, unused or unclassified, and why. It also reports unresolved custom types, templates/strategies that may hide dependencies, and exceptions whose URLs are no longer registered. The preview works on all admitted releases; the filtering switch is currently available only on Core 2026.9.3 and 2026.9.4.
+
+Turn on **Resource filtering** only after reviewing this report, then hard-reload the dashboard. Selected accounts receive required modules, shared stylesheets, the card-mod module and optional **Advanced resource exceptions > Always forward** selections. All selected dashboards contribute, including nested stacks, conditional branches, card templates, badges, features and custom layouts. The filter operates on both native Lovelace resource-list aliases, preserves the original rows and URL query strings, and never deletes registrations or changes native resource editing permissions. Newly installed modules are evaluated from the current collection on the next request; dashboard edits refresh dependency discovery automatically.
+
+Automatic mappings cover the standard local/HACS filenames for Bubble Card, Button Card, Mini Graph Card, ApexCharts Card, Sunsynk Power Flow Card, Horizon Card, Mushroom, Stack In Card, Vertical Stack In Card, Auto Entities, Layout Card and Yet Another Media Player. Layout Card's gap and layout-break helpers and custom layouts share its bundle. Card-mod remains included because it can style native cards and themes without appearing as a custom card. Stylesheets remain included because their effects can be global. Loona's graph and animation companion is registered separately as an extra frontend module and is unaffected.
+
+This is bounded mapping coverage, not universal dependency discovery. Renamed bundles, remote module URLs, custom icon packs, separately registered helper libraries, modules loaded for side effects and generated card types may be unclassified. **Unclassified modules are omitted when filtering is enabled**, and a native Repair directs you to the preview. If a needed card, icon or helper is unclassified, add its actual URL under **Always forward**, or turn off Resource filtering. Exceptions default to empty and are preserved across unrelated options changes. A changed query string creates a different exception URL and is reported when the old URL disappears.
+
+Resource targeting applies to the whole selected account, including resource editors and other dashboards, so use an unfiltered account or disable the filter when full resource lists are needed. An empty retained set returns an empty list. Failed dashboard loads or invalid account selections bypass resource filtering; an entity-discovery problem alone does not prevent the separate resource scan. An unexpected native resource API or ownership failure disables only this adapter and reports a compatibility problem.
+
+HA loads resources once per page, so switches, exceptions, dashboard/resource changes and integration reloads require a full page reload to change downloads. Already loaded modules stay loaded. Core frontend bundles and unrelated extra frontend modules remain untouched. Resource-list filtering does not block direct asset requests or provide a security boundary, and fewer modules do not guarantee faster visible-card rendering.
 
 ## Visible-first graphs
 
@@ -164,11 +179,11 @@ For a real-browser comparison, use the same dashboard, account, network, and bro
 
 **Scope problem is on:** save the selected dashboards, remove deleted dashboard or account selections, and check for unsupported templates, strategies, or auto-entities filters. Both filters pass through full data while this sensor is on, even when their switches are enabled. Unresolved entity counts alone do not cause a bypass.
 
-**Compatibility problem is on:** use a supported Home Assistant version and check for another integration replacing entity subscriptions or registry commands. Turn off Loona while investigating. The affected filter returns to native handling; diagnostics identify a registry compatibility failure separately.
+**Compatibility problem is on:** use a supported Home Assistant version and check for another integration replacing entity subscriptions, registry commands or resource-list commands. Turn off Loona while investigating. The affected filter returns to native handling; diagnostics identify registry and resource compatibility failures separately.
 
 **Settings or another dashboard shows fewer entities:** that session uses a filtered account and shares its selected dashboard union. Add the needed entities, choose an unfiltered account, or turn off Loona's master switch.
 
-Download diagnostics from the integration menu when reporting a problem at [Loona issues](https://github.com/leecaochang/Loona/issues). Include your Home Assistant version and the affected card type. Diagnostics redact account IDs, entity IDs, dashboard paths, and dependency locations.
+Download diagnostics from the integration menu when reporting a problem at [Loona issues](https://github.com/leecaochang/Loona/issues). Include your Home Assistant version and the affected card type. Diagnostics redact account IDs, entity IDs, dashboard paths, resource URLs and dependency locations.
 
 ## License
 
@@ -177,6 +192,6 @@ Download diagnostics from the integration menu when reporting a problem at [Loon
 
 ## Compatibility testing
 
-The native backend acceptance runner is `tests/core_compatibility.py`. It exercises real Core setup and unload, storage and YAML dashboard loading, inherited area/floor/label discovery, native options and switch services, selected accounts, permissions, live state updates, scope replacement, bypass and persisted controls. The GitHub Actions compatibility matrix installs each admitted Core with its shipped package constraints and matching frontend, then runs this test with the appropriate Python version. The regular test suite also runs the acceptance runner on the development Core. Frontend scheduling and animation tests remain tied to the verified current frontend.
+The native backend acceptance runner is `tests/core_compatibility.py`. It exercises real Core setup and unload, storage and YAML dashboard loading, inherited area/floor/label discovery, all six native registry lists and refetch notifications, native options and switch services, selected accounts, permissions, live state updates, scope replacement, bypass and persisted controls. The GitHub Actions compatibility matrix installs each admitted Core with its shipped package constraints and matching frontend, then runs this test with the appropriate Python version. The regular test suite also runs the acceptance runner on the development Core. Frontend scheduling and animation tests remain tied to the verified current frontend.
 
 To reproduce a matrix entry, install its Core and matching frontend in an isolated environment using `.github/workflows/compatibility.yml`, then run `python tests/core_compatibility.py` from the repository. The development test extra pins Core 2026.9.4 and therefore requires Python 3.14.2 or newer; the integration itself supports Python 3.12 on its admitted older releases.

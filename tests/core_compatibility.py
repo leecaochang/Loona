@@ -38,7 +38,7 @@ from homeassistant.helpers import (  # noqa: E402
 )
 
 from custom_components.loona.config_flow import LoonaConfigFlow  # noqa: E402
-from custom_components.loona.const import DOMAIN, FRONTEND_CORE_VERSIONS, REGISTRY_CORE_VERSIONS  # noqa: E402
+from custom_components.loona.const import DOMAIN, FRONTEND_CORE_VERSIONS, REGISTRY_CORE_VERSIONS, RESOURCE_CORE_VERSIONS  # noqa: E402
 from custom_components.loona.dashboard import discovery_context, load_dashboard  # noqa: E402
 from custom_components.loona.diagnostics import async_get_config_entry_diagnostics  # noqa: E402
 
@@ -85,7 +85,14 @@ async def check(hass: HomeAssistant) -> None:
     boards = {None: default, "wall-panel": wall, "yaml-panel": yaml_board}
     key = getattr(lovelace_const, "LOVELACE_DATA", "lovelace")
     data_class = getattr(lovelace, "LovelaceData", None)
-    hass.data[key] = data_class("storage", boards, None, {}) if data_class else {"dashboards": boards}
+    from homeassistant.components.lovelace.resources import ResourceYAMLCollection
+    collection = ResourceYAMLCollection([])
+    hass.data[key] = data_class("yaml", boards, collection, {}) if data_class else {"dashboards": boards, "resources": collection}
+    for name in ("lovelace/resources", "lovelace/resources/list"):
+        import voluptuous as vol
+        from homeassistant.components.lovelace.websocket import websocket_lovelace_resources
+        websocket_api.async_register_command(hass, name, websocket_lovelace_resources,
+            websocket_api.BASE_COMMAND_MESSAGE_SCHEMA.extend({vol.Required("type"): name}))
     assert (await load_dashboard(hass, "lovelace"))["cards"][0]["entity"] == "sensor.other"
     assert (await load_dashboard(hass, "yaml-panel", force=True))["cards"][0]["entity"] == "sensor.yaml"
 
@@ -146,6 +153,8 @@ async def check(hass: HomeAssistant) -> None:
         assert not runtime.compatibility_problem, runtime.compatibility_problem
         assert not runtime.scope_problem, runtime.problems
         expected = {"enabled", "entity_filtering"}
+        if ha_const.__version__ in RESOURCE_CORE_VERSIONS:
+            expected.add("resource_filtering")
         if ha_const.__version__ in REGISTRY_CORE_VERSIONS:
             expected.add("registry_filtering")
         if ha_const.__version__ in FRONTEND_CORE_VERSIONS:
@@ -180,6 +189,55 @@ async def check(hass: HomeAssistant) -> None:
         context = discovery_context(hass)
         for category, identifier in (("area_id", area.id), ("floor_id", floor.floor_id), ("label_id", label.label_id)):
             assert entity.entity_id in context.targets[category][identifier]
+
+        # Older and current native serializers must preserve their envelopes.
+        registry_originals = dict(runtime.registry_adapter._originals)
+        registry_client, registry_output = client(admin)
+
+        async def registry_request(name):
+            msg_id = registry_client.last_id + 1
+            registry_client.async_handle({"id": msg_id, "type": name})
+            await hass.async_block_till_done()
+            packet = next(item for item in reversed(registry_output) if item.get("id") == msg_id)
+            assert packet["success"], packet
+            return packet["result"]
+
+        await runtime.async_set_control("registry_filtering", False)
+        baseline = {name: await registry_request(name) for name in registry_originals if name != "subscribe_events"}
+        # Native legacy via-device closure is required on every admitted Core.
+        parent = dr.async_get(hass).async_get_or_create(config_entry_id=entry.entry_id, identifiers={("test", "parent")})
+        dr.async_get(hass).async_update_device(device.id, via_device_id=parent.id)
+        await wall.async_save({"cards": [{"entity": "sensor.wall"}, {"entity": "sensor.denied"}, {"entity": entity.entity_id}]})
+        await runtime.async_scan()
+        await runtime.async_set_control("registry_filtering", True)
+        scope = runtime.registry_scope
+        assert {parent.id, device.id} <= scope.devices
+        assert area.id in scope.areas and floor.floor_id in scope.floors and label.label_id in scope.labels
+        for name in baseline:
+            # Fetch native baseline again after adding relationships.
+            await runtime.async_set_control("registry_filtering", False)
+            full = await registry_request(name)
+            await runtime.async_set_control("registry_filtering", True)
+            filtered = await registry_request(name)
+            kind, identifier = {
+                "config/entity_registry/list": ("entities", "entity_id"),
+                "config/entity_registry/list_for_display": ("entities", "ei"),
+                "config/device_registry/list": ("devices", "id"),
+                "config/area_registry/list": ("areas", "area_id"),
+                "config/floor_registry/list": ("floors", "floor_id"),
+                "config/label_registry/list": ("labels", "label_id"),
+            }[name]
+            if name.endswith("list_for_display"):
+                assert filtered == {**full, "entities": [row for row in full["entities"] if row[identifier] in scope.entities]}
+            else:
+                assert filtered == [row for row in full if row[identifier] in getattr(scope, kind)]
+        subscription = registry_client.last_id + 1
+        registry_client.async_handle({"id": subscription, "type": "subscribe_events", "event_type": er.EVENT_ENTITY_REGISTRY_UPDATED})
+        before = len(registry_output)
+        await runtime.async_set_control("registry_filtering", False)
+        assert any(packet.get("id") == subscription and packet.get("type") == "event" for packet in registry_output[before:])
+        await wall.async_save({"cards": [{"entity": "sensor.wall"}, {"entity": "sensor.denied"}]})
+        await runtime.async_scan()
 
         connection, output = client(admin)
         connection.async_handle({"id": 1, "type": "subscribe_entities"})
@@ -264,6 +322,7 @@ async def check(hass: HomeAssistant) -> None:
         assert "sensor.wall" in snapshot(output)
         assert await hass.config_entries.async_unload(entry.entry_id)
         assert hass.data[websocket_api.DOMAIN]["subscribe_entities"] is native
+        assert all(hass.data[websocket_api.DOMAIN][name] is handler for name, handler in registry_originals.items())
         assert not runtime._unsubscribers and not runtime._listeners
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
