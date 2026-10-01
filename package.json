@@ -1,0 +1,8 @@
+{
+  "name": "loona-protocol-tests",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "home-assistant-js-websocket": "9.6.0"
+  }
+}

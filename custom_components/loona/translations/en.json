@@ -1,0 +1,157 @@
+{
+  "title": "Loona",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Select dashboards",
+        "description": "Select dashboards whose combined entities will be sent to filtered accounts. Save automatically generated dashboards first.",
+        "data": {
+          "dashboards": "Dashboards"
+        }
+      },
+      "targets": {
+        "title": "Select accounts",
+        "description": "Targeting affects every ordinary entity subscription using an account, including administrators, across all tabs and apps. After initial setup, reload pages that were already open.",
+        "data": {
+          "target_mode": "Target mode",
+          "user_ids": "Accounts"
+        }
+      }
+    },
+    "error": {
+      "no_dashboards": "Select at least one dashboard.",
+      "no_accounts": "Select at least one active account.",
+      "invalid_selection": "Choose current, unique values from the available selections.",
+      "invalid_pattern": "Use domains such as light and entity globs such as sensor.room_* without spaces or unmatched brackets.",
+      "not_loaded": "Loona must be loaded before changing its filter control."
+    },
+    "abort": {
+      "already_configured": "Only one Loona integration can be configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Loona settings",
+        "menu_options": {
+          "dashboards": "Dashboards",
+          "targets": "Targets",
+          "filters": "Filters",
+          "extra_entities": "Extra entities",
+          "rules": "Advanced entity rules"
+        }
+      },
+      "dashboards": {
+        "title": "Dashboards",
+        "description": "Every filtered account receives the combined entity scope of these dashboards.",
+        "data": {
+          "dashboards": "Dashboards"
+        }
+      },
+      "targets": {
+        "title": "Select accounts",
+        "description": "Targeting affects every ordinary entity subscription using an account, including administrators, across all tabs and apps. After initial setup, reload pages that were already open.",
+        "data": {
+          "target_mode": "Target mode",
+          "user_ids": "Accounts"
+        }
+      },
+      "filters": {
+        "title": "Filters",
+        "description": "Both Entity filtering and the Enabled switch must be on. Changes apply to existing subscriptions managed by Loona.",
+        "data": {
+          "entity_filtering": "Entity filtering"
+        }
+      },
+      "extra_entities": {
+        "title": "Extra entities",
+        "description": "Include dependencies calculated by custom cards or needed by other sessions using a filtered account.",
+        "data": {
+          "extra_entities": "Extra entities"
+        }
+      },
+      "rules": {
+        "title": "Advanced entity rules",
+        "description": "Combine discovered dependencies and inclusions, then apply exclusions. Excluding card dependencies can break a dashboard. Loona controls and statistics always remain included.",
+        "data": {
+          "include_domains": "Include domains",
+          "include_globs": "Include entity patterns",
+          "exclude_globs": "Exclude entity patterns"
+        }
+      }
+    },
+    "error": {
+      "no_dashboards": "Select at least one dashboard.",
+      "no_accounts": "Select at least one active account.",
+      "invalid_selection": "Choose current, unique values from the available selections.",
+      "invalid_pattern": "Use domains such as light and entity globs such as sensor.room_* without spaces or unmatched brackets.",
+      "not_loaded": "Loona must be loaded before changing its filter control."
+    }
+  },
+  "entity": {
+    "switch": {
+      "enabled": {
+        "name": "Enabled"
+      },
+      "entity_filtering": {
+        "name": "Entity filtering"
+      }
+    },
+    "button": {
+      "rescan": {
+        "name": "Rescan dashboards"
+      }
+    },
+    "binary_sensor": {
+      "compatibility_problem": {
+        "name": "Compatibility problem"
+      },
+      "scope_problem": {
+        "name": "Scope problem"
+      }
+    },
+    "sensor": {
+      "union_entities": {
+        "name": "Union entities"
+      },
+      "current_scope": {
+        "name": "Current scope entities"
+      },
+      "reduction_estimate": {
+        "name": "Entity count reduction estimate"
+      },
+      "managed_subscriptions": {
+        "name": "Managed subscriptions"
+      },
+      "filtered_subscriptions": {
+        "name": "Filtered subscriptions"
+      },
+      "last_scan": {
+        "name": "Last successful scan"
+      },
+      "scan_duration": {
+        "name": "Scan duration"
+      },
+      "discovered_entities": {
+        "name": "Discovered entities"
+      },
+      "unresolved_entities": {
+        "name": "Unresolved entities"
+      }
+    }
+  },
+  "issues": {
+    "compatibility": {
+      "title": "Loona cannot safely apply entity filtering",
+      "description": "Check the Compatibility problem sensor, the supported Home Assistant versions, and other integrations that replace entity subscriptions. Loona preserves native handling when it cannot install its filter. Reload browser pages after reloading Loona."
+    },
+    "scope": {
+      "title": "Loona is passing through full entity states",
+      "description": "Check selected dashboards and active accounts in Loona options. Save automatically generated dashboards. Runtime templates, dashboard strategies, unsupported auto-entities rules, or an empty scope prevent reliable filtering. Loona resumes filtering automatically after a complete scan. Download diagnostics for scan status."
+    },
+    "exclusion": {
+      "title": "An exclusion removes a dashboard dependency",
+      "description": "Review Advanced entity rules in Loona options. Removing a referenced entity can break a card. Remove the exclusion or turn off Loona to restore its state."
+    }
+  }
+}
