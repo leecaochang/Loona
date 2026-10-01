@@ -36,7 +36,7 @@
         "menu_options": {
           "dashboards": "Dashboards",
           "targets": "Targets",
-          "filters": "Filters and graph loading",
+          "filters": "Filters and performance",
           "extra_entities": "Extra entities",
           "rules": "Advanced entity rules"
         }
@@ -57,12 +57,13 @@
         }
       },
       "filters": {
-        "title": "Filters and graph loading",
-        "description": "The Enabled switch must be on for these options. Registry filtering limits dashboard metadata and is off by default because editors may need full lists. Visible-first graphs is also off by default: visible graphs start immediately, then off-screen graphs load after visible rendering and requests settle. Changes apply to open pages; reload the view to compare graph loading.",
+        "title": "Filters and performance",
+        "description": "The Enabled switch must be on for these options. Registry filtering limits dashboard metadata and is off by default because editors may need full lists. Visible-first graphs is also off by default: visible graphs start immediately, then off-screen graphs load after visible rendering and requests settle. Changes apply to open pages; reload the view to compare graph loading. Pause animations during loading temporarily pauses continuous dashboard motion and restores it automatically. It defaults to off.",
         "data": {
           "entity_filtering": "Entity filtering",
           "registry_filtering": "Registry filtering",
-          "visible_first_graphs": "Visible-first graphs"
+          "visible_first_graphs": "Visible-first graphs",
+          "pause_animations_during_loading": "Pause animations during loading"
         }
       },
       "extra_entities": {
@@ -103,6 +104,9 @@
       },
       "visible_first_graphs": {
         "name": "Visible-first graphs"
+      },
+      "pause_animations_during_loading": {
+        "name": "Pause animations during loading"
       }
     },
     "button": {

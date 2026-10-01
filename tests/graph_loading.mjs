@@ -1,6 +1,5 @@
 // Execute Loona against the pinned, verbatim native HuiCard class and real Lit.
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import { build } from "esbuild";
 import { Window } from "happy-dom";
 
@@ -83,7 +82,8 @@ const compiled = await build({
 const native = await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString("base64")}`);
 StackCard = class extends native.HuiStackCard {};
 customElements.define("test-native-stack", StackCard);
-const moduleSource = await readFile("custom_components/loona/frontend/graph-loading.js", "utf8");
+const moduleSource = (await build({ entryPoints: ["custom_components/loona/frontend/graph-loading.js"],
+  bundle: true, write: false, format: "esm" })).outputFiles[0].text;
 await import(`data:text/javascript;base64,${Buffer.from(moduleSource).toString("base64")}`);
 await Promise.resolve();
 
@@ -92,7 +92,7 @@ const profiles = {
   "custom:mini-graph-card": { height: 150, size: 3, columns: 6, rows: 3 },
   "custom:apexcharts-card": { height: 250, size: 5, columns: 6, rows: 5 },
 };
-const initialPolicy = { version: "0.4.1", enabled: true, dashboards: ["wall-panel"],
+const initialPolicy = { version: "0.4.2", enabled: true, dashboards: ["wall-panel"],
   quiet_ms: 20, poll_ms: 5, trace_limit: 200, profiles };
 function makeHass(policy = initialPolicy) {
   const connection = {

@@ -19,6 +19,12 @@ from .const import (
     CONF_USER_IDS,
     CONTROL_GRAPHS,
     CONTROL_MASTER,
+    CONTROL_MOTION,
+    MOTION_MAX_MS,
+    MOTION_POLL_MS,
+    MOTION_PROGRESS_TAGS,
+    MOTION_QUIET_MS,
+    MOTION_VIEW_TAGS,
     GRAPH_CONTEXT,
     GRAPH_POLL_MS,
     GRAPH_PROFILES,
@@ -46,6 +52,11 @@ async def async_register_frontend(hass: HomeAssistant) -> Callable[[], None]:
                 StaticPathConfig(
                     _ASSET_PATH,
                     str(Path(__file__).parent / "frontend" / "graph-loading.js"),
+                    cache_headers=False,
+                ),
+                StaticPathConfig(
+                    "/loona/startup-motion.js",
+                    str(Path(__file__).parent / "frontend" / "startup-motion.js"),
                     cache_headers=False,
                 )
             ]
@@ -92,18 +103,25 @@ class GraphLoadingAdapter:
             connection.user.id in settings.get(CONF_USER_IDS, ())
         )
         table = self.hass.data.get(websocket_api.DOMAIN, {})
-        enabled = (
+        allowed = (
             not self.stopped
             and table.get("get_config") == self.owned
             and table.get(GRAPH_SUBSCRIBE) == self.subscription
             and connection.user.is_active
             and targeted
             and self.runtime.controls[CONTROL_MASTER]
-            and self.runtime.controls[CONTROL_GRAPHS]
         )
         return {
             "version": VERSION,
-            "enabled": bool(enabled),
+            "enabled": bool(allowed and self.runtime.controls[CONTROL_GRAPHS]),
+            "motion": {
+                "enabled": bool(allowed and self.runtime.controls[CONTROL_MOTION]),
+                "quiet_ms": MOTION_QUIET_MS,
+                "poll_ms": MOTION_POLL_MS,
+                "max_ms": MOTION_MAX_MS,
+                "progress_tags": MOTION_PROGRESS_TAGS,
+                "view_tags": MOTION_VIEW_TAGS,
+            },
             "dashboards": list(settings.get(CONF_DASHBOARDS, ())) if targeted else [],
             "quiet_ms": GRAPH_QUIET_MS,
             "poll_ms": GRAPH_POLL_MS,

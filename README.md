@@ -1,6 +1,6 @@
 # Loona
 
-Loona reduces the entity states sent to Home Assistant dashboards and can prioritize visible graphs during loading. Select the dashboards and accounts to filter, then continue using your existing dashboards at your normal Home Assistant address.
+Loona reduces the entity states sent to Home Assistant dashboards and can prioritize visible graphs and temporarily pause continuous animations during loading. Select the dashboards and accounts to filter, then continue using your existing dashboards at your normal Home Assistant address.
 
 Loona is experimental. This release supports Home Assistant Core **2026.9.3 and 2026.9.4**. On other versions, Loona reports a compatibility problem and leaves native subscriptions unchanged. Support for earlier versions has not yet been established.
 
@@ -28,10 +28,11 @@ Open the **Loona** device under **Settings > Devices & services** to find these 
 
 | Control | What it does |
 | --- | --- |
-| Enabled | Master switch. Turn it off to restore full entity states and registry lists, and release graphs waiting to load. |
+| Enabled | Master switch. Turn it off to restore full entity states and registry lists, release graphs waiting to load, and restore paused animations. |
 | Entity filtering | Turns entity state filtering on or off while keeping the master switch independent. Both switches must be on for filtering. |
 | Registry filtering | Limits entity, device, area, floor, and label lists to dashboard dependencies and related metadata. Off by default. The Enabled switch must also be on. |
 | Visible-first graphs | Starts visible graphs immediately, then creates off-screen graphs one at a time after visible activity settles. Off by default. The Enabled switch must also be on. |
+| Pause animations during loading | Temporarily pauses continuous card animations while a selected dashboard loads, then restores them automatically. Off by default. The Enabled switch must also be on. |
 | Rescan dashboards | Reloads the selected configurations and rebuilds the scope. Use this for troubleshooting; ordinary dashboard changes are handled automatically. |
 
 Switch states survive Home Assistant restarts. Switch changes update existing subscriptions managed by Loona without requiring a page reload. Turning filtering back on also applies to those subscriptions automatically.
@@ -52,7 +53,7 @@ Use Loona's **Configure** menu under **Settings > Devices & services**.
 | --- | --- |
 | Dashboards | Change which dashboards contribute to the shared scope. |
 | Targets | Change the selected accounts or choose all accounts. |
-| Filters and graph loading | Change the filtering and visible-first graph controls shown on the Loona device. |
+| Filters and performance | Change filtering, visible-first graphs, and the temporary animation pause shown on the Loona device. |
 | Extra entities | Include additional entities needed by custom cards or other sessions using a filtered account. |
 | Advanced entity rules | Include whole domains or entity patterns, or exclude entities. |
 
@@ -101,6 +102,14 @@ A graph already visible, or scrolled into view while earlier cards are still loa
 Queued graphs use temporary placeholders with estimated sizes until the native card replaces them. Dashboard preview and editing create real cards immediately. Turning the graph switch or Enabled off releases pending graphs and restores ordinary creation; cards already created remain loaded. Turning it on affects subsequent card creation, so reload the view for a comparison. Initial installation, integration reloads, and upgrades require a browser page reload.
 
 For troubleshooting, `window.loonaGraphLoadingReport()` shows queued and created graphs, and `console.table(window.loonaGraphLoadingTrace())` shows a bounded creation trace. These browser diagnostics do not measure total dashboard load time.
+
+## Pause animations during loading
+
+Turn on **Pause animations during loading** on the Loona device and reload a selected dashboard using a targeted account. This switch works independently of visible-first graphs and both filters. Loona pauses running, infinitely repeating CSS and Web Animations inside native dashboard cards while initial rendering and data requests settle. Live values and native controls continue updating. Finite transitions, already-paused animations, identifiable loading indicators, editing, previews, and panel layouts keep their ordinary behavior.
+
+Motion resumes at an idle opportunity after a 750 ms quiet interval, immediately when you scroll, press a key, or touch the dashboard, or after at most 10 seconds. Turning this switch or Enabled off also resumes animations. When both performance switches are enabled, motion resumes before off-screen graphs begin their background loading. Later state updates and background graph creation do not restart the pause on a settled view. There is no universal custom-card loaded signal, so Loona uses visible render promises, DOM changes, images/fonts, resource activity, and outstanding Home Assistant requests as a completion heuristic. A stalled request cannot leave animations paused indefinitely.
+
+This feature changes browser animations, not saved card styles or configuration. Animations implemented through JavaScript drawing loops, SVG SMIL, or inaccessible shadow roots are outside its scope. Reducing animation work during startup does not guarantee faster card completion; compare the same dashboard with this switch on and off. For troubleshooting, `window.loonaStartupMotionReport()` shows the pause phase, animation count, and restoration time.
 
 ## Performance measurements
 

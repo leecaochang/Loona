@@ -1,8 +1,11 @@
+import { StartupMotion } from "./startup-motion.js?v=0.4.2";
+
 // Optional graph scheduling for the tested native Home Assistant card container.
 // Dashboard configuration and loaded card elements remain native.
 if (!window[Symbol.for("loona.graph-loading")]) {
   window[Symbol.for("loona.graph-loading")] = true;
-  const moduleVersion = "0.4.1";
+  const moduleVersion = "0.4.2";
+  const motion = new StartupMotion(moduleVersion);
   const connectedCards = new Set();
   const records = new WeakMap();
   const policies = new WeakMap();
@@ -55,11 +58,13 @@ if (!window[Symbol.for("loona.graph-loading")]) {
       policy = hass.config.loona_graph_loading;
       policies.set(connection, policy);
       lastPolicy = policy;
+      motion.update(policy, hass);
     }
     if (!subscriptions.has(connection) && typeof connection.subscribeMessage === "function") {
       subscriptions.add(connection);
       const update = (value) => {
         policies.set(connection, valid(value) ? value : { enabled: false });
+        motion.update(valid(value) ? value : undefined, hass);
         if (valid(value)) lastPolicy = value;
         for (const card of connectedCards) {
           if (card._hass?.connection === connection && !eligible(card._owner, card._config)) {
@@ -212,6 +217,8 @@ if (!window[Symbol.for("loona.graph-loading")]) {
     }
 
     busy(except) {
+      // Give startup motion its first idle restoration before background graphs.
+      if (motion.active) return true;
       if (document.hidden || [...this.renders.values()].some((node) => node.isConnected && this.visible(node))
         || [...this.jobs.keys()].some((job) => job !== except)) return true;
       if (document.fonts?.status === "loading") return true;
@@ -491,6 +498,10 @@ if (!window[Symbol.for("loona.graph-loading")]) {
           nativeLoad.call(this, config);
         }
       } finally {
+        const hass = construction.hass;
+        queueMicrotask(() => {
+          motion.track(this, hass, policyFor(hass));
+        });
         construction = previous;
       }
     };

@@ -40,6 +40,8 @@ async def test_native_bootstrap_and_redaction(graph_runtime, make_user, make_con
     context = augmented[GRAPH_CONTEXT]
     assert context["version"] == VERSION
     assert context["enabled"] is False
+    assert context["motion"]["enabled"] is False
+    assert context["motion"]["max_ms"] == 10000
     assert context["quiet_ms"] == 750
     assert context["dashboards"] == ["wall-panel"]
     assert "user_ids" not in json.dumps(context)
@@ -58,6 +60,9 @@ async def test_live_switches_targets_unsubscribe_and_unload(
     connection.async_handle({"id": 1, "type": GRAPH_SUBSCRIBE})
     assert wire[-2] == {"id": 1, "type": "result", "success": True, "result": None}
     assert wire[-1]["event"]["enabled"] is False
+    await graph_runtime.async_set_control("pause_animations_during_loading", True)
+    assert wire[-1]["event"]["enabled"] is False
+    assert wire[-1]["event"]["motion"]["enabled"] is True
     await graph_runtime.async_set_control("visible_first_graphs", True)
     assert wire[-1]["event"]["enabled"] is True
     before = len(wire)
@@ -67,6 +72,7 @@ async def test_live_switches_targets_unsubscribe_and_unload(
     assert wire[-1]["event"]["enabled"] is True
     await graph_runtime.async_set_control("enabled", False)
     assert wire[-1]["event"]["enabled"] is False
+    assert wire[-1]["event"]["motion"]["enabled"] is False
     await graph_runtime.async_set_control("enabled", True)
     assert wire[-1]["event"]["enabled"] is True
     graph_runtime.hass.config_entries.async_update_entry(
@@ -75,6 +81,7 @@ async def test_live_switches_targets_unsubscribe_and_unload(
     await graph_runtime.async_scan()
     assert wire[-1]["event"]["enabled"] is False
     assert wire[-1]["event"]["dashboards"] == []
+    assert wire[-1]["event"]["motion"]["enabled"] is False
     graph_runtime.hass.config_entries.async_update_entry(
         graph_runtime.entry, options={"target_mode": "all", "dashboards": ["lovelace"]}
     )
@@ -88,6 +95,7 @@ async def test_live_switches_targets_unsubscribe_and_unload(
     await graph_runtime.async_stop()
     assert len(other_wire) == before
     assert wire[-1]["event"]["enabled"] is False
+    assert wire[-1]["event"]["motion"]["enabled"] is False
     assert not graph_runtime.graph_adapter
     assert not graph_runtime._listeners
     connection.async_handle({"id": 2, "type": "get_config"})
@@ -139,6 +147,10 @@ async def test_native_static_asset_and_module_reload(loona_hass, frontend_http):
         assert response.status == 200
         assert response.content_type in {"text/javascript", "application/javascript"}
         assert await response.text() == Path("custom_components/loona/frontend/graph-loading.js").read_text()
+        response = await client.get(f"/loona/startup-motion.js?v={VERSION}")
+        assert response.status == 200
+        assert response.content_type in {"text/javascript", "application/javascript"}
+        assert await response.text() == Path("custom_components/loona/frontend/startup-motion.js").read_text()
     remove()
     assert not manager.urls
 

@@ -5,7 +5,7 @@ from typing import Final
 DOMAIN: Final = "loona"
 SUBSCRIBE_ENTITIES: Final = "subscribe_entities"
 SUPPORTED_CORE_VERSIONS: Final = frozenset({"2026.9.3", "2026.9.4"})
-VERSION: Final = "0.4.1"
+VERSION: Final = "0.4.2"
 CONF_DASHBOARDS: Final = "dashboards"
 CONF_TARGET_MODE: Final = "target_mode"
 CONF_USER_IDS: Final = "user_ids"
@@ -21,6 +21,16 @@ CONTROL_MASTER: Final = "enabled"
 CONTROL_ENTITIES: Final = "entity_filtering"
 CONTROL_REGISTRIES: Final = "registry_filtering"
 CONTROL_GRAPHS: Final = "visible_first_graphs"
+CONTROL_MOTION: Final = "pause_animations_during_loading"
+MOTION_QUIET_MS: Final = 750
+MOTION_POLL_MS: Final = 100
+MOTION_MAX_MS: Final = 10000
+MOTION_VIEW_TAGS: Final = ("HUI-SECTIONS-VIEW", "HUI-MASONRY-VIEW")
+MOTION_PROGRESS_TAGS: Final = (
+    "HA-SPINNER", "HA-PROGRESS-BUTTON",
+    "HA-CIRCULAR-PROGRESS", "HA-LINEAR-PROGRESS", "MD-CIRCULAR-PROGRESS",
+    "MD-LINEAR-PROGRESS", "MDC-CIRCULAR-PROGRESS",
+)
 GRAPH_CONTEXT: Final = "loona_graph_loading"
 GRAPH_SUBSCRIBE: Final = "loona/subscribe_graph_loading"
 GRAPH_QUIET_MS: Final = 750
@@ -36,6 +46,7 @@ CONTROL_DEFAULTS: Final = {
     CONTROL_ENTITIES: True,
     CONTROL_REGISTRIES: False,
     CONTROL_GRAPHS: False,
+    CONTROL_MOTION: False,
 }
 SCAN_DEBOUNCE: Final = 1.0
 MAINTENANCE_SECONDS: Final = 60

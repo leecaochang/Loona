@@ -1,6 +1,6 @@
 // Reproduce HA's real registry/HTMLElement replacement after an early module.
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { build } from "esbuild";
 import { Window } from "happy-dom";
 const window = new Window();
 globalThis.window = window;
@@ -11,7 +11,8 @@ for (const key of ["customElements", "HTMLElement", "CustomElementRegistry"])
   Object.defineProperty(globalThis, key, { get: () => window[key], configurable: true });
 const nativeRegistry = customElements;
 const nativeHTMLElement = HTMLElement;
-const source = await readFile("custom_components/loona/frontend/graph-loading.js", "utf8");
+const source = (await build({ entryPoints: ["custom_components/loona/frontend/graph-loading.js"],
+  bundle: true, write: false, format: "esm" })).outputFiles[0].text;
 await import(`data:text/javascript;base64,${Buffer.from(source).toString("base64")}`);
 assert.equal(customElements.get("loona-graph-placeholder"), undefined,
   "Placeholder registration must wait until after HA bootstrap");
