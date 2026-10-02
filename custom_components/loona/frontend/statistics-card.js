@@ -1,4 +1,4 @@
-/* Optional native-themed statistics and administrator dependency preview. */
+/* Native-themed live filtering statistics. */
 const command = "loona/statistics";
 const elementName = "loona-statistics-card";
 
@@ -22,9 +22,6 @@ function install() {
     constructor() {
       super();
       this.attachShadow({ mode: "open" });
-      this._search = "";
-      this._status = "all";
-      this._offset = 0;
       this._sequence = 0;
       this._visible = true;
       this._lastRequest = 0;
@@ -36,12 +33,12 @@ function install() {
           h2 { margin:0; font-size:20px; line-height:1.4; font-weight:500; }
           p { margin:8px 0 0; font-size:14px; line-height:1.5; color:var(--secondary-text-color); }
           .state { color:var(--primary-text-color); }
-          button,input,select { font:inherit; color:var(--primary-text-color); }
+          button { font:inherit; color:var(--primary-text-color); }
           button { border:0; border-radius:var(--ha-border-radius,8px); min-height:44px;
             padding:8px 12px; background:transparent; color:var(--primary-color); cursor:pointer; }
           button:hover { background:var(--secondary-background-color); }
           button:disabled { color:var(--disabled-text-color); cursor:default; }
-          button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible {
+          button:focus-visible,summary:focus-visible {
             outline:2px solid var(--primary-color); outline-offset:2px; }
           ::selection { background:var(--primary-color); color:var(--text-primary-color,#fff); }
           .rates { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:20px 16px;
@@ -58,23 +55,12 @@ function install() {
           .actions p { margin:0; font-size:12px; }
           details { margin-top:20px; border-top:1px solid var(--divider-color); padding-top:16px; }
           summary { cursor:pointer; min-height:36px; font-size:15px; line-height:1.5; }
-          .tools { display:flex; gap:12px; margin:12px 0; }
-          input,select { box-sizing:border-box; min-height:44px; border:1px solid var(--divider-color);
-            border-radius:var(--ha-border-radius,8px); background:var(--card-background-color);
-            padding:8px 12px; min-width:0; caret-color:var(--primary-color); }
-          input { flex:1; width:100%; }
-          input::placeholder { color:var(--secondary-text-color); }
           .rows { margin:0; padding:0; list-style:none; }
           .rows>li { border-top:1px solid var(--divider-color); padding:12px 0; }
-          .rows details { border:0; margin:0; padding:0; }
-          .rows summary { overflow-wrap:anywhere; font-size:14px; }
-          .reason { margin:8px 0 0; padding-left:20px; font-size:13px; line-height:1.6; overflow-wrap:anywhere; }
-          .tag { color:var(--secondary-text-color); font-size:12px; margin:4px 0 0; }
-          .pagination { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:13px; }
           #error { color:var(--error-color); overflow-wrap:anywhere; }
           [hidden] { display:none !important; }
           @media(max-width:480px) { ha-card { padding:16px; } .rates { gap:16px 10px; }
-            dd { font-size:23px; } .tools { flex-direction:column; } .actions { align-items:start; }
+            dd { font-size:23px; } .actions { align-items:start; }
             .actions p { max-width:55%; } }
         </style>
         <ha-card>
@@ -101,36 +87,10 @@ function install() {
                 Resource counts cover registered Lovelace resources, excluding core bundles and extra modules.</p>
               <ul id="load-rows" class="rows"></ul>
             </details>
-            <details id="dependencies"><summary>Entity dependencies <span id="dependency-count"></span></summary>
-              <p>Inspect retained, excluded and unresolved IDs. Exclusions can break cards. Details describe the configured scope;
-                incomplete scans or disabled filtering pass through full data.</p>
-              <div class="tools"><input id="search" type="search" maxlength="160" placeholder="Search entity IDs" aria-label="Search entity dependencies">
-                <select id="filter" aria-label="Filter entity dependencies"><option value="all">All dependencies</option>
-                  <option value="retained">Retained</option><option value="excluded">Excluded</option><option value="unresolved">Unresolved</option></select></div>
-              <ul id="dependency-rows" class="rows"></ul>
-              <div class="pagination"><button id="previous">Previous</button><span id="page"></span><button id="next">Next</button></div>
-            </details>
           </div>
         </ha-card>`;
       this._get("refresh").addEventListener("click", () => this._fetch());
       this._get("reset").addEventListener("click", () => this._reset());
-      this._get("search").addEventListener("input", (event) => {
-        this._search = event.target.value;
-        this._offset = 0;
-        window.clearTimeout(this._debounce);
-        this._debounce = window.setTimeout(() => this._fetch(), 250);
-      });
-      this._get("filter").addEventListener("change", (event) => {
-        this._status = event.target.value;
-        this._offset = 0;
-        this._fetch();
-      });
-      this._get("previous").addEventListener("click", () => {
-        this._offset = Math.max(0, this._offset - this._data.page_size); this._fetch();
-      });
-      this._get("next").addEventListener("click", () => {
-        this._offset += this._data.page_size; this._fetch();
-      });
     }
 
     static getStubConfig() { return { type: "custom:loona-statistics-card" }; }
@@ -149,13 +109,11 @@ function install() {
         this._data = undefined;
         this._loading = false;
         this._get("content").hidden = true;
-        this._get("dependency-rows").replaceChildren();
         this._get("load-rows").replaceChildren();
-        this._dependencySignature = undefined;
       }
       if (!value?.user?.is_admin) {
         this._get("content").hidden = true;
-        this._get("state").textContent = "Administrator access is required for dependency details.";
+        this._get("state").textContent = "Administrator access is required for Loona statistics.";
         this._get("refresh").disabled = true;
         return;
       }
@@ -173,7 +131,6 @@ function install() {
     }
     disconnectedCallback() {
       window.clearInterval(this._timer);
-      window.clearTimeout(this._debounce);
       this._observer?.disconnect();
       this._sequence++;
       this._loading = false;
@@ -185,7 +142,7 @@ function install() {
       this._lastRequest = Date.now();
       this._get("refresh").disabled = true;
       try {
-        const data = await this._hass.callWS({ type: command, search: this._search, status: this._status, offset: this._offset });
+        const data = await this._hass.callWS({ type: command });
         if (sequence !== this._sequence || !this._hass?.user?.is_admin) return;
         this._data = data;
         this._get("error").hidden = true;
@@ -235,26 +192,6 @@ function install() {
       this._get("estimate").textContent = format(metrics.reduction_estimate) + "%";
       this._get("reset-time").textContent = "Since " + new Date(data.reset_at).toLocaleString();
       this._get("reset").disabled = !data.reset_entity || this._resetting;
-      this._get("dependency-count").textContent = "(" + format(data.total) + ")";
-      const signature = JSON.stringify(data.dependencies);
-      if (signature !== this._dependencySignature) {
-        this._dependencySignature = signature;
-        const expanded = new Set([...this._get("dependency-rows").querySelectorAll("details[open]")].map(item => item.dataset.entity));
-        const focused = this.shadowRoot.activeElement?.closest("details[data-entity]")?.dataset.entity;
-        const rows = data.dependencies.map(row => {
-        const item = node("li");
-        const details = node("details"); details.dataset.entity = row.entity_id; details.open = expanded.has(row.entity_id);
-        details.append(node("summary", row.entity_id));
-        details.append(node("p", row.status + (row.unresolved ? "; unresolved: no registry entry or current state" : ""), "tag"));
-        const reasons = node("ul", undefined, "reason"); row.reasons.forEach(reason => reasons.append(node("li", reason)));
-        details.append(reasons); item.append(details); return item;
-      });
-        this._get("dependency-rows").replaceChildren(...(rows.length ? rows : [node("li", "No dependencies match this search.")]));
-        if (focused) [...this._get("dependency-rows").querySelectorAll("details")].find(item => item.dataset.entity === focused)?.querySelector("summary").focus();
-      }
-      this._get("previous").disabled = this._offset === 0;
-      this._get("next").disabled = this._offset + data.page_size >= data.total;
-      this._get("page").textContent = data.total ? (data.offset + 1) + "-" + Math.min(data.total, data.offset + data.page_size) + " of " + data.total : "0 results";
       this._get("load-count").textContent = "(" + data.page_loads.length + ")";
       this._get("load-rows").replaceChildren(...(data.page_loads.length ? data.page_loads.map(row => {
         const item = node("li"); item.append(node("strong", row.title));
@@ -268,7 +205,7 @@ function install() {
 
   customElements.define(elementName, LoonaStatisticsCard);
   window.customCards = window.customCards || [];
-  window.customCards.push({ type: elementName, name: "Loona statistics", description: "Live filtering statistics and administrator dependency preview", preview: true });
+  window.customCards.push({ type: elementName, name: "Loona statistics", description: "Live filtering statistics and latest page loads", preview: true });
   // One report per full page load; SPA navigation does not create a new snapshot.
   const dashboard = location.pathname.split("/")[1] || "lovelace";
   let attempts = 0;

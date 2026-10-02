@@ -12,7 +12,7 @@ SUPPORTED_CORE_VERSIONS: Final = frozenset(
 )
 REGISTRY_CORE_VERSIONS: Final = SUPPORTED_CORE_VERSIONS
 FRONTEND_CORE_VERSIONS: Final = frozenset({"2026.9.3", "2026.9.4"})
-VERSION: Final = "0.7.0"
+VERSION: Final = "0.7.1"
 CONF_DASHBOARDS: Final = "dashboards"
 CONF_TARGET_MODE: Final = "target_mode"
 CONF_USER_IDS: Final = "user_ids"
@@ -112,7 +112,6 @@ MAINTENANCE_SECONDS: Final = 60
 METRIC_SECONDS: Final = 30
 LIVE_RATE_PRECISION: Final = 3
 DEPENDENCY_PAGE_SIZE: Final = 50
-CONF_STATISTICS_CARD: Final = "statistics_card"
 STATISTICS_DASHBOARD: Final = "loona-statistics"
 STATISTICS_ASSET: Final = "/loona/statistics-card.js"
 STATISTICS_COMMAND: Final = "loona/statistics"

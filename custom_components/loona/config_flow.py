@@ -32,12 +32,10 @@ from .const import (
     TARGET_ALL,
     TARGET_SELECTED,
     TARGET_MODES,
-    CONF_STATISTICS_CARD,
 )
 from .compatibility import CompatibilityError
 from .dashboard import dashboard_titles
 from .preview import dependency_rows
-from .statistics_card import StatisticsCardError
 
 
 def entity_rule_choices(
@@ -206,23 +204,12 @@ class LoonaConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors["base"] = error
             else:
                 self._settings.update(user_input)
-                return await self.async_step_statistics_card()
+                return self.async_create_entry(title="Loona", data=self._settings)
         return self.async_show_form(
             step_id="targets",
             data_schema=await target_schema(self.hass, user_input or self._settings),
             errors=errors,
         )
-
-    async def async_step_statistics_card(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Offer a separate statistics dashboard without editing selected views."""
-        if user_input is not None:
-            if user_input.get(CONF_STATISTICS_CARD, False):
-                self._settings[CONF_STATISTICS_CARD] = True
-            return self.async_create_entry(title="Loona", data=self._settings)
-        return self.async_show_form(step_id="statistics_card", data_schema=vol.Schema({
-            vol.Optional(CONF_STATISTICS_CARD, default=False): selector.BooleanSelector(),
-        }))
-
 
 class LoonaOptionsFlow(OptionsFlow):
     """Update one category while preserving every other saved option."""
@@ -249,7 +236,7 @@ class LoonaOptionsFlow(OptionsFlow):
         data = {**self.config_entry.options, **changes}
         for key, value in changes.items():
             if (key in self.config_entry.data and value == self.config_entry.data[key]) or (
-                key in (CONF_ALWAYS_FORWARD, CONF_STATISTICS_CARD) and not value and key not in self.config_entry.data
+                key == CONF_ALWAYS_FORWARD and not value and key not in self.config_entry.data
             ):
                 data.pop(key, None)
         return self.async_create_entry(title="", data=data)
@@ -268,7 +255,6 @@ class LoonaOptionsFlow(OptionsFlow):
                 "rules",
                 "resource_preview",
                 "dependency_preview",
-                "statistics_card",
             ],
         )
 
@@ -287,32 +273,6 @@ class LoonaOptionsFlow(OptionsFlow):
             data_schema=dashboard_schema(self.hass, self.settings),
             errors=errors,
         )
-
-    async def async_step_statistics_card(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Allow installing or removing the dedicated dashboard at any time."""
-        runtime = getattr(self.config_entry, "runtime_data", None)
-        if runtime is None:
-            return self.async_abort(reason="not_loaded")
-        errors = {}
-        detail = ""
-        if user_input is not None:
-            enabled = user_input.get(CONF_STATISTICS_CARD, False)
-            if not isinstance(enabled, bool):
-                errors["base"] = "invalid_selection"
-            else:
-                try:
-                    await runtime.statistics_card.set_enabled(enabled)
-                except StatisticsCardError as err:
-                    errors["base"] = "card_setup_failed"
-                    detail = str(err)
-                else:
-                    runtime.statistics_card_problem = None
-                    return self.finish({CONF_STATISTICS_CARD: enabled})
-        return self.async_show_form(step_id="statistics_card", errors=errors,
-            description_placeholders={"detail": detail}, data_schema=vol.Schema({
-                vol.Optional(CONF_STATISTICS_CARD, default=self.settings.get(CONF_STATISTICS_CARD, False)):
-                    selector.BooleanSelector(),
-            }))
 
     async def async_step_dependency_preview(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Inspect one dependency at a time without storing any configuration."""

@@ -8,7 +8,7 @@ from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 
-from .const import DEPENDENCY_PAGE_SIZE, DOMAIN, METRIC_SECONDS, PAGE_LOAD_COMMAND, PAGE_LOAD_LIMIT, CONF_STATISTICS_CARD
+from .const import DEPENDENCY_PAGE_SIZE, DOMAIN, METRIC_SECONDS, PAGE_LOAD_COMMAND, PAGE_LOAD_LIMIT
 from .dashboard import dashboard_objects
 from homeassistant.util import dt as dt_util
 from .runtime import LoonaRuntime
@@ -30,9 +30,9 @@ def dependency_rows(runtime: LoonaRuntime) -> list[dict[str, Any]]:
     return sorted(rows, key=lambda row: row["entity_id"])
 
 
-def statistics_report(runtime: LoonaRuntime, search: str = "", status: str = "all", offset: int = 0) -> dict[str, Any]:
+def statistics_report(runtime: LoonaRuntime, search: str = "", status: str = "all", offset: int = 0, *, include_dependencies: bool = False) -> dict[str, Any]:
     """Paginate details and keep statistics and operating status compact."""
-    rows = dependency_rows(runtime)
+    rows = dependency_rows(runtime) if include_dependencies else []
     query = search.casefold()
     matching = [row for row in rows if (not query or query in row["entity_id"].casefold())
                 and (status == "all" or (status == "unresolved" and row["unresolved"])
@@ -63,6 +63,7 @@ def statistics_report(runtime: LoonaRuntime, search: str = "", status: str = "al
 @websocket_api.require_admin
 @websocket_api.websocket_command({
     vol.Required("type"): "loona/statistics",
+    vol.Optional("include_dependencies", default=False): bool,
     vol.Optional("search", default=""): vol.All(str, vol.Length(max=160)),
     vol.Optional("status", default="all"): vol.In(("all", "retained", "excluded", "unresolved")),
     vol.Optional("offset", default=0): vol.All(vol.Coerce(int), vol.Range(min=0)),
@@ -73,7 +74,7 @@ def websocket_statistics(hass: HomeAssistant, connection: websocket_api.ActiveCo
     if runtime is None:
         connection.send_error(msg["id"], "not_loaded", "Loona is not loaded")
         return
-    connection.send_result(msg["id"], statistics_report(runtime, msg["search"], msg["status"], msg["offset"]))
+    connection.send_result(msg["id"], statistics_report(runtime, msg["search"], msg["status"], msg["offset"], include_dependencies=msg["include_dependencies"]))
 
 
 @callback
@@ -86,7 +87,7 @@ def websocket_page_load(hass: HomeAssistant, connection: websocket_api.ActiveCon
     runtime = hass.data.get(DOMAIN)
     path = msg["dashboard"]
     board = dashboard_objects(hass).get(path)
-    if runtime is None or not runtime.settings.get(CONF_STATISTICS_CARD, False) or board is None:
+    if runtime is None or board is None:
         connection.send_result(msg["id"], None)
         return
     if (board.config or {}).get("require_admin") and not connection.user.is_admin:

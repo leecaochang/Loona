@@ -57,7 +57,6 @@ from .const import (
     SCAN_DEBOUNCE,
     TARGET_ALL,
     VERSION,
-    CONF_STATISTICS_CARD,
 )
 from .graph_loading import GraphLoadingAdapter
 from .dashboard import (
@@ -250,12 +249,11 @@ class LoonaRuntime:
         self._update_issues()
 
     async def async_update_statistics_card(self) -> None:
-        """Install optional presentation independently of the filtering adapters."""
-        enabled = self.settings.get(CONF_STATISTICS_CARD, False)
-        if enabled == self.statistics_card.enabled:
+        """Ensure automatic presentation independently of the filtering adapters."""
+        if self.statistics_card.enabled:
             return
         try:
-            await self.statistics_card.set_enabled(enabled)
+            await self.statistics_card.set_enabled(True)
         except StatisticsCardError as err:
             self.statistics_card_problem = str(err)
         else:

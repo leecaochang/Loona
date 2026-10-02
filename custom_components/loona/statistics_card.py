@@ -1,4 +1,4 @@
-"""Install an optional frontend module and an owned native storage dashboard."""
+"""Manage the bundled frontend module and an owned native storage dashboard."""
 
 import asyncio
 from inspect import unwrap
@@ -40,6 +40,12 @@ class StatisticsCard:
         entry = self.hass.data.get(websocket_api.DOMAIN, {}).get("lovelace/dashboards/list")
         handler = unwrap(entry[0]) if isinstance(entry, tuple) else None
         collection = getattr(getattr(handler, "__self__", None), "storage_collection", None)
+        if not isinstance(collection, DashboardsCollection):
+            # Older Core registers a standalone list handler and stores the
+            # native collection in its legacy Lovelace data dictionary.
+            data = self.hass.data.get("lovelace")
+            if isinstance(data, dict):
+                collection = data.get("dashboards_collection")
         if not isinstance(collection, DashboardsCollection):
             raise StatisticsCardError("Native dashboard collection is unavailable")
         return collection
@@ -121,12 +127,19 @@ class StatisticsCard:
                         await self.store.async_remove()
                         raise
             except Exception:
-                frontend.remove_extra_js_url(self.hass, self.url)
+                self._remove_module()
                 raise
             self.enabled = True
+
+    def _remove_module(self) -> None:
+        """Use Core's module remover or its older native URL manager."""
+        if callable(remove := getattr(frontend, "remove_extra_js_url", None)):
+            remove(self.hass, self.url)
+        else:
+            self.hass.data[frontend.DATA_EXTRA_MODULE_URL].remove(self.url)
 
     def unload(self) -> None:
         """Unload the module registration while retaining the saved dashboard."""
         if self.enabled:
-            frontend.remove_extra_js_url(self.hass, self.url)
+            self._remove_module()
         self.enabled = False

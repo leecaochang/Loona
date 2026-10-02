@@ -34,7 +34,7 @@ async def test_dependency_preview_privacy_and_excluded_reasons(preview_runtime, 
     assert rows['sensor.wall']['reasons']
     assert rows['sensor.future']['unresolved'] and rows['sensor.future']['status'] == 'retained'
     admin, output = make_connection(make_user(admin=True))
-    admin.async_handle({'id': 1, 'type': 'loona/statistics', 'status': 'excluded'})
+    admin.async_handle({'id': 1, 'type': 'loona/statistics', 'status': 'excluded', 'include_dependencies': True})
     assert output[-1]['result']['dependencies'] == [rows['sensor.wall']]
     reader, denied = make_connection(make_user(allowed={'sensor.wall'}))
     reader.async_handle({'id': 1, 'type': 'loona/statistics'})
@@ -59,10 +59,10 @@ async def test_paging_native_reset_and_own_telemetry_exclusion(preview_runtime, 
     values = [f'sensor.extra_{index:03}' for index in range(DEPENDENCY_PAGE_SIZE + 3)]
     runtime.hass.config_entries.async_update_entry(runtime.entry, options={'extra_entities': values})
     await runtime.async_scan()
-    report = statistics_report(runtime, search='sensor.extra_')
+    report = statistics_report(runtime, search='sensor.extra_', include_dependencies=True)
     assert len(report['dependencies']) == DEPENDENCY_PAGE_SIZE
     assert report['total'] == len(values)
-    next_page = statistics_report(runtime, search='sensor.extra_', offset=DEPENDENCY_PAGE_SIZE)
+    next_page = statistics_report(runtime, search='sensor.extra_', offset=DEPENDENCY_PAGE_SIZE, include_dependencies=True)
     assert len(next_page['dependencies']) == 3
     assert not set(row['entity_id'] for row in report['dependencies']) & set(row['entity_id'] for row in next_page['dependencies'])
     connection, _ = make_connection(make_user(admin=True))
@@ -86,8 +86,6 @@ async def test_paging_native_reset_and_own_telemetry_exclusion(preview_runtime, 
 
 async def test_page_load_counts_are_per_socket_and_only_server_observed(preview_runtime, make_user, make_connection):
     runtime = preview_runtime
-    # Enable reporting without installing presentation; API test owns no dashboard edits.
-    runtime.hass.config_entries.async_update_entry(runtime.entry, data={**runtime.entry.data, 'statistics_card': True})
     connection, output = make_connection(make_user(admin=True))
     connection.async_handle({'id': 1, 'type': 'subscribe_entities'})
     native_snapshot = output[-1]['event']['a']
@@ -115,7 +113,6 @@ async def test_page_load_counts_are_per_socket_and_only_server_observed(preview_
 
 async def test_optional_dashboard_failure_keeps_filtering_alive(preview_runtime, monkeypatch, make_user, make_connection):
     runtime = preview_runtime
-    runtime.hass.config_entries.async_update_entry(runtime.entry, data={**runtime.entry.data, 'statistics_card': True})
 
     def fail_collection():
         raise OSError('Native collection storage is unavailable')
@@ -127,7 +124,13 @@ async def test_optional_dashboard_failure_keeps_filtering_alive(preview_runtime,
     connection.async_handle({'id': 1, 'type': 'subscribe_entities'})
     assert 'sensor.other' not in output[-1]['event']['a']
     assert runtime.adapter.managed_count == 1
-    flow = LoonaOptionsFlow(runtime.entry.entry_id)
-    flow.hass = runtime.hass
-    form = await flow.async_step_statistics_card({'statistics_card': True})
-    assert form['errors']['base'] == 'card_setup_failed'
+
+
+async def test_statistics_card_does_not_request_dependency_details(preview_runtime, monkeypatch, make_user, make_connection):
+    def fail_preview(*args):
+        raise AssertionError('Statistics polling must not scan dependencies')
+    monkeypatch.setattr('custom_components.loona.preview.dependency_rows', fail_preview)
+    connection, output = make_connection(make_user(admin=True))
+    connection.async_handle({'id': 1, 'type': 'loona/statistics'})
+    assert output[-1]['success']
+    assert output[-1]['result']['dependencies'] == []

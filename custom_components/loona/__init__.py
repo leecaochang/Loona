@@ -23,8 +23,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: LoonaConfigEntry) -> boo
         raise CompatibilityError("Another handler owns Loona statistics")
     try:
         await runtime.async_start()
-        # The route must exist before Core freezes its HTTP router. The optional
-        # module URL is added only when the user installs the statistics card.
+        # The bundled route must exist before Core freezes its HTTP router.
+        # Dashboard creation follows native platform and scope setup.
         if hasattr(hass, "http"):
             try:
                 await runtime.statistics_card.register_asset()

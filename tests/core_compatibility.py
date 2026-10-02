@@ -73,13 +73,17 @@ async def check(hass: HomeAssistant) -> None:
     for module in (area_registry, device_registry, entity_registry, floor_registry, label_registry):
         module.async_setup(hass)
     hass.config.components.update({"config", "websocket_api", "lovelace", "frontend"})
-    if ha_const.__version__ in FRONTEND_CORE_VERSIONS:
-        from homeassistant.components import frontend
-        from homeassistant.components.http import HomeAssistantHTTP
-        from homeassistant.components.http.cors import setup_cors
-        hass.http = HomeAssistantHTTP(hass, None, None, None, ["127.0.0.1"], 0, [], "modern")
-        setup_cors(hass.http.app, [])
-        hass.data[frontend.DATA_EXTRA_MODULE_URL] = frontend.UrlManager(lambda *args: None, [])
+    from homeassistant.components import frontend
+    from homeassistant.components.http import HomeAssistantHTTP
+    from homeassistant.components.http.cors import setup_cors
+    hass.http = HomeAssistantHTTP(hass, None, None, None, ["127.0.0.1"], 0, [], "modern")
+    setup_cors(hass.http.app, [])
+    manager_args = ([],)
+    if frontend.UrlManager.__init__.__code__.co_argcount > 2:
+        manager_args = (lambda *args: None, [])
+    hass.data[frontend.DATA_EXTRA_MODULE_URL] = frontend.UrlManager(*manager_args)
+
+    assert await lovelace.async_setup(hass, {"lovelace": {"mode": "storage"}})
 
     default = LovelaceStorage(hass, None)
     wall = LovelaceStorage(hass, {"id": "wall", "url_path": "wall-panel", "title": "Wall"})
@@ -91,7 +95,11 @@ async def check(hass: HomeAssistant) -> None:
     key = getattr(lovelace_const, "LOVELACE_DATA", "lovelace")
     data_class = getattr(lovelace, "LovelaceData", None)
     def set_collection(collection, mode):
-        hass.data[key] = data_class(mode, boards, collection, {}) if data_class else {"dashboards": boards, "resources": collection}
+        previous = hass.data.get(key, {})
+        hass.data[key] = data_class(mode, boards, collection, {}) if data_class else {
+            "dashboards": boards, "resources": collection,
+            "dashboards_collection": previous.get("dashboards_collection"),
+        }
 
     # Native 2024.5 setup deliberately disables the generic collection list.
     # Later Core releases expose the resource-specific collection list and alias.
@@ -127,9 +135,8 @@ async def check(hass: HomeAssistant) -> None:
     form = await flow.async_step_user(form["data_schema"]({"dashboards": ["wall-panel"]}))
     assert form["step_id"] == "targets"
     result = await flow.async_step_targets(form["data_schema"]({"target_mode": "all"}))
-    assert result["step_id"] == "statistics_card"
-    result = await flow.async_step_statistics_card(result["data_schema"]({"statistics_card": False}))
-    kwargs = dict(domain=DOMAIN, data=result["data"], options={}, version=1, minor_version=1,
+    assert result["type"] == "create_entry"
+    kwargs = dict(domain=DOMAIN, data=result["data"], options={"statistics_card": False}, version=1, minor_version=1,
                   title="Loona", source="user", unique_id=DOMAIN)
     parameters = config_entries.ConfigEntry.__init__.__code__.co_varnames
     if "discovery_keys" in parameters:
@@ -208,6 +215,9 @@ async def check(hass: HomeAssistant) -> None:
         await hass.async_block_till_done()
         runtime = entry.runtime_data
         assert not runtime.compatibility_problem, runtime.compatibility_problem
+        assert runtime.statistics_card.enabled
+        statistics_board = hass.data[key].dashboards["loona-statistics"] if data_class else hass.data[key]["dashboards"]["loona-statistics"]
+        statistics_id = statistics_board.config["id"]
         assert not runtime.scope_problem, runtime.problems
         assert not runtime.resource_compatibility_problem, runtime.resource_compatibility_problem
         resource_client, resource_output = client(admin)
@@ -344,7 +354,7 @@ async def check(hass: HomeAssistant) -> None:
         assert any("sensor.wall" in packet.get("event", {}).get("c", {}) for packet in output[before:])
         assert all("sensor.denied" not in packet.get("event", {}).get("c", {}) for packet in limited_output)
 
-        connection.async_handle({"id": 2, "type": "loona/statistics", "search": "sensor.wall"})
+        connection.async_handle({"id": 2, "type": "loona/statistics", "search": "sensor.wall", "include_dependencies": True})
         assert output[-1]["result"]["dependencies"][0]["entity_id"] == "sensor.wall"
         restricted.async_handle({"id": 2, "type": "loona/statistics"})
         assert limited_output[-1]["success"] is False
@@ -449,8 +459,13 @@ async def check(hass: HomeAssistant) -> None:
         runtime = entry.runtime_data
         assert not runtime.controls["enabled"] and runtime.controls["entity_filtering"]
         assert runtime.available_controls == expected
+        board_map = hass.data[key].dashboards if data_class else hass.data[key]["dashboards"]
+        assert board_map["loona-statistics"].config["id"] == statistics_id
         assert await hass.config_entries.async_unload(entry.entry_id)
         assert hass.data[websocket_api.DOMAIN]["subscribe_entities"] is native
+        assert await hass.config_entries.async_remove(entry.entry_id)
+        assert "loona-statistics" not in board_map
+        assert runtime.statistics_card.url not in hass.data[frontend.DATA_EXTRA_MODULE_URL].urls
         print(f"Passed full native backend acceptance on Core {ha_const.__version__}: setup, storage/YAML, discovery, controls/options, permissions, live updates, bypass, persistence and unload")
     finally:
         if runtime:

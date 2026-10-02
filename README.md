@@ -27,8 +27,9 @@ Go to **Settings > Devices & services > Add integration**, search for **Loona**,
 
 1. Select one or more dashboards. Loona uses their combined entity dependencies for every filtered account. Storage dashboards and YAML dashboards are supported. Save an automatically generated Overview dashboard before selecting it.
 2. Choose **Selected accounts** and select the accounts to filter, or choose **All accounts**. Administrators can be selected and receive the same filtering as other selected accounts.
-3. Optionally install the **Loona statistics dashboard**. This adds an administrator-only dashboard with the bundled statistics card. It does not edit your existing dashboards. You can add or remove it later through Configure.
-4. Reload any browser pages that were already open when Loona was added. New connections use the selected scope automatically.
+3. Reload any browser pages that were already open when Loona was added. New connections use the selected scope automatically.
+
+Loona automatically creates an administrator-only **Loona statistics** dashboard with its bundled card. Existing dashboards are preserved.
 
 **Targeting applies to the whole account.** Every tab, tablet, Companion session, and other application using that account's ordinary unfiltered entity subscription receives the same combined scope, regardless of which dashboard or page it opens. Accounts outside the selection retain their full entity state list. A separate account for a wall panel makes it easier to keep other sessions fully populated.
 
@@ -70,7 +71,6 @@ Use Loona's **Configure** menu under **Settings > Devices & services**.
 | Extra entities | Include additional entities needed by custom cards or other sessions using a filtered account. |
 | Advanced entity rules | Include whole domains or entity patterns, or exclude entities. |
 | Entity dependencies | Read-only, searchable explanations of retained, excluded and unresolved entities. Choose an entity and submit to inspect it; close the form when finished. |
-| Statistics dashboard | Install or remove the optional statistics card and its dedicated administrator-only dashboard. |
 
 Advanced rules use searchable selection lists populated from current states and the entity registry. Choose domains such as `light`, individual entity IDs, or whole-domain patterns such as `sensor.*`. Previously saved custom patterns, such as `sensor.room_*`, remain selectable even when they currently match no entities; new arbitrary text entries are not accepted. Loona combines discovered dependencies, extra entities, domain inclusions, and pattern inclusions; it then applies exclusions. Loona's own controls and statistics are always retained.
 
@@ -99,15 +99,15 @@ Subscription counts refresh about every 30 seconds. Each selected dashboard also
 
 ## Statistics dashboard and live reset
 
-Enable **Loona > Configure > Statistics dashboard** and reload the browser. **Loona statistics** appears in the sidebar for administrators. The bundled card shows filtering status, live rates, totals, the current scope, searchable dependency explanations and the latest full browser load for each dashboard. Details start collapsed. You can also place `type: custom:loona-statistics-card` on your own dashboards while the card is installed.
+Loona automatically creates **Loona statistics** in the sidebar for administrators. Reload the browser after installation or upgrading. The bundled card shows filtering status, live rates, totals, the current scope and the latest full browser load for each dashboard. Latest loads start collapsed. Detailed entity dependencies remain available under **Loona > Configure > Entity dependencies**. You can also place `type: custom:loona-statistics-card` on your own dashboards.
 
-The generated dashboard uses native storage and is managed separately from the dashboards you filter. Turning the setting off removes only the unedited generated dashboard and the module registration. If you edit that dashboard, Loona preserves it and asks you to remove it manually before disabling the setting. Cards placed on your own dashboards must also be removed before uninstalling the module. Removing the integration removes its unedited generated dashboard. Downloaded modules remain in an already-open page until it is reloaded.
+The generated dashboard uses native storage and is managed separately from the dashboards you filter. It is created during integration setup, including upgrades from installations that previously opted out. There is no installation checkbox. Uninstalling Loona removes its module registration and unedited generated dashboard. User-edited dashboards are preserved; remove any Loona cards from those dashboards before uninstalling. Downloaded modules remain in an already-open page until it is reloaded.
 
 Rates normally refresh every 30 seconds. The first reading after startup or reset waits for the next sampling tick; the card shows the measured interval. Initial snapshots, policy-reconciliation snapshots, explicit native scopes, unselected-account subscriptions, denied entities and Loona's own telemetry/control changes are excluded from live update counters. Each eligible change is counted once per managed selected-account subscription, so multiple tabs can increase the totals. Bypassed selected-account subscriptions count eligible changes as forwarded. Statistics reset on integration reload or HA restart; they are not persisted.
 
 Use **Reset live statistics** on the Loona device or in the card to clear update totals, the rate interval and the latest-load records. This leaves filtering settings, subscriptions, the live entity-count estimate, and HA recorder history/statistics unchanged.
 
-The optional module reports one full browser page load after the native state subscription is ready. Records show the initial permission-eligible entity count and how many entities that socket received. Resource counts are reported only when the filtered resource-list response was observed after an owned entity subscription; otherwise the card explicitly says they were not observed. These are registered Lovelace resource counts, not all network requests. Navigating within an existing HA page does not create another initial subscription and is not recorded as a new full load. The latest record for each dashboard replaces its previous record, with up to 30 dashboards retained. Entity filtering still uses the selected dashboards' combined scope rather than a separate scope for the displayed page. The browser supplies the dashboard path; the server computes the counts. Detailed previews and latest-load records are administrator-only.
+The bundled module reports one full browser page load after the native state subscription is ready. Records show the initial permission-eligible entity count and how many entities that socket received. Resource counts are reported only when the filtered resource-list response was observed after an owned entity subscription; otherwise the card explicitly says they were not observed. These are registered Lovelace resource counts, not all network requests. Navigating within an existing HA page does not create another initial subscription and is not recorded as a new full load. The latest record for each dashboard replaces its previous record, with up to 30 dashboards retained. Entity filtering still uses the selected dashboards' combined scope rather than a separate scope for the displayed page. The browser supplies the dashboard path; the server computes the counts. Detailed previews and latest-load records are administrator-only.
 
 ## Supported dashboards and limitations
 
