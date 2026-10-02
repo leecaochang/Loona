@@ -124,10 +124,11 @@ class _Subscription:
 class SubscriptionAdapter:
     """Own one command replacement and its tracked unscoped subscriptions."""
 
-    def __init__(self, hass: HomeAssistant, policy: ScopePolicy, statistics: LiveStatistics | None = None) -> None:
+    def __init__(self, hass: HomeAssistant, policy: ScopePolicy, statistics: LiveStatistics | None = None, dashboard_active: Callable[[websocket_api.ActiveConnection], bool] | None = None) -> None:
         self.hass = hass
         self.policy = policy
         self.statistics = statistics
+        self.dashboard_active = dashboard_active
         self._table: HandlerTable | None = None
         self._original: HandlerEntry | None = None
         self._owned_entry: HandlerEntry | None = None
@@ -201,9 +202,15 @@ class SubscriptionAdapter:
             self._original[0](hass, connection, msg)
             return
         candidate = self._prepare(
-            connection, msg, self.policy.scope_for(connection.user.id), initial=True
+            connection, msg, self._scope_for(self.policy, connection), initial=True
         )
         self._publish(candidate, previous=None, managed=True)
+
+    def _scope_for(self, policy: ScopePolicy, connection: websocket_api.ActiveConnection) -> frozenset[str] | None:
+        """Runtime filtering requires an explicitly reported selected dashboard."""
+        if self.dashboard_active is not None and not self.dashboard_active(connection):
+            return None
+        return policy.scope_for(connection.user.id)
 
     def _prepare(
         self,
@@ -288,12 +295,15 @@ class SubscriptionAdapter:
         candidate.relay.flush()
 
     def _stage_changes(
-        self, policy: ScopePolicy, *, unloading: bool = False
+        self, policy: ScopePolicy, *, unloading: bool = False,
+        connection: websocket_api.ActiveConnection | None = None,
     ) -> list[tuple[_Subscription, _Subscription]]:
         """Stage all listeners before changing any client or published policy."""
         staged: list[tuple[_Subscription, _Subscription]] = []
         try:
             for previous in self._records.values():
+                if connection is not None and previous.connection is not connection:
+                    continue
                 if (
                     previous.connection.subscriptions.get(previous.request["id"])
                     is not previous.owned_unsubscribe
@@ -304,7 +314,7 @@ class SubscriptionAdapter:
                         "Another owner replaced a managed listener"
                     )
                 scope = (
-                    None if unloading else policy.scope_for(previous.connection.user.id)
+                    None if unloading else self._scope_for(policy, previous.connection)
                 )
                 if unloading or scope != previous.scope:
                     candidate = self._prepare(
@@ -323,6 +333,14 @@ class SubscriptionAdapter:
         self._check_owner()
         staged = self._stage_changes(policy)
         self.policy = policy
+        for previous, candidate in staged:
+            self._publish(candidate, previous=previous, managed=True)
+
+    @callback
+    def refresh_connection(self, connection: websocket_api.ActiveConnection) -> None:
+        """Reconcile this socket's ordinary feeds after a panel transition."""
+        self._check_owner()
+        staged = self._stage_changes(self.policy, connection=connection)
         for previous, candidate in staged:
             self._publish(candidate, previous=previous, managed=True)
 

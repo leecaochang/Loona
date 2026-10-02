@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from homeassistant import auth, const as ha_const
 from homeassistant.components.lovelace.const import EVENT_LOVELACE_UPDATED
+from homeassistant.components import websocket_api
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_PANELS_UPDATED, EVENT_STATE_CHANGED
 from homeassistant.core import (
@@ -59,6 +60,7 @@ from .const import (
     VERSION,
 )
 from .graph_loading import GraphLoadingAdapter
+from .panels import PanelContext
 from .dashboard import (
     dashboard_titles,
     discovery_context,
@@ -92,6 +94,7 @@ class LoonaRuntime:
         self.problems: tuple[str, ...] = ()
         self.warnings: tuple[str, ...] = ()
         self.entity_compatibility_problem: str | None = None
+        self.panel_compatibility_problem: str | None = None
         self.registry_compatibility_problem: str | None = None
         self.last_scan: datetime | None = None
         self.scan_duration = 0.0
@@ -99,6 +102,7 @@ class LoonaRuntime:
         self.statistics_card = StatisticsCard(hass, entry.entry_id)
         self.statistics_card_problem: str | None = None
         self.adapter: SubscriptionAdapter | None = None
+        self.panel_context = PanelContext(hass, self._panel_changed)
         self.registry_adapter: RegistryAdapter | None = None
         self.graph_adapter: GraphLoadingAdapter | None = None
         self.graph_compatibility_problem: str | None = None
@@ -139,6 +143,7 @@ class LoonaRuntime:
     def compatibility_problem(self) -> str | None:
         return (
             self.entity_compatibility_problem
+            or self.panel_compatibility_problem
             or self.registry_compatibility_problem
             or self.graph_compatibility_problem
             or self.resource_compatibility_problem
@@ -157,6 +162,7 @@ class LoonaRuntime:
 
     async def async_start(self) -> None:
         """Load controls before installing a hook and register invalidation."""
+        self.panel_context.install()
         stored = await self._store.async_load()
         if stored:
             self.controls.update(
@@ -205,7 +211,7 @@ class LoonaRuntime:
             )
         )
         await self.async_scan()
-        adapter = SubscriptionAdapter(self.hass, self._policy(), self.live_statistics)
+        adapter = SubscriptionAdapter(self.hass, self._policy(), self.live_statistics, self.panel_context.active)
         try:
             adapter.install()
         except CompatibilityError as err:
@@ -218,6 +224,7 @@ class LoonaRuntime:
                 self._policy(CONTROL_REGISTRIES),
                 self.registry_scope,
                 self._registry_failed,
+                self.panel_context.active,
             )
             try:
                 registry_adapter.install()
@@ -239,6 +246,7 @@ class LoonaRuntime:
                 self.hass, self._policy(CONTROL_RESOURCES), self.resource_report,
                 self._resources_failed,
                 self._observe_resource_load,
+                self.panel_context.active,
             )
             try:
                 resource_adapter.install()
@@ -502,6 +510,24 @@ class LoonaRuntime:
         )
 
     @callback
+    def _panel_changed(self, connection: websocket_api.ActiveConnection) -> None:
+        """Restore native data before a non-dashboard panel's next request."""
+        if self.adapter is not None:
+            try:
+                self.adapter.refresh_connection(connection)
+            except CompatibilityError as err:
+                self.entity_compatibility_problem = str(err)
+                self.adapter.uninstall()
+                self.adapter = None
+        if self.registry_adapter is not None:
+            try:
+                self.registry_adapter.refresh_connection(connection)
+            except CompatibilityError as err:
+                self.registry_adapter.fail(err)
+        self._update_issues()
+        self.notify()
+
+    @callback
     def _apply_policy(self) -> None:
         if self.adapter is not None:
             try:
@@ -525,6 +551,8 @@ class LoonaRuntime:
                 self.resource_adapter.set_policy(self._policy(CONTROL_RESOURCES))
             except CompatibilityError as err:
                 self.resource_adapter.fail(err)
+
+        self.panel_context.set_dashboards(frozenset(self._policy_settings.get(CONF_DASHBOARDS, ())))
 
     @callback
     def _registry_failed(self, error: CompatibilityError) -> None:
@@ -631,6 +659,7 @@ class LoonaRuntime:
                 await self._scan_task
             except asyncio.CancelledError:
                 pass
+        self.panel_context.disable_clients()
         if self.adapter:
             self.adapter.uninstall()
             self.adapter = None
@@ -643,6 +672,7 @@ class LoonaRuntime:
         if self.graph_adapter:
             self.graph_adapter.uninstall()
             self.graph_adapter = None
+        self.panel_context.uninstall()
         self._listeners.clear()
         self.statistics_card.unload()
         for key in ("compatibility", "scope", "exclusion", "resources"):

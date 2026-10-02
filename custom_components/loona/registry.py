@@ -216,9 +216,11 @@ class RegistryAdapter:
         policy: ScopePolicy,
         scope: RegistryScope,
         on_failure: Callable[[CompatibilityError], None],
+        dashboard_active: Callable[[websocket_api.ActiveConnection], bool] | None = None,
     ) -> None:
         self.hass, self.policy, self.scope = hass, policy, scope
         self.on_failure = on_failure
+        self.dashboard_active = dashboard_active
         self._table: HandlerTable | None = None
         self._originals: dict[str, HandlerEntry] = {}
         self._owned: dict[str, HandlerEntry] = {}
@@ -284,7 +286,7 @@ class RegistryAdapter:
             self.check_ownership()
         except CompatibilityError as err:
             self.fail(err)
-        if self._table is None or self.policy.scope_for(connection.user.id) is None:
+        if self._table is None or self._scope_for(self.policy, connection) is None:
             native(hass, connection, msg)
         else:
             native(
@@ -295,6 +297,24 @@ class RegistryAdapter:
                 ),
                 msg,
             )
+
+    def _scope_for(self, policy: ScopePolicy, connection: websocket_api.ActiveConnection) -> frozenset[str] | None:
+        """Use the same connection-local dashboard gate as entity feeds."""
+        if self.dashboard_active is not None and not self.dashboard_active(connection):
+            return None
+        return policy.scope_for(connection.user.id)
+
+    @callback
+    def refresh_connection(self, connection: websocket_api.ActiveConnection) -> None:
+        """Ask native collections on this socket to refetch after navigation."""
+        self.check_ownership()
+        for (client, msg_id), (event_type, unsubscribe, _) in tuple(self._watchers.items()):
+            if client is not connection:
+                continue
+            if client.subscriptions.get(msg_id) is not unsubscribe:
+                self._watchers.pop((client, msg_id), None)
+                continue
+            client.send_event(msg_id, Event(event_type, {"action": "update"}).as_dict())
 
     @callback
     def _subscribe(
@@ -332,8 +352,8 @@ class RegistryAdapter:
                 self._watchers.pop((connection, msg_id), None)
                 continue
             before, after = (
-                previous.scope_for(connection.user.id),
-                self.policy.scope_for(connection.user.id),
+                self._scope_for(previous, connection),
+                self._scope_for(self.policy, connection),
             )
             kind = _EVENTS[event_type]
             if (before is None) == (after is None) and (

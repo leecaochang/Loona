@@ -28,7 +28,7 @@ For HACS, add `https://github.com/leecaochang/Loona` as a custom repository with
 
 Loona creates an administrator-only **Loona** dashboard with statistics and settings cards. It does not edit your existing dashboards.
 
-**Filtering applies to the account, not the page.** Every tab, device and app using a selected account receives the entities from all selected dashboards. Other pages may be missing entities they need. A separate account for a wall panel keeps your main account unaffected. Accounts you did not select receive their usual data.
+Entity, registry and resource filtering applies only while a selected account is viewing a selected dashboard. Settings, Developer Tools, other panels and unselected dashboards receive normal Home Assistant data. Each browser tab reports its own panel automatically; clients without panel context receive normal data. If the report arrives after startup, Loona applies filtering to the existing updates. Reload browser pages after upgrading so they load the panel reporter. Home Assistant permissions still apply.
 
 Home Assistant permissions still apply. Loona does not restrict access: an authorized app can still request other entities through Home Assistant's APIs. Requests that already specify their own entity list or filters are left unchanged.
 
@@ -172,7 +172,7 @@ For a real-browser comparison, use the same dashboard, account, network, and bro
 
 **Compatibility says Limited:** check your HA version and Loona diagnostics. Another integration may have replaced a function Loona uses. The affected feature leaves its requests to HA.
 
-**An editor or another dashboard is missing choices:** the selected account is filtered everywhere. Add the needed entities, disable Registry filtering, use an unfiltered account or turn off Enabled.
+**A panel is missing choices:** reload the browser after upgrading Loona. Non-dashboard panels and unselected dashboards receive normal data. Selectors opened within a filtered dashboard still use its scope; add needed entities with Extra entities or disable filtering while editing.
 
 When reporting a problem at [Loona issues](https://github.com/leecaochang/Loona/issues), include your HA version, affected card type and integration diagnostics. Diagnostics hide account and entity IDs, dashboard paths, file URLs and reference locations.
 

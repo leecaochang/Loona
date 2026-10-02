@@ -1,5 +1,5 @@
 /* Prefilled administrator settings using native Loona validation and storage. */
-import { language, text, translate } from "./i18n.js?v=0.8.2";
+import { language, text, translate } from "./i18n.js?v=0.8.3";
 
 const groups = {
   controls: "Filters and performance", dashboards: "Dashboards", targets: "Accounts",

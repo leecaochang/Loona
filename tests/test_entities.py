@@ -85,7 +85,7 @@ async def test_native_platforms_and_dashboard_selection_cleanup(
     await asyncio.sleep(0)
 
 
-async def test_missing_optional_frontend_api_keeps_entity_filtering_operational(
+async def test_missing_frontend_api_preserves_native_panel_data(
     loona_hass, make_entry, dashboards, frontend_http, make_user, make_connection
 ):
     from unittest.mock import patch
@@ -108,7 +108,8 @@ async def test_missing_optional_frontend_api_keeps_entity_filtering_operational(
         connection, wire = make_connection(make_user(admin=True))
         connection.async_handle({"id": 1, "type": "subscribe_entities"})
         assert "sensor.wall" in wire[-1]["event"]["a"]
-        assert "sensor.other" not in wire[-1]["event"]["a"]
+        assert "sensor.other" in wire[-1]["event"]["a"]
+        assert runtime.panel_compatibility_problem
         entities = er.async_entries_for_config_entry(er.async_get(loona_hass), entry.entry_id)
         assert not any(entity.unique_id.endswith((":visible_first_graphs", ":pause_animations_during_loading")) for entity in entities)
     finally:

@@ -162,7 +162,7 @@ class _ResourceConnection:
             return
         try:
             self.adapter.check_ownership()
-            if self.adapter.targeted(self.connection.user.id):
+            if self.adapter.targets_connection(self.connection):
                 if not isinstance(result, list) or any(
                     not isinstance(row, dict) or not isinstance(row.get("url"), str)
                     or row.get("type") not in {"module", "js", "css", "html"}
@@ -188,9 +188,11 @@ class ResourceAdapter:
         report: Callable[[list[dict[str, Any]]], dict[str, Any]],
         on_failure: Callable[[CompatibilityError], None],
         observe: Callable[[Any, int, int], None] | None = None,
+        dashboard_active: Callable[[websocket_api.ActiveConnection], bool] | None = None,
     ) -> None:
         self.hass, self.policy, self.report, self.on_failure = hass, policy, report, on_failure
         self.observe = observe
+        self.dashboard_active = dashboard_active
         self._table: HandlerTable | None = None
         self._originals: dict[str, HandlerEntry] = {}
         self._owned: dict[str, HandlerEntry] = {}
@@ -199,6 +201,12 @@ class ResourceAdapter:
         """Unlike entity subscriptions, an empty retained resource list is valid."""
         return bool(self.policy.enabled and self.policy.complete
                     and (self.policy.all_users or user_id in self.policy.user_ids))
+
+    def targets_connection(self, connection: websocket_api.ActiveConnection) -> bool:
+        """Recheck the current panel when an asynchronous native list finishes."""
+        return self.targeted(connection.user.id) and (
+            self.dashboard_active is None or self.dashboard_active(connection)
+        )
 
     def install(self) -> None:
         if self._table is not None:
@@ -245,7 +253,7 @@ class ResourceAdapter:
             self.check_ownership()
         except CompatibilityError as err:
             self.fail(err)
-        if self._table is not None and self.targeted(connection.user.id):
+        if self._table is not None and self.targets_connection(connection):
             connection = cast(websocket_api.ActiveConnection, _ResourceConnection(self, connection))
         native(hass, connection, msg)
 

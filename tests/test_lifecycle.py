@@ -38,7 +38,8 @@ async def test_native_scan_and_switch_updates_existing_admin(
 ):
     assert runtime.entity_ids == {"sensor.wall"}
     connection, wire = make_connection(make_user(admin=True))
-    connection.async_handle({"id": 1, "type": "subscribe_entities"})
+    connection.async_handle({"id": 1, "type": "loona/subscribe_panel", "dashboard": "wall-panel"})
+    connection.async_handle({"id": 2, "type": "subscribe_entities"})
     assert set(wire[-1]["event"]["a"]) == {"sensor.wall"}
     await runtime.async_set_control("enabled", False)
     assert set(wire[-1]["event"]["a"]) == {"sensor.wall", "sensor.other"}
@@ -107,7 +108,8 @@ async def test_empty_or_dynamic_scopes_bypass_entire_union(
     runtime, dashboards, make_user, make_connection, config
 ):
     connection, wire = make_connection(make_user(admin=True))
-    connection.async_handle({"id": 1, "type": "subscribe_entities"})
+    connection.async_handle({"id": 1, "type": "loona/subscribe_panel", "dashboard": "wall-panel"})
+    connection.async_handle({"id": 2, "type": "subscribe_entities"})
     last_success = runtime.last_scan
     await dashboards["wall-panel"].async_save(config)
     await runtime.async_scan()
@@ -150,7 +152,8 @@ async def test_fixed_templates_filter_both_categories_and_dynamic_lookups_bypass
         runtime.hass.states.async_set(identifier, "12")
     await runtime.async_set_control("registry_filtering", True)
     connection, wire = make_connection(make_user(admin=True))
-    connection.async_handle({"id": 1, "type": "subscribe_entities"})
+    connection.async_handle({"id": 1, "type": "loona/subscribe_panel", "dashboard": "wall-panel"})
+    connection.async_handle({"id": 2, "type": "subscribe_entities"})
     fixed = {
         "cards": [
             {
@@ -164,7 +167,7 @@ async def test_fixed_templates_filter_both_categories_and_dynamic_lookups_bypass
     await runtime.async_scan()
     assert not runtime.scope_problem
     assert set(wire[-1]["event"]["a"]) == {wall, template_only}
-    connection.async_handle({"id": 2, "type": "config/entity_registry/list"})
+    connection.async_handle({"id": 3, "type": "config/entity_registry/list"})
     assert {row["entity_id"] for row in wire[-1]["result"]} == {wall, template_only}
     await dashboards["wall-panel"].async_save(
         {
@@ -176,13 +179,13 @@ async def test_fixed_templates_filter_both_categories_and_dynamic_lookups_bypass
     await runtime.async_scan()
     assert runtime.scope_problem
     assert other in wire[-1]["event"]["a"]
-    connection.async_handle({"id": 3, "type": "config/entity_registry/list"})
+    connection.async_handle({"id": 4, "type": "config/entity_registry/list"})
     assert {row["entity_id"] for row in wire[-1]["result"]} == set(registered)
     await dashboards["wall-panel"].async_save(fixed)
     await runtime.async_scan()
     assert not runtime.scope_problem
     assert other in wire[-2]["event"]["r"]
-    connection.async_handle({"id": 4, "type": "config/entity_registry/list"})
+    connection.async_handle({"id": 5, "type": "config/entity_registry/list"})
     assert {row["entity_id"] for row in wire[-1]["result"]} == {wall, template_only}
 
 
@@ -200,7 +203,8 @@ async def test_entity_mapping_updates_existing_state_and_registry_collections(
     runtime.hass.states.async_set(other, "5678")
     await runtime.async_set_control("registry_filtering", True)
     connection, wire = make_connection(make_user(admin=True))
-    connection.async_handle({"id": 1, "type": "subscribe_entities"})
+    connection.async_handle({"id": 1, "type": "loona/subscribe_panel", "dashboard": "wall-panel"})
+    connection.async_handle({"id": 2, "type": "subscribe_entities"})
     assert power not in wire[-1]["event"]["a"]
     await dashboards["wall-panel"].async_save(
         {
@@ -217,7 +221,7 @@ async def test_entity_mapping_updates_existing_state_and_registry_collections(
     assert not runtime.scope_problem
     assert wire[-1]["event"]["a"][power]["s"] == "1234"
     assert other not in wire[-1]["event"]["a"]
-    connection.async_handle({"id": 2, "type": "config/entity_registry/list"})
+    connection.async_handle({"id": 3, "type": "config/entity_registry/list"})
     assert {row["entity_id"] for row in wire[-1]["result"]} == {power}
     runtime.hass.states.async_set(power, "4321")
     await runtime.hass.async_block_till_done()
@@ -285,7 +289,8 @@ async def test_controls_persist_and_unload_restores_native(
 ):
     original = runtime.adapter._original
     connection, wire = make_connection(make_user(admin=True))
-    connection.async_handle({"id": 1, "type": "subscribe_entities"})
+    connection.async_handle({"id": 1, "type": "loona/subscribe_panel", "dashboard": "wall-panel"})
+    connection.async_handle({"id": 2, "type": "subscribe_entities"})
     await runtime.async_set_control("entity_filtering", False)
     await runtime.async_stop()
     assert runtime.hass.data["websocket_api"]["subscribe_entities"] is original
@@ -352,7 +357,8 @@ async def test_later_command_owner_preserved_and_known_connections_bypass(
     runtime, make_user, make_connection
 ):
     connection, wire = make_connection(make_user(admin=True))
-    connection.async_handle({"id": 1, "type": "subscribe_entities"})
+    connection.async_handle({"id": 1, "type": "loona/subscribe_panel", "dashboard": "wall-panel"})
+    connection.async_handle({"id": 2, "type": "subscribe_entities"})
     table = runtime.hass.data["websocket_api"]
     foreign = (lambda *args: None, table["subscribe_entities"][1])
     table["subscribe_entities"] = foreign

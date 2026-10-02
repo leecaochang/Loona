@@ -7,6 +7,7 @@ from homeassistant.components import websocket_api
 from .compatibility import CompatibilityError
 from .const import DOMAIN, STATISTICS_COMMAND, PAGE_LOAD_COMMAND, SETTINGS_COMMAND, SETTINGS_SAVE_COMMAND
 from .graph_loading import async_register_frontend
+from .panels import async_register_frontend as async_register_panel_frontend
 from .runtime import LoonaConfigEntry, LoonaRuntime
 from .preview import websocket_statistics, websocket_page_load
 from .settings import websocket_settings, websocket_save_settings
@@ -24,6 +25,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: LoonaConfigEntry) -> boo
         raise CompatibilityError("Another handler owns Loona statistics")
     try:
         await runtime.async_start()
+        if hasattr(hass, "http"):
+            try:
+                runtime._unsubscribers.append(await async_register_panel_frontend(hass))
+            except CompatibilityError as err:
+                runtime.panel_compatibility_problem = str(err)
+                runtime._update_issues()
         # The bundled route must exist before Core freezes its HTTP router.
         # Dashboard creation follows native platform and scope setup.
         if hasattr(hass, "http"):

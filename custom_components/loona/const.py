@@ -4,6 +4,10 @@ from typing import Final
 
 DOMAIN: Final = "loona"
 SUBSCRIBE_ENTITIES: Final = "subscribe_entities"
+PANEL_SUBSCRIBE: Final = "loona/subscribe_panel"
+PANEL_COMMAND: Final = "loona/panel"
+PANEL_ASSET: Final = "/loona/panel-context.js"
+PANEL_POLL_MS: Final = 100
 SUPPORTED_CORE_VERSIONS: Final = frozenset(
     {
         "2024.5.5", "2024.12.5", "2025.6.3", "2026.1.3", "2026.8.3",
@@ -12,7 +16,7 @@ SUPPORTED_CORE_VERSIONS: Final = frozenset(
 )
 REGISTRY_CORE_VERSIONS: Final = SUPPORTED_CORE_VERSIONS
 FRONTEND_CORE_VERSIONS: Final = frozenset({"2026.9.3", "2026.9.4"})
-VERSION: Final = "0.8.2"
+VERSION: Final = "0.8.3"
 CONF_DASHBOARDS: Final = "dashboards"
 CONF_TARGET_MODE: Final = "target_mode"
 CONF_USER_IDS: Final = "user_ids"

@@ -169,6 +169,8 @@ async def check(hass: HomeAssistant) -> None:
             kwargs["remote"] = None
         connection = ActiveConnection(**kwargs)
         clients.append(connection)
+        if "loona/subscribe_panel" in hass.data[websocket_api.DOMAIN]:
+            connection.async_handle({"id": 1, "type": "loona/subscribe_panel", "dashboard": "wall-panel"})
         return connection, packets
 
     def snapshot(packets):
@@ -341,7 +343,7 @@ async def check(hass: HomeAssistant) -> None:
         await runtime.async_scan()
 
         connection, output = client(admin)
-        connection.async_handle({"id": 1, "type": "subscribe_entities"})
+        connection.async_handle({"id": 2, "type": "subscribe_entities"})
         assert "sensor.wall" in snapshot(output)
         assert "sensor.other" not in snapshot(output)
         lookup = PermissionLookup(er.async_get(hass), dr.async_get(hass))
@@ -349,10 +351,10 @@ async def check(hass: HomeAssistant) -> None:
             name="Limited", policy={"entities": {"entity_ids": {"sensor.wall": {"read": True}}}}, id="limited",
         )])
         restricted, limited_output = client(limited)
-        restricted.async_handle({"id": 1, "type": "subscribe_entities"})
+        restricted.async_handle({"id": 2, "type": "subscribe_entities"})
         assert set(snapshot(limited_output)) == {"sensor.wall"}
         explicit, explicit_output = client(admin)
-        explicit.async_handle({"id": 1, "type": "subscribe_entities", "entity_ids": ["sensor.other"]})
+        explicit.async_handle({"id": 2, "type": "subscribe_entities", "entity_ids": ["sensor.other"]})
         assert set(snapshot(explicit_output)) == {"sensor.other"}
         before = len(output)
         hass.states.async_set("sensor.other", "2")
@@ -364,28 +366,28 @@ async def check(hass: HomeAssistant) -> None:
         assert any("sensor.wall" in packet.get("event", {}).get("c", {}) for packet in output[before:])
         assert all("sensor.denied" not in packet.get("event", {}).get("c", {}) for packet in limited_output)
 
-        connection.async_handle({"id": 2, "type": "loona/statistics", "search": "sensor.wall", "include_dependencies": True})
+        connection.async_handle({"id": 3, "type": "loona/statistics", "search": "sensor.wall", "include_dependencies": True})
         assert output[-1]["result"]["dependencies"][0]["entity_id"] == "sensor.wall"
-        restricted.async_handle({"id": 2, "type": "loona/statistics"})
+        restricted.async_handle({"id": 3, "type": "loona/statistics"})
         assert limited_output[-1]["success"] is False
-        connection.async_handle({"id": 3, "type": "loona/settings"})
+        connection.async_handle({"id": 4, "type": "loona/settings"})
         await hass.async_block_till_done()
-        card_settings = next(row["result"] for row in output if row.get("id") == 3)
+        card_settings = next(row["result"] for row in output if row.get("id") == 4)
         assert set(card_settings["values"]["controls"]) == expected
         extras = card_settings["values"]["extra_entities"]
-        connection.async_handle({"id": 4, "type": "loona/save_settings", "group": "extra_entities",
+        connection.async_handle({"id": 5, "type": "loona/save_settings", "group": "extra_entities",
                                  "revision": card_settings["revision"], "values": {"extra_entities": ["sensor.other"]}})
         await hass.async_block_till_done()
-        saved = next(row for row in output if row.get("id") == 4)
+        saved = next(row for row in output if row.get("id") == 5)
         assert saved["success"] and runtime.settings["extra_entities"] == ["sensor.other"]
-        connection.async_handle({"id": 5, "type": "loona/save_settings", "group": "extra_entities",
+        connection.async_handle({"id": 6, "type": "loona/save_settings", "group": "extra_entities",
                                  "revision": saved["result"]["revision"], "values": extras})
         await hass.async_block_till_done()
-        assert next(row for row in output if row.get("id") == 5)["success"]
-        restricted.async_handle({"id": 3, "type": "loona/settings"})
-        restricted.async_handle({"id": 4, "type": "loona/save_settings", "group": "extra_entities",
+        assert next(row for row in output if row.get("id") == 6)["success"]
+        restricted.async_handle({"id": 4, "type": "loona/settings"})
+        restricted.async_handle({"id": 5, "type": "loona/save_settings", "group": "extra_entities",
                                  "revision": card_settings["revision"], "values": extras})
-        assert all(not row["success"] for row in limited_output if row.get("id") in {3, 4} and row.get("type") == "result")
+        assert all(not row["success"] for row in limited_output if row.get("id") in {4, 5} and row.get("type") == "result")
         assert runtime.live_statistics.forwarded > 0 and runtime.live_statistics.avoided > 0
         reset = next(row.entity_id for row in rows if row.unique_id.endswith(":reset_live_statistics"))
         await hass.services.async_call("button", "press", {"entity_id": reset}, blocking=True)
@@ -442,7 +444,7 @@ async def check(hass: HomeAssistant) -> None:
         assert "sensor.other" not in snapshot(output)
         other_admin = await hass.auth.async_create_user("Other administrator", group_ids=["system-admin"])
         unselected, unselected_output = client(other_admin)
-        unselected.async_handle({"id": 1, "type": "subscribe_entities"})
+        unselected.async_handle({"id": 2, "type": "subscribe_entities"})
         assert "sensor.other" in snapshot(unselected_output)
         target_form = await options.async_init(entry.entry_id)
         target_form = await options.async_configure(target_form["flow_id"], {"next_step_id": "targets"})

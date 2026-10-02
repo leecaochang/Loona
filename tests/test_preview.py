@@ -66,7 +66,8 @@ async def test_paging_native_reset_and_own_telemetry_exclusion(preview_runtime, 
     assert len(next_page['dependencies']) == 3
     assert not set(row['entity_id'] for row in report['dependencies']) & set(row['entity_id'] for row in next_page['dependencies'])
     connection, _ = make_connection(make_user(admin=True))
-    connection.async_handle({'id': 1, 'type': 'subscribe_entities'})
+    connection.async_handle({'id': 1, 'type': 'loona/subscribe_panel', 'dashboard': 'wall-panel'})
+    connection.async_handle({'id': 2, 'type': 'subscribe_entities'})
     runtime.hass.states.async_set('sensor.wall', '1')
     runtime.hass.states.async_set('sensor.other', '1')
     await runtime.hass.async_block_till_done()
@@ -87,22 +88,24 @@ async def test_paging_native_reset_and_own_telemetry_exclusion(preview_runtime, 
 async def test_page_load_counts_are_per_socket_and_only_server_observed(preview_runtime, make_user, make_connection):
     runtime = preview_runtime
     connection, output = make_connection(make_user(admin=True))
-    connection.async_handle({'id': 1, 'type': 'subscribe_entities'})
+    connection.async_handle({'id': 1, 'type': 'loona/subscribe_panel', 'dashboard': 'wall-panel'})
+    connection.async_handle({'id': 2, 'type': 'subscribe_entities'})
     native_snapshot = output[-1]['event']['a']
-    connection.async_handle({'id': 2, 'type': 'loona/page_load', 'dashboard': 'wall-panel'})
+    connection.async_handle({'id': 3, 'type': 'loona/page_load', 'dashboard': 'wall-panel'})
     row = runtime.live_statistics.page_loads['wall-panel']
     assert row['entities']['sent'] == len(native_snapshot)
     assert row['entities']['available'] == len(runtime.hass.states.async_entity_ids())
     assert row['resources'] is None
-    connection.async_handle({'id': 3, 'type': 'loona/page_load', 'dashboard': 'wall-panel', 'sent': 999999})
+    connection.async_handle({'id': 4, 'type': 'loona/page_load', 'dashboard': 'wall-panel', 'sent': 999999})
     assert not output[-1]['success']
     other, _ = make_connection(make_user(allowed={'sensor.other'}))
-    other.async_handle({'id': 1, 'type': 'subscribe_entities'})
-    other.async_handle({'id': 2, 'type': 'loona/page_load', 'dashboard': 'wall-panel'})
+    other.async_handle({'id': 1, 'type': 'loona/subscribe_panel', 'dashboard': 'wall-panel'})
+    other.async_handle({'id': 2, 'type': 'subscribe_entities'})
+    other.async_handle({'id': 3, 'type': 'loona/page_load', 'dashboard': 'wall-panel'})
     assert runtime.live_statistics.page_loads['wall-panel']['entities']['available'] == 1
     assert runtime.live_statistics.page_loads['wall-panel']['entities']['sent'] == 0
     runtime.adapter.observe_resources(connection, 7, 2)
-    connection.async_handle({'id': 4, 'type': 'loona/page_load', 'dashboard': 'wall-panel'})
+    connection.async_handle({'id': 5, 'type': 'loona/page_load', 'dashboard': 'wall-panel'})
     assert runtime.live_statistics.page_loads['wall-panel']['resources'] == {'available': 7, 'sent': 2}
     connection.async_handle_close()
     assert runtime.adapter.initial_counts(connection) is None
@@ -121,7 +124,8 @@ async def test_optional_dashboard_failure_keeps_filtering_alive(preview_runtime,
     await runtime.async_update_statistics_card()
     assert runtime.statistics_card_problem == 'Native statistics dashboard operation failed'
     connection, output = make_connection(make_user(admin=True))
-    connection.async_handle({'id': 1, 'type': 'subscribe_entities'})
+    connection.async_handle({'id': 1, 'type': 'loona/subscribe_panel', 'dashboard': 'wall-panel'})
+    connection.async_handle({'id': 2, 'type': 'subscribe_entities'})
     assert 'sensor.other' not in output[-1]['event']['a']
     assert runtime.adapter.managed_count == 1
 

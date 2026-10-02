@@ -130,6 +130,7 @@ async def test_native_storage_aliases_live_changes_master_and_unload(
 ):
     runtime, collection = resources_runtime
     connection, output = make_connection(make_user(admin=True))
+    connection.async_handle({"id": 1, "type": "loona/subscribe_panel", "dashboard": "wall-panel"})
     full = (await request(runtime.hass, connection, output))["result"]
     assert full == collection.async_items()
     await runtime.async_set_control("resource_filtering", True)
@@ -161,6 +162,7 @@ async def test_account_targets_native_permissions_and_incomplete_bypass(
     selected = make_user(admin=False)
     runtime.resource_adapter.set_policy(ScopePolicy(user_ids=frozenset({selected.id})))
     connection, output = make_connection(selected)
+    connection.async_handle({"id": 1, "type": "loona/subscribe_panel", "dashboard": "wall-panel"})
     assert len((await request(runtime.hass, connection, output))["result"]) == 2
     denied = await request(runtime.hass, connection, output, "lovelace/resources/create",
                            url="/local/denied.js", res_type="module")
@@ -220,6 +222,7 @@ async def test_native_optional_checkboxes_required_rows_and_master(
     flow = LoonaOptionsFlow(runtime.entry.entry_id)
     flow.hass, flow.handler = runtime.hass, runtime.entry.entry_id
     connection, output = make_connection(make_user(admin=True))
+    connection.async_handle({"id": 1, "type": "loona/subscribe_panel", "dashboard": "wall-panel"})
     form = await flow.async_step_resource_preview()
     schema = {str(key.schema): value for key, value in form["data_schema"].schema.items()}
     picker = schema["always_forward_resources"]
@@ -302,6 +305,7 @@ async def test_delayed_native_result_rechecks_policy_and_survives_unload(
     runtime, collection = resources_runtime
     await runtime.async_set_control("resource_filtering", True)
     connection, output = make_connection(make_user(admin=True))
+    connection.async_handle({"id": 1, "type": "loona/subscribe_panel", "dashboard": "wall-panel"})
     gate = asyncio.Event()
     entered = asyncio.Event()
     original_load = collection.async_load
@@ -311,7 +315,7 @@ async def test_delayed_native_result_rechecks_policy_and_survives_unload(
         await gate.wait()
         await original_load()
 
-    for unload in (False, True):
+    for mode in ("switch", "panel", "unload"):
         collection.loaded = False
         gate.clear()
         entered.clear()
@@ -322,16 +326,33 @@ async def test_delayed_native_result_rechecks_policy_and_survives_unload(
             # Other native traffic is unaffected while the list handler awaits.
             connection.async_handle({"id": msg_id + 1, "type": "subscribe_entities"})
             assert any(packet.get("id") == msg_id + 1 for packet in output)
-            if unload:
+            if mode == "unload":
                 runtime.resource_adapter.uninstall()
+            elif mode == "panel":
+                connection.async_handle({"id": msg_id + 2, "type": "loona/panel", "dashboard": "config"})
             else:
                 await runtime.async_set_control("resource_filtering", False)
             gate.set()
             await runtime.hass.async_block_till_done()
         assert next(packet for packet in output if packet.get("id") == msg_id)["result"] == collection.async_items()
         assert runtime.resource_compatibility_problem is None
-        if not unload:
+        if mode == "switch":
             await runtime.async_set_control("resource_filtering", True)
+        elif mode == "panel":
+            connection.async_handle({"id": connection.last_id + 1, "type": "loona/panel", "dashboard": "wall-panel"})
+
+
+async def test_resource_lists_bypass_unknown_and_non_dashboard_panels(resources_runtime, make_user, make_connection):
+    runtime, collection = resources_runtime
+    await runtime.async_set_control("resource_filtering", True)
+    connection, output = make_connection(make_user(admin=True))
+    assert (await request(runtime.hass, connection, output))["result"] == collection.async_items()
+    await request(runtime.hass, connection, output, "loona/subscribe_panel", dashboard="config")
+    assert (await request(runtime.hass, connection, output))["result"] == collection.async_items()
+    await request(runtime.hass, connection, output, "loona/panel", dashboard="wall-panel")
+    assert len((await request(runtime.hass, connection, output))["result"]) == 2
+    await request(runtime.hass, connection, output, "loona/panel", dashboard="developer-tools")
+    assert (await request(runtime.hass, connection, output))["result"] == collection.async_items()
 
 
 async def test_resource_repair_stale_exception_and_collection_failure_isolation(resources_runtime):
@@ -374,6 +395,7 @@ async def test_changed_response_fails_open_and_unknown_owner_is_preserved(resour
     runtime, collection = resources_runtime
     await runtime.async_set_control("resource_filtering", True)
     connection, output = make_connection(make_user())
+    connection.async_handle({"id": 1, "type": "loona/subscribe_panel", "dashboard": "wall-panel"})
     # Apply a shape mutation at the native boundary; no fake list handler.
     with patch.object(collection, "async_items", return_value=[{"url": "/local/bad.js"}]):
         assert (await request(runtime.hass, connection, output))["result"] == [{"url": "/local/bad.js"}]
