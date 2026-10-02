@@ -10,6 +10,7 @@ import pytest
 from custom_components.loona import async_setup_entry, async_unload_entry
 from custom_components.loona.compatibility import CompatibilityError
 from custom_components.loona.settings import revision, settings_report
+from custom_components.loona.const import CONTROL_DEFAULTS
 
 
 @pytest.fixture
@@ -33,6 +34,26 @@ async def request(runtime, client, output, name='loona/settings', **fields):
     client.async_handle({'id': msg_id, 'type': name, **fields})
     await runtime.hass.async_block_till_done(wait_background_tasks=True)
     return next(row for row in reversed(output) if row.get('id') == msg_id)
+
+
+async def test_control_order_and_native_action_entities(settings_runtime):
+    runtime = settings_runtime
+    report = await settings_report(runtime)
+    assert list(report['values']['controls']) == [key for key in CONTROL_DEFAULTS
+                                                if key in runtime.available_controls]
+    assert list(report['action_entities']) == ['rescan', 'reset_live_statistics']
+    for key, entity_id in report['action_entities'].items():
+        assert entity_id is not None and entity_id.startswith('button.')
+        assert entity_id in runtime.hass.states.async_entity_ids()
+        before_scan = runtime.last_scan
+        runtime.live_statistics.record(True)
+        await runtime.hass.services.async_call('button', 'press',
+                                               {'entity_id': entity_id}, blocking=True)
+        if key == 'rescan':
+            assert runtime.last_scan >= before_scan
+            assert runtime.live_statistics.forwarded == 1
+        else:
+            assert runtime.live_statistics.forwarded == 0
 
 
 async def test_prefilled_choices_and_private_dispatch(settings_runtime, make_user, make_connection):

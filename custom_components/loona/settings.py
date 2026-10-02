@@ -13,7 +13,7 @@ from .compatibility import CompatibilityError
 from .config_flow import entity_rule_choices, human_accounts, validate_dashboards, validate_targets
 from .const import (
     CONF_ALWAYS_FORWARD, CONF_DASHBOARDS, CONF_EXTRA_ENTITIES,
-    CONF_TARGET_MODE, CONF_USER_IDS, DOMAIN, TARGET_SELECTED, CONTROL_RESOURCES,
+    CONF_TARGET_MODE, CONF_USER_IDS, DOMAIN, TARGET_SELECTED, CONTROL_RESOURCES, CONTROL_DEFAULTS,
     SETTINGS_COMMAND, SETTINGS_SAVE_COMMAND, SETTINGS_GROUPS, SETTINGS_CHOICE_PAGE, SETTINGS_EMPTY_DEFAULTS,
 )
 from .dashboard import dashboard_titles
@@ -53,7 +53,7 @@ async def settings_report(runtime: LoonaRuntime) -> dict[str, Any]:
         "revision": _revision(settings, controls),
         "choice_page": SETTINGS_CHOICE_PAGE,
         "values": {
-            "controls": {key: controls[key] for key in sorted(runtime.available_controls)},
+            "controls": {key: controls[key] for key in CONTROL_DEFAULTS if key in runtime.available_controls},
             "dashboards": {CONF_DASHBOARDS: list(settings.get(CONF_DASHBOARDS, []))},
             "targets": {CONF_TARGET_MODE: settings.get(CONF_TARGET_MODE, TARGET_SELECTED), CONF_USER_IDS: list(settings.get(CONF_USER_IDS, []))},
             "extra_entities": {CONF_EXTRA_ENTITIES: list(settings.get(CONF_EXTRA_ENTITIES, []))},
@@ -76,6 +76,10 @@ async def settings_report(runtime: LoonaRuntime) -> dict[str, Any]:
         "required_resources": [row["url"] for row in resources["resources"] if row["status"] == "required"],
         "resources_editable": resource_available and CONTROL_RESOURCES in runtime.available_controls,
         "entry_id": runtime.entry.entry_id,
+        "action_entities": {key: next((item.entity_id for item in registry.entities.values()
+            if item.config_entry_id == runtime.entry.entry_id
+            and item.domain == "button" and item.unique_id.endswith(":" + key)), None)
+            for key in ("rescan", "reset_live_statistics")},
     }
 
 

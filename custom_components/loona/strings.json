@@ -4,16 +4,16 @@
     "step": {
       "user": {
         "title": "Select dashboards",
-        "description": "Select dashboards whose combined entities will be sent to filtered accounts. Save automatically generated dashboards first.",
+        "description": "Choose the dashboards these accounts will use. Loona includes entities from all selected dashboards. Save an automatically generated dashboard before selecting it.",
         "data": {
           "dashboards": "Dashboards"
         }
       },
       "targets": {
         "title": "Select accounts",
-        "description": "Targeting affects every ordinary entity subscription using an account, including administrators, across all tabs and apps. After initial setup, reload pages that were already open.",
+        "description": "Filtering applies to every tab, device and app using these accounts, including administrators. Other pages may need entities outside your selected dashboards. Reload open pages after setup.",
         "data": {
-          "target_mode": "Target mode",
+          "target_mode": "Apply filtering to",
           "user_ids": "Accounts"
         }
       }
@@ -21,9 +21,9 @@
     "error": {
       "no_dashboards": "Select at least one dashboard.",
       "no_accounts": "Select at least one active account.",
-      "invalid_selection": "Choose current, unique values from the available selections.",
-      "invalid_pattern": "Use domains such as light and entity globs such as sensor.room_* without spaces or unmatched brackets.",
-      "not_loaded": "Loona must be loaded before changing these controls."
+      "invalid_selection": "Some choices are no longer available or were selected twice. Choose from the current list.",
+      "invalid_pattern": "Choose an entity type such as light, or a pattern such as sensor.room_*. Patterns cannot contain spaces or unpaired brackets.",
+      "not_loaded": "Loona is not running. Reload the integration, then try again."
     },
     "abort": {
       "already_configured": "Only one Loona integration can be configured."
@@ -35,32 +35,32 @@
         "title": "Loona settings",
         "menu_options": {
           "dashboards": "Dashboards",
-          "targets": "Targets",
+          "targets": "Accounts",
           "filters": "Filters and performance",
           "extra_entities": "Extra entities",
           "rules": "Advanced entity rules",
-          "resource_preview": "Resource dependencies",
-          "dependency_preview": "Entity dependencies"
+          "resource_preview": "Card files",
+          "dependency_preview": "Why entities are included"
         }
       },
       "dashboards": {
         "title": "Dashboards",
-        "description": "Every filtered account receives the combined entity scope of these dashboards.",
+        "description": "All filtered accounts receive the entities from every dashboard selected here.",
         "data": {
           "dashboards": "Dashboards"
         }
       },
       "targets": {
         "title": "Select accounts",
-        "description": "Targeting affects every ordinary entity subscription using an account, including administrators, across all tabs and apps. After initial setup, reload pages that were already open.",
+        "description": "Filtering applies to every tab, device and app using these accounts, including administrators. Other pages may need entities outside your selected dashboards. Reload open pages after setup.",
         "data": {
-          "target_mode": "Target mode",
+          "target_mode": "Apply filtering to",
           "user_ids": "Accounts"
         }
       },
       "filters": {
         "title": "Filters and performance",
-        "description": "The Enabled switch must be on for these options. Registry filtering limits dashboard metadata and is off by default because editors may need full lists. Visible-first graphs is also off by default: visible graphs start immediately, then off-screen graphs load after visible rendering and requests settle. Changes apply to open pages; reload the view to compare graph loading. Pause animations during loading temporarily pauses continuous dashboard motion and restores it automatically. It defaults to off. Resource filtering defaults to off. It limits Lovelace modules for selected accounts to the dashboard union, shared styles and optional exceptions. Review Resource dependencies to select any optional or unclassified modules you need. Hard-reload pages after changing this filter; already loaded modules cannot be unloaded.",
+        "description": "Turn on Enabled to use these features. Optional features start off.\n\nEntity filtering sends only the entities your selected dashboards need. Registry filtering also shortens entity and device lists; turn it off if an editor is missing choices.\n\nVisible-first graphs loads on-screen graphs first. Off-screen graphs load later, or immediately when you scroll to them. Pause animations during loading restores animations automatically.\n\nResource filtering skips optional card files you have not selected. Review Card files before enabling it. Reload the browser page after changing resource choices or comparing graph loading.",
         "data": {
           "entity_filtering": "Entity filtering",
           "registry_filtering": "Registry filtering",
@@ -71,31 +71,31 @@
       },
       "extra_entities": {
         "title": "Extra entities",
-        "description": "Include dependencies calculated by custom cards or needed by other sessions using a filtered account.",
+        "description": "Add entities a card needs but Loona did not find, or entities needed on other pages using these accounts.",
         "data": {
           "extra_entities": "Extra entities"
         }
       },
       "rules": {
         "title": "Advanced entity rules",
-        "description": "Choose existing domains, entities, or whole-domain patterns such as sensor.*. Previously saved custom patterns remain available. Exclusions apply after inclusions and can break cards. Loona controls and statistics always remain included.",
+        "description": "Include an entity type such as light, individual entities, or a pattern such as sensor.*. Saved patterns remain available. Exclusions override inclusions and may leave cards without data. Loona always keeps its own controls and statistics.",
         "data": {
-          "include_domains": "Include domains",
-          "include_globs": "Include entities or domain patterns",
-          "exclude_globs": "Exclude entities or domain patterns"
+          "include_domains": "Include entity types",
+          "include_globs": "Include entities or patterns",
+          "exclude_globs": "Exclude entities or patterns"
         }
       },
       "resource_preview": {
-        "title": "Resource dependencies",
-        "description": "{required_start}Required resources ({required_count}){required_summary_end}\n\nRequired resources stay enabled automatically and have no checkbox.\n\n{required}\n\n{required_end}\n\nUnresolved custom types ({unresolved_count}): {unresolved}\n\nUnavailable saved resources ({stale_count}): {stale}\n\nUncheck unavailable saved resources to remove their selections. Templates or strategies may need additional resources. If the Resource filtering control is unavailable, this Home Assistant version or its adapter does not currently support resource filtering.\n\nEnable Resource filtering to apply the optional selections below. Checked resources also load; unchecked resources are omitted. New optional resources default to unchecked. When Resource filtering is off, Home Assistant loads its full resource list. Loona's Enabled switch must also be on. Save your choices, then hard-reload the browser page.",
+        "title": "Card files",
+        "description": "{required_start}Files kept automatically ({required_count}){required_summary_end}\n\nThese files are needed by your dashboards or shared styling.\n\n{required}\n\n{required_end}\n\nCard types Loona cannot match to a file ({unresolved_count}): {unresolved}\n\nSaved files no longer registered ({stale_count}): {stale}\n\nWith Resource filtering on, checked files below also load. Unchecked files are skipped. New optional files start unchecked. Turn on Enabled as well. With Resource filtering off, all registered files load.\n\nTemplates may need files Loona cannot detect. If a card or icon is missing, check its file or turn off Resource filtering. Uncheck missing saved files to remove them from your choices. If the switch is absent, this feature is unavailable on your installation. Save, then reload the browser page; files already loaded remain until you reload.",
         "data": {
           "resource_filtering": "Resource filtering",
-          "always_forward_resources": "Optional resources to load"
+          "always_forward_resources": "Additional files to load"
         }
       },
       "dependency_preview": {
-        "title": "Entity dependencies",
-        "description": "{count} dependencies. Exclusions apply after inclusions. Select an entity and submit to inspect its dependencies.\n\nRetained: {retained}\n\nExcluded: {excluded}\n\nUnresolved: {unresolved}\n\nExtra entity: {extra}\n\nInclude rule: {rule}\n\nLoona control or statistic: {protected}\n\nConfiguration paths:\n\n{detail}\n\nThis preview is read-only. When the scope is incomplete or filtering is disabled, Home Assistant sends full entity data.",
+        "title": "Why entities are included",
+        "description": "{count} entities found in the selected dashboards and rules. Select an entity and submit to see why it is included. This page does not change your settings.\n\nIncluded: {retained}\n\nExcluded by a rule: {excluded}\n\nNot found in Home Assistant: {unresolved}\n\nAdded in Extra entities: {extra}\n\nMatched an include rule: {rule}\n\nLoona control or statistic: {protected}\n\nWhere the entity is referenced:\n\n{detail}\n\nIf a dashboard scan fails or filtering is off, Home Assistant sends the full entity list.",
         "data": {
           "entity": "Entity"
         }
@@ -104,13 +104,13 @@
     "error": {
       "no_dashboards": "Select at least one dashboard.",
       "no_accounts": "Select at least one active account.",
-      "invalid_selection": "Choose current, unique values from the available selections.",
-      "invalid_pattern": "Use domains such as light and entity globs such as sensor.room_* without spaces or unmatched brackets.",
-      "not_loaded": "Loona must be loaded before changing these controls."
+      "invalid_selection": "Some choices are no longer available or were selected twice. Choose from the current list.",
+      "invalid_pattern": "Choose an entity type such as light, or a pattern such as sensor.room_*. Patterns cannot contain spaces or unpaired brackets.",
+      "not_loaded": "Loona is not running. Reload the integration, then try again."
     },
     "abort": {
-      "not_loaded": "Loona must be loaded to preview resources.",
-      "resources_unavailable": "The native Lovelace resource collection is unavailable."
+      "not_loaded": "Loona is not running. Reload the integration, then reopen this page.",
+      "resources_unavailable": "Loona could not read the card file list. Reload the integration and try again."
     }
   },
   "entity": {
@@ -144,27 +144,35 @@
     },
     "binary_sensor": {
       "compatibility_problem": {
-        "name": "Compatibility problem"
+        "name": "Compatibility",
+        "state": {
+          "off": "Supported",
+          "on": "Limited"
+        }
       },
       "scope_problem": {
-        "name": "Scope problem"
+        "name": "Dashboard scan",
+        "state": {
+          "off": "Complete",
+          "on": "Incomplete"
+        }
       }
     },
     "sensor": {
       "union_entities": {
-        "name": "Union entities"
+        "name": "Entities included"
       },
       "current_scope": {
-        "name": "Current scope entities"
+        "name": "Available included entities"
       },
       "reduction_estimate": {
-        "name": "Entity count reduction estimate"
+        "name": "Estimated entity reduction"
       },
       "managed_subscriptions": {
-        "name": "Managed subscriptions"
+        "name": "Tracked update feeds"
       },
       "filtered_subscriptions": {
-        "name": "Filtered subscriptions"
+        "name": "Filtered update feeds"
       },
       "last_scan": {
         "name": "Last successful scan"
@@ -173,44 +181,44 @@
         "name": "Scan duration"
       },
       "discovered_entities": {
-        "name": "Discovered entities"
+        "name": "Referenced entities"
       },
       "unresolved_entities": {
-        "name": "Unresolved entities"
+        "name": "Entities not found"
       },
       "forwarded_rate": {
-        "name": "Entity updates forwarded per second"
+        "name": "Entity updates sent per second"
       },
       "avoided_rate": {
-        "name": "Entity updates avoided per second"
+        "name": "Entity updates filtered per second"
       },
       "update_reduction": {
-        "name": "Live entity update reduction"
+        "name": "Live update reduction"
       },
       "forwarded_updates": {
-        "name": "Entity updates forwarded"
+        "name": "Entity updates sent"
       },
       "avoided_updates": {
-        "name": "Entity updates avoided"
+        "name": "Entity updates filtered"
       }
     }
   },
   "issues": {
     "compatibility": {
-      "title": "Loona cannot safely apply filtering",
-      "description": "Check the Compatibility problem sensor, the supported Home Assistant versions, and other integrations replacing entity, registry, or config commands. An affected feature preserves native handling when it cannot be installed. Reload browser pages after reloading Loona."
+      "title": "A Loona feature is unavailable",
+      "description": "Your Home Assistant version or another integration prevents Loona from using a feature. The affected feature is off; Home Assistant handles its requests normally. Check Loona diagnostics for the affected feature and supported versions. After reloading Loona, reload your browser pages."
     },
     "scope": {
-      "title": "Loona is passing through full data",
-      "description": "Both entity and registry filtering are bypassed while Scope problem is on, even when their switches are enabled. Check selected dashboards and active accounts in Loona options. Save automatically generated dashboards. Unsupported templates, dashboard strategies, unsupported auto-entities rules, or an empty scope prevent reliable filtering. Loona resumes filtering automatically after a complete scan. Download diagnostics for scan status."
+      "title": "Loona is sending all entities",
+      "description": "Loona could not build a reliable entity list for your dashboards. Entity and registry filtering are temporarily paused, even if their switches are on. In Loona settings, check that your selected dashboards and accounts still exist. Save automatically generated dashboards. Unsupported templates or auto-entities rules can also prevent a complete scan. Loona resumes filtering when the scan succeeds. Download diagnostics to see what failed."
     },
     "exclusion": {
-      "title": "An exclusion removes a dashboard dependency",
-      "description": "Review Advanced entity rules in Loona options. Removing a referenced entity can break a card. Remove the exclusion or turn off Loona to restore its state."
+      "title": "An excluded entity is used by a dashboard",
+      "description": "A rule removes an entity that a dashboard card uses. The card may show missing or incorrect data. Open Advanced entity rules in Loona settings and remove that exclusion, or turn off Enabled to send all entities."
     },
     "resources": {
-      "title": "Loona resource dependencies need attention",
-      "description": "Resource filtering omits unchecked optional modules. Open Resource dependencies in Loona options to inspect unresolved custom types, dynamic configuration and missing selections. Required resources remain enabled automatically. If a card, icon or helper is missing, select its optional resource or turn off Resource filtering, then hard-reload. Saved resource registrations are preserved."
+      "title": "Check which card files Loona loads",
+      "description": "Resource filtering is on. Loona cannot confirm every file your dashboards may need, or a saved file is no longer registered. This warning does not mean a card is broken.\n\nOpen Card files in Loona settings. Files Loona knows are needed stay enabled. Check any additional files you need. If everything works, you can leave your choices as they are.\n\nIf a card or icon is missing, turn off Resource filtering and reload the browser page. You can then enable it again with the missing file checked."
     }
   },
   "selector": {

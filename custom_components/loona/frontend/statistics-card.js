@@ -1,5 +1,5 @@
 /* Native-themed live filtering statistics. */
-import { language, text, translate } from "./i18n.js?v=0.8.1";
+import { language, text, translate } from "./i18n.js?v=0.8.2";
 
 const command = "loona/statistics";
 const elementName = "loona-statistics-card";
@@ -71,22 +71,22 @@ function install() {
           <p id="error" role="alert" hidden></p>
           <div id="content" hidden>
             <dl class="rates">
-              <div><dt data-i18n="Forwarded">Forwarded</dt><dd><span id="forwarded">0</span><small data-i18n="updates/s">updates/s</small></dd></div>
-              <div><dt data-i18n="Avoided">Avoided</dt><dd><span id="avoided">0</span><small data-i18n="updates/s">updates/s</small></dd></div>
-              <div><dt data-i18n="Live reduction">Live reduction</dt><dd><span id="reduction">0</span>%<small data-i18n="eligible updates">eligible updates</small></dd></div>
+              <div><dt data-i18n="Sent">Sent</dt><dd><span id="forwarded">0</span><small data-i18n="updates/s">updates/s</small></dd></div>
+              <div><dt data-i18n="Filtered out">Filtered out</dt><dd><span id="avoided">0</span><small data-i18n="updates/s">updates/s</small></dd></div>
+              <div><dt data-i18n="Updates filtered">Updates filtered</dt><dd><span id="reduction">0</span>%<small data-i18n="of counted updates">of counted updates</small></dd></div>
             </dl>
             <p id="interval"></p>
             <dl class="facts">
-              <dt data-i18n="Updates forwarded since reset">Updates forwarded since reset</dt><dd id="forwarded-total"></dd>
-              <dt data-i18n="Updates avoided since reset">Updates avoided since reset</dt><dd id="avoided-total"></dd>
-              <dt data-i18n="Filtered / managed subscriptions">Filtered / managed subscriptions</dt><dd id="subscriptions"></dd>
-              <dt data-i18n="Current entity scope">Current entity scope</dt><dd id="scope"></dd>
-              <dt data-i18n="Entity count reduction estimate">Entity count reduction estimate</dt><dd id="estimate"></dd>
+              <dt data-i18n="Updates sent since reset">Updates sent since reset</dt><dd id="forwarded-total"></dd>
+              <dt data-i18n="Updates filtered since reset">Updates filtered since reset</dt><dd id="avoided-total"></dd>
+              <dt data-i18n="Filtered / tracked update feeds">Filtered / tracked update feeds</dt><dd id="subscriptions"></dd>
+              <dt data-i18n="Entities currently included">Entities currently included</dt><dd id="scope"></dd>
+              <dt data-i18n="Estimated entity reduction">Estimated entity reduction</dt><dd id="estimate"></dd>
             </dl>
+            <p data-i18n="An update feed receives live entity changes; one tab can have more than one. The entity reduction estimate compares included entities with all current entities, even when filtering is off.">An update feed receives live entity changes; one tab can have more than one. The entity reduction estimate compares included entities with all current entities, even when filtering is off.</p>
             <div class="actions"><p id="reset-time"></p><button id="reset" data-i18n="Reset live statistics">Reset live statistics</button></div>
             <details id="loads"><summary><span data-i18n="Latest page loads">Latest page loads</span> <span id="load-count"></span></summary>
-              <p data-i18n="Latest full browser load for each dashboard. Entity snapshots use the selected dashboards' combined scope. Resource counts cover registered Lovelace resources, excluding core bundles and extra modules.">Latest full browser load for each dashboard. Entity snapshots use the selected dashboards' combined scope.
-                Resource counts cover registered Lovelace resources, excluding core bundles and extra modules.</p>
+              <p data-i18n="Each dashboard's latest browser reload. Entity counts include all selected dashboards. File counts cover registered card files, not Home Assistant's own files or files loaded separately.">Each dashboard's latest browser reload. Entity counts include all selected dashboards. File counts cover registered card files, not Home Assistant's own files or files loaded separately.</p>
               <ul id="load-rows" class="rows"></ul>
             </details>
           </div>
@@ -131,7 +131,7 @@ function install() {
       }
       if (!value?.user?.is_admin) {
         this._get("content").hidden = true;
-        this._get("state").textContent = text(this._hass, 'Administrator access is required for Loona statistics.');
+        this._get("state").textContent = text(this._hass, 'Sign in as an administrator to view Loona statistics.');
         this._get("refresh").disabled = true;
         return;
       }
@@ -145,9 +145,11 @@ function install() {
         const interval = (this._data?.interval_seconds || 30) * 1000;
         if (!document.hidden && this._visible && Date.now() - this._lastRequest >= interval && !this._loading) this._fetch();
       }, 1000);
+      this._resetListener = () => this._fetch(); window.addEventListener("loona-statistics-reset", this._resetListener);
       if (this._hass) this._fetch();
     }
     disconnectedCallback() {
+      window.removeEventListener("loona-statistics-reset", this._resetListener);
       window.clearInterval(this._timer);
       this._observer?.disconnect();
       this._sequence++;
@@ -168,7 +170,7 @@ function install() {
         this._render(data);
       } catch (error) {
         if (sequence !== this._sequence) return;
-        this._errorKey = "Statistics unavailable. Check that Loona is loaded, then refresh.";
+        this._errorKey = "Could not load statistics. Check that Loona is running, then press Refresh.";
         this._get("error").textContent = text(this._hass, this._errorKey);
         this._get("error").hidden = false;
         if (!this._data) this._get("state").textContent = text(this._hass, 'Unable to load statistics');
@@ -187,7 +189,7 @@ function install() {
         await this._hass.callService("button", "press", { entity_id: this._data.reset_entity });
         await this._fetch();
       } catch {
-        this._errorKey = "Reset failed. Check the Reset live statistics button in Loona's settings.";
+        this._errorKey = "Could not reset statistics. Try Reset live statistics on the Loona device page.";
         this._get("error").textContent = text(this._hass, this._errorKey);
         this._get("error").hidden = false;
       } finally {
@@ -199,16 +201,16 @@ function install() {
       const metrics = data.metrics;
       const format = (value) => Number(value).toLocaleString(language(this._hass), { maximumFractionDigits: 3 });
       this._get("content").hidden = false;
-      this._get("state").textContent = data.compatibility_problem ? text(this._hass, "Compatibility issue. Check Loona diagnostics.")
-        : !data.complete ? text(this._hass, "Incomplete scope: filtering passes through full data")
+      this._get("state").textContent = data.compatibility_problem ? text(this._hass, "A feature is unavailable. Check Loona diagnostics.")
+        : !data.complete ? text(this._hass, "Dashboard scan incomplete. All entities are being sent.")
         : !data.controls.enabled || !data.controls.entity_filtering ? text(this._hass, "Entity filtering is disabled")
-        : metrics.filtered_subscriptions ? text(this._hass, "Entity filtering is active") : text(this._hass, "Waiting for a filtered subscription");
+        : metrics.filtered_subscriptions ? text(this._hass, "Entity filtering is active") : text(this._hass, "No filtered update feed yet. Open a dashboard with a selected account.");
       for (const [id, key] of [["forwarded", "forwarded_rate"], ["avoided", "avoided_rate"], ["reduction", "update_reduction"],
         ["forwarded-total", "forwarded_updates"], ["avoided-total", "avoided_updates"]]) this._get(id).textContent = format(metrics[key]);
       this._get("interval").textContent = (data.sample_seconds
-        ? text(this._hass, "Latest {seconds}-second sample.", { seconds: format(data.sample_seconds) })
-        : text(this._hass, "Waiting for the next rate sample, up to {seconds} seconds.", { seconds: format(data.interval_seconds) }))
-        + " " + text(this._hass, "Counts are logical entity updates per selected-account subscription, not bytes or load-time savings.");
+        ? text(this._hass, "Measured over the last {seconds} seconds.", { seconds: format(data.sample_seconds) })
+        : text(this._hass, "Rates update within {seconds} seconds.", { seconds: format(data.interval_seconds) }))
+        + " " + text(this._hass, "Each update is counted once per update feed, so multiple tabs can increase totals. These numbers do not measure loading speed or network traffic.");
       this._get("subscriptions").textContent = format(metrics.filtered_subscriptions) + " / " + format(metrics.managed_subscriptions);
       this._get("scope").textContent = text(this._hass, "{count} entities", { count: format(metrics.current_scope) });
       this._get("estimate").textContent = format(metrics.reduction_estimate) + "%";
@@ -219,9 +221,9 @@ function install() {
         const item = node("li"); item.append(node("strong", row.title));
         item.append(node("p", new Date(row.at).toLocaleString(language(this._hass))));
         item.append(node("p", text(this._hass, "Entities sent: {sent} / {available}", row.entities)));
-        item.append(node("p", row.resources ? text(this._hass, "Resources sent: {sent} / {available}", row.resources) : text(this._hass, "Resource filtering counts were not observed.")));
+        item.append(node("p", row.resources ? text(this._hass, "Card files sent: {sent} / {available}", row.resources) : text(this._hass, "No card file count was recorded for this load.")));
         return item;
-      }) : [node("li", text(this._hass, "No page loads recorded yet. Reload a dashboard after installing this card."))]));
+      }) : [node("li", text(this._hass, "No page loads recorded yet. Reload one of your dashboards."))]));
     }
   }
 

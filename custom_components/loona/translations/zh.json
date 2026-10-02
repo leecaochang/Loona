@@ -4,16 +4,16 @@
     "step": {
       "user": {
         "title": "选择仪表盘",
-        "description": "选择仪表盘，Loona 会将这些仪表盘的实体合并后发送给被筛选的账户。请先保存自动生成的仪表盘。",
+        "description": "选择这些账户会使用的仪表盘。Loona 会包含所有所选仪表盘的实体。自动生成的仪表盘需要先保存，再选择。",
         "data": {
           "dashboards": "仪表盘"
         }
       },
       "targets": {
         "title": "选择账户",
-        "description": "账户筛选会影响该账户在所有标签页和应用中的常规实体订阅，也包括管理员账户。首次设置后，请重新加载已打开的页面。",
+        "description": "筛选会影响这些账户使用的所有标签页、设备和应用，也包括管理员账户。其他页面可能需要所选仪表盘之外的实体。设置完成后，请刷新已打开的页面。",
         "data": {
-          "target_mode": "筛选对象",
+          "target_mode": "筛选哪些账户",
           "user_ids": "账户"
         }
       }
@@ -21,9 +21,9 @@
     "error": {
       "no_dashboards": "请至少选择一个仪表盘。",
       "no_accounts": "请至少选择一个有效账户。",
-      "invalid_selection": "请从当前可用选项中选择，且不要重复。",
-      "invalid_pattern": "请使用 light 等域或 sensor.room_* 等实体模式，不要包含空格或不配对的括号。",
-      "not_loaded": "请先加载 Loona，再修改这些控制项。"
+      "invalid_selection": "部分选项已失效或被重复选择。请从当前列表中重新选择。",
+      "invalid_pattern": "请选择 light 等实体类型，或 sensor.room_* 等匹配规则。规则不能包含空格或未配对的括号。",
+      "not_loaded": "Loona 尚未运行。请重新加载集成，然后重试。"
     },
     "abort": {
       "already_configured": "只能配置一个 Loona 集成。"
@@ -35,32 +35,32 @@
         "title": "Loona 设置",
         "menu_options": {
           "dashboards": "仪表盘",
-          "targets": "筛选对象",
+          "targets": "账户",
           "filters": "筛选与性能",
           "extra_entities": "额外实体",
           "rules": "高级实体规则",
-          "resource_preview": "资源依赖",
-          "dependency_preview": "实体依赖"
+          "resource_preview": "卡片文件",
+          "dependency_preview": "实体包含原因"
         }
       },
       "dashboards": {
         "title": "仪表盘",
-        "description": "每个被筛选的账户都会收到这些仪表盘合并后的实体范围。",
+        "description": "被筛选的账户都会收到这里所有所选仪表盘的实体。",
         "data": {
           "dashboards": "仪表盘"
         }
       },
       "targets": {
         "title": "选择账户",
-        "description": "账户筛选会影响该账户在所有标签页和应用中的常规实体订阅，也包括管理员账户。首次设置后，请重新加载已打开的页面。",
+        "description": "筛选会影响这些账户使用的所有标签页、设备和应用，也包括管理员账户。其他页面可能需要所选仪表盘之外的实体。设置完成后，请刷新已打开的页面。",
         "data": {
-          "target_mode": "筛选对象",
+          "target_mode": "筛选哪些账户",
           "user_ids": "账户"
         }
       },
       "filters": {
         "title": "筛选与性能",
-        "description": "这些选项需要开启“启用”总开关。注册表筛选会限制仪表盘元数据，默认关闭，因为编辑器可能需要完整列表。“优先加载可见图表”默认关闭：可见图表立即加载，屏幕外的图表会在可见内容渲染和请求稳定后加载。修改会应用到已打开的页面；请重新加载视图以比较效果。“加载期间暂停动画”会暂时暂停持续动画，并自动恢复，默认关闭。资源筛选默认关闭，将指定账户的 Lovelace 模块限制为仪表盘依赖、共享样式及所选例外。请在“资源依赖”中选择需要的可选或未分类模块。修改后请强制刷新页面；已加载的模块无法卸载。",
+        "description": "这些功能需要开启“启用”总开关。可选功能默认关闭。\n\n实体筛选只发送所选仪表盘需要的实体。注册表筛选还会缩短实体和设备列表；如果编辑器缺少选项，请关闭它。\n\n优先加载可见图表会先加载屏幕内的图表。屏幕外的图表稍后加载，滚动到它们时则立即加载。加载期间暂停的动画会自动恢复。\n\n资源筛选会跳过未勾选的可选卡片文件。开启前，请检查“卡片文件”。修改文件选择或比较图表加载效果后，请刷新浏览器页面。",
         "data": {
           "entity_filtering": "实体筛选",
           "registry_filtering": "注册表筛选",
@@ -71,31 +71,31 @@
       },
       "extra_entities": {
         "title": "额外实体",
-        "description": "包含自定义卡片动态计算的依赖，或被筛选账户的其他会话所需的实体。",
+        "description": "添加卡片需要但 Loona 未发现的实体，或这些账户在其他页面需要的实体。",
         "data": {
           "extra_entities": "额外实体"
         }
       },
       "rules": {
         "title": "高级实体规则",
-        "description": "选择现有域、实体或 sensor.* 等整个域的模式。已保存的自定义模式仍可选择。排除规则在包含规则之后生效，可能导致卡片异常。Loona 的控制和统计实体始终保留。",
+        "description": "可以包含 light 等实体类型、单个实体，或 sensor.* 等匹配规则。已保存的规则仍可选择。排除规则会覆盖包含规则，可能导致卡片没有数据。Loona 自身的控制和统计实体始终保留。",
         "data": {
-          "include_domains": "包含域",
-          "include_globs": "包含实体或域模式",
-          "exclude_globs": "排除实体或域模式"
+          "include_domains": "包含实体类型",
+          "include_globs": "包含实体或匹配规则",
+          "exclude_globs": "排除实体或匹配规则"
         }
       },
       "resource_preview": {
-        "title": "资源依赖",
-        "description": "{required_start}必需资源（{required_count}）{required_summary_end}\n\n必需资源会自动保持启用，不提供复选框。\n\n{required}\n\n{required_end}\n\n尚未解析的自定义类型（{unresolved_count}）：{unresolved}\n\n不可用的已保存资源（{stale_count}）：{stale}\n\n取消勾选不可用的已保存资源，可移除其保存的选择。模板或策略可能需要额外资源。如果未提供资源筛选控制项，则此 Home Assistant 版本或其适配器当前不支持资源筛选。\n\n开启资源筛选后，下面的可选选择才会生效。勾选的资源也会加载；未勾选的资源会被省略。新的可选资源默认不勾选。关闭资源筛选时，Home Assistant 会加载完整资源列表。Loona 的“启用”总开关也必须开启。保存后，请强制刷新浏览器页面。",
+        "title": "卡片文件",
+        "description": "{required_start}自动保留的文件（{required_count}）{required_summary_end}\n\n这些文件用于仪表盘卡片或共享样式。\n\n{required}\n\n{required_end}\n\n无法匹配到文件的卡片类型（{unresolved_count}）：{unresolved}\n\n已保存但不再注册的文件（{stale_count}）：{stale}\n\n开启资源筛选后，下方勾选的文件也会加载，未勾选的文件会跳过。新出现的可选文件默认不勾选。“启用”总开关也需要开启。关闭资源筛选时，所有已注册的文件都会加载。\n\n模板可能需要 Loona 无法识别的文件。如果卡片或图标缺失，请勾选对应文件，或关闭资源筛选。取消勾选已失效的文件即可移除保存的选择。没有显示开关时，表示当前安装无法使用此功能。保存后，请刷新浏览器页面；已加载的文件会保留到刷新为止。",
         "data": {
           "resource_filtering": "资源筛选",
-          "always_forward_resources": "需要加载的可选资源"
+          "always_forward_resources": "额外加载的文件"
         }
       },
       "dependency_preview": {
-        "title": "实体依赖",
-        "description": "{count} 个依赖项。排除规则在包含规则之后生效。选择实体并提交，即可查看其依赖来源。\n\n已保留：{retained}\n\n已排除：{excluded}\n\n尚未解析：{unresolved}\n\n额外实体：{extra}\n\n包含规则：{rule}\n\nLoona 控制或统计实体：{protected}\n\n配置路径：\n\n{detail}\n\n此预览为只读。当实体范围不完整或筛选已关闭时，Home Assistant 会发送完整实体数据。",
+        "title": "实体包含原因",
+        "description": "从所选仪表盘和规则中找到 {count} 个实体。选择实体并提交，即可查看包含它的原因。此页面不会修改设置。\n\n已包含：{retained}\n\n被规则排除：{excluded}\n\n在 Home Assistant 中未找到：{unresolved}\n\n通过“额外实体”添加：{extra}\n\n匹配了包含规则：{rule}\n\nLoona 控制或统计实体：{protected}\n\n引用该实体的位置：\n\n{detail}\n\n如果仪表盘扫描失败或筛选已关闭，Home Assistant 会发送完整实体列表。",
         "data": {
           "entity": "实体"
         }
@@ -104,13 +104,13 @@
     "error": {
       "no_dashboards": "请至少选择一个仪表盘。",
       "no_accounts": "请至少选择一个有效账户。",
-      "invalid_selection": "请从当前可用选项中选择，且不要重复。",
-      "invalid_pattern": "请使用 light 等域或 sensor.room_* 等实体模式，不要包含空格或不配对的括号。",
-      "not_loaded": "请先加载 Loona，再修改这些控制项。"
+      "invalid_selection": "部分选项已失效或被重复选择。请从当前列表中重新选择。",
+      "invalid_pattern": "请选择 light 等实体类型，或 sensor.room_* 等匹配规则。规则不能包含空格或未配对的括号。",
+      "not_loaded": "Loona 尚未运行。请重新加载集成，然后重试。"
     },
     "abort": {
-      "not_loaded": "请先加载 Loona，再预览资源。",
-      "resources_unavailable": "原生 Lovelace 资源集合不可用。"
+      "not_loaded": "Loona 尚未运行。请重新加载集成，再打开此页面。",
+      "resources_unavailable": "Loona 无法读取卡片文件列表。请重新加载集成，然后重试。"
     }
   },
   "entity": {
@@ -144,27 +144,35 @@
     },
     "binary_sensor": {
       "compatibility_problem": {
-        "name": "兼容性问题"
+        "name": "兼容性",
+        "state": {
+          "off": "支持",
+          "on": "受限"
+        }
       },
       "scope_problem": {
-        "name": "实体范围问题"
+        "name": "仪表盘扫描",
+        "state": {
+          "off": "完整",
+          "on": "不完整"
+        }
       }
     },
     "sensor": {
       "union_entities": {
-        "name": "合并实体数"
+        "name": "包含的实体数"
       },
       "current_scope": {
-        "name": "当前范围实体数"
+        "name": "包含且可用的实体数"
       },
       "reduction_estimate": {
         "name": "实体数量减少估算"
       },
       "managed_subscriptions": {
-        "name": "受管理订阅数"
+        "name": "跟踪的更新订阅数"
       },
       "filtered_subscriptions": {
-        "name": "已筛选订阅数"
+        "name": "已筛选的更新订阅数"
       },
       "last_scan": {
         "name": "上次成功扫描"
@@ -173,44 +181,44 @@
         "name": "扫描耗时"
       },
       "discovered_entities": {
-        "name": "发现的实体数"
+        "name": "仪表盘引用的实体数"
       },
       "unresolved_entities": {
-        "name": "未解析的实体数"
+        "name": "未找到的实体数"
       },
       "forwarded_rate": {
-        "name": "每秒转发的实体更新"
+        "name": "每秒发送的实体更新"
       },
       "avoided_rate": {
-        "name": "每秒省略的实体更新"
+        "name": "每秒筛掉的实体更新"
       },
       "update_reduction": {
-        "name": "实时实体更新减少比例"
+        "name": "实时更新减少比例"
       },
       "forwarded_updates": {
-        "name": "已转发的实体更新"
+        "name": "已发送的实体更新"
       },
       "avoided_updates": {
-        "name": "已省略的实体更新"
+        "name": "已筛掉的实体更新"
       }
     }
   },
   "issues": {
     "compatibility": {
-      "title": "Loona 无法安全应用筛选",
-      "description": "请检查“兼容性问题”传感器、受支持的 Home Assistant 版本，以及是否有其他集成替换实体、注册表或配置命令。无法启用的功能会保留原生处理方式。重新加载 Loona 后，请刷新浏览器页面。"
+      "title": "Loona 的部分功能无法使用",
+      "description": "当前 Home Assistant 版本或其他集成导致 Loona 的某项功能无法使用。该功能已停用，相关请求由 Home Assistant 正常处理。请查看 Loona 诊断信息，确认受影响的功能和支持的版本。重新加载 Loona 后，请刷新浏览器页面。"
     },
     "scope": {
-      "title": "Loona 正在传递完整数据",
-      "description": "“实体范围问题”为开启状态时，实体和注册表筛选都会被绕过，即使相应开关已开启。请检查 Loona 选项中的仪表盘和有效账户，并保存自动生成的仪表盘。不受支持的模板、仪表盘策略、auto-entities 规则或空范围会妨碍可靠筛选。完整扫描成功后，Loona 会自动恢复筛选。可下载诊断信息查看扫描状态。"
+      "title": "Loona 正在发送全部实体",
+      "description": "Loona 无法确定仪表盘需要的完整实体列表。实体筛选和注册表筛选已暂时停止，即使开关仍然开启。请在 Loona 设置中确认所选仪表盘和账户仍然存在，并保存自动生成的仪表盘。不受支持的模板或 auto-entities 规则也可能导致扫描不完整。扫描成功后会自动恢复筛选。可下载诊断信息查看失败原因。"
     },
     "exclusion": {
-      "title": "排除规则移除了仪表盘依赖",
-      "description": "请检查 Loona 选项中的高级实体规则。移除被引用的实体可能导致卡片异常。删除相应排除规则或关闭 Loona，即可恢复其状态。"
+      "title": "排除的实体正在被仪表盘使用",
+      "description": "某条规则排除了仪表盘卡片使用的实体，可能导致数据缺失或显示错误。请在 Loona 设置中打开“高级实体规则”，移除对应排除规则，或关闭“启用”总开关以发送全部实体。"
     },
     "resources": {
-      "title": "Loona 资源依赖需要检查",
-      "description": "资源筛选会省略未勾选的可选模块。请在 Loona 选项中打开“资源依赖”，检查未解析的自定义类型、动态配置和缺失的选择。必需资源会自动保持启用。如果卡片、图标或辅助功能缺失，请勾选其可选资源或关闭资源筛选，然后强制刷新页面。已保存的资源注册信息不会被删除。"
+      "title": "请检查 Loona 加载的卡片文件",
+      "description": "资源筛选已开启，但 Loona 无法确定仪表盘需要的所有文件，或某个已保存的文件已不再注册。此提示不代表卡片已经出错。\n\n请在 Loona 设置中打开“卡片文件”。已确认需要的文件会自动保留。请勾选其他需要的文件。如果一切正常，可以保持当前选择。\n\n如果卡片或图标缺失，请关闭资源筛选并刷新浏览器页面。勾选缺失的文件后，可以再次开启资源筛选。"
     }
   },
   "selector": {

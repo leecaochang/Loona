@@ -16,7 +16,7 @@ from homeassistant.core import HomeAssistant, callback
 
 from .compatibility import CompatibilityError, HandlerEntry, HandlerTable
 from .const import (
-    RESOURCE_CARDS, RESOURCE_COMMANDS, RESOURCE_COMMAND_PROFILES, RESOURCE_CONFIG_KEYS,
+    BUNDLED_CARD_TYPES, RESOURCE_CARDS, RESOURCE_COMMANDS, RESOURCE_COMMAND_PROFILES, RESOURCE_CONFIG_KEYS,
     RESOURCE_CORE_VERSIONS, RESOURCE_SHARED, RESOURCE_SHARED_PATHS,
 )
 from .websocket import ScopePolicy
@@ -75,7 +75,7 @@ def resource_report(
 ) -> dict[str, Any]:
     """Classify a fresh native list, preserving URL queries and resource IDs."""
     exceptions = frozenset(always_forward)
-    found: set[str] = set()
+    found: set[str] = set(BUNDLED_CARD_TYPES)
     report_rows = []
     for row in rows:
         url, kind = row["url"], row["type"]

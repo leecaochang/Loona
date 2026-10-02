@@ -12,7 +12,7 @@ SUPPORTED_CORE_VERSIONS: Final = frozenset(
 )
 REGISTRY_CORE_VERSIONS: Final = SUPPORTED_CORE_VERSIONS
 FRONTEND_CORE_VERSIONS: Final = frozenset({"2026.9.3", "2026.9.4"})
-VERSION: Final = "0.8.1"
+VERSION: Final = "0.8.2"
 CONF_DASHBOARDS: Final = "dashboards"
 CONF_TARGET_MODE: Final = "target_mode"
 CONF_USER_IDS: Final = "user_ids"
@@ -75,6 +75,8 @@ RESOURCE_CARDS: Final = {
 }
 # card-mod also applies theme styles and patches native cards globally.
 RESOURCE_SHARED: Final = frozenset({"card-mod.js"})
+# These cards are installed as frontend modules, outside Lovelace's file list.
+BUNDLED_CARD_TYPES: Final = frozenset({"loona-statistics-card", "loona-settings-card"})
 # Browser Mod registers this resource for Cast as well as an extra frontend module.
 RESOURCE_SHARED_PATHS: Final = {"/browser_mod.js": "Browser Mod frontend service and Cast companion"}
 RESOURCE_CONFIG_KEYS: Final = {"kiosk_mode": "kiosk-mode.js"}

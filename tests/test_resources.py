@@ -97,6 +97,18 @@ def test_helper_mapping_does_not_trust_remote_names_or_wrong_resource_kinds():
     assert all(row["status"] == "unclassified" and not row["forwarded"] for row in report["resources"])
 
 
+def test_bundled_cards_do_not_need_lovelace_resource_registrations():
+    dependencies = resource_dependencies([{"cards": [
+        {"type": "custom:loona-statistics-card"},
+        {"type": "custom:loona-settings-card"},
+        {"type": "custom:loona-unknown-card"},
+        {"type": "custom:unknown-card"},
+    ]}])
+    report = resource_report([], dependencies)
+    assert report["unresolved_custom_types"] == ["loona-unknown-card", "unknown-card"]
+    assert not report["resources"]
+
+
 @pytest.fixture
 async def resources_runtime(loona_hass, dashboards, make_entry):
     await dashboards["wall-panel"].async_save({"cards": [{"type": "custom:mini-graph-card", "entity": "sensor.wall"}]})

@@ -172,7 +172,7 @@ class LoonaRuntime:
             identifiers={(DOMAIN, self.entry.entry_id)},
             name="Loona",
             manufacturer="Loona",
-            model="Dashboard entity filtering",
+            model="Loona",
             sw_version=VERSION,
         ).id
         for event_type in (
