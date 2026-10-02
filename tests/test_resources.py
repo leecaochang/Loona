@@ -355,13 +355,14 @@ async def test_resource_lists_bypass_unknown_and_non_dashboard_panels(resources_
     assert (await request(runtime.hass, connection, output))["result"] == collection.async_items()
 
 
-async def test_resource_repair_stale_exception_and_collection_failure_isolation(resources_runtime):
+async def test_resource_notices_stale_exception_and_collection_failure_isolation(resources_runtime):
     runtime, collection = resources_runtime
     issue_key = ("loona", f"{runtime.entry.entry_id}_resources")
     issues = ir.async_get(runtime.hass)
     assert issue_key not in issues.issues
     await runtime.async_set_control("resource_filtering", True)
-    assert issue_key in issues.issues  # Unclassified helper is disclosed.
+    assert issue_key not in issues.issues
+    assert any(item["code"] == "unchecked_resources" and item["severity"] == "info" for item in runtime.notice_report())
     await runtime.async_set_control("resource_filtering", False)
     assert issue_key not in issues.issues
     runtime.hass.config_entries.async_update_entry(runtime.entry, options={

@@ -15,7 +15,7 @@ from custom_components.loona.config_flow import (
 )
 
 
-async def test_two_step_setup_targets_admin(loona_hass, dashboards):
+async def test_setup_targets_admin_and_confirms_card_refresh(loona_hass, dashboards):
     admin = await loona_hass.auth.async_create_user(
         "Administrator", group_ids=["system-admin"]
     )
@@ -36,11 +36,16 @@ async def test_two_step_setup_targets_admin(loona_hass, dashboards):
     assert form["step_id"] == "targets"
     values = form["data_schema"]({"target_mode": "selected", "user_ids": [admin.id]})
     result = await flow.async_step_targets(values)
+    assert result["step_id"] == "cards"
+    result = await flow.async_step_cards({"dashboard_cards": ["settings", "statistics"]})
+    assert result["step_id"] == "finish" and result["last_step"]
+    result = await flow.async_step_finish({})
     assert result["type"] == "create_entry"
     assert result["data"] == {
         "dashboards": ["lovelace", "wall-panel"],
         "target_mode": "selected",
         "user_ids": [admin.id],
+        "dashboard_cards": ["settings", "statistics"],
     }
 
 
@@ -94,10 +99,8 @@ async def test_options_preserve_unrelated_fields_and_stale_labels(
         "dashboards",
         "targets",
         "filters",
-        "extra_entities",
         "rules",
         "resource_preview",
-        "dependency_preview",
     }
     result = await flow.async_step_dashboards()
     selector = next(iter(result["data_schema"].schema.values()))
@@ -123,9 +126,10 @@ async def test_rules_and_extra_entities_validate(loona_hass, make_entry):
     assert result["errors"]["base"] == "invalid_selection"
     result = await flow.async_step_rules({"include_globs": ["sensor.["]})
     assert result["errors"]["base"] == "invalid_selection"
-    result = await flow.async_step_extra_entities({"extra_entities": ["sensor.future"]})
+    loona_hass.states.async_set("sensor.future", "1")
+    result = await flow.async_step_rules({"extra_entities": ["sensor.future"]})
     assert result["data"]["extra_entities"] == ["sensor.future"]
-    result = await flow.async_step_extra_entities({"extra_entities": ["bad value"]})
+    result = await flow.async_step_rules({"extra_entities": ["bad value"]})
     assert result["errors"]["base"] == "invalid_selection"
     result = await flow.async_step_filters({"entity_filtering": False})
     assert result["errors"]["base"] == "not_loaded"
@@ -203,3 +207,23 @@ async def test_restore_initial_choices_and_empty_exceptions_preserves_other_opti
     flow.hass, flow.handler = loona_hass, entry.entry_id
     result = flow.finish({"dashboards": ["wall-panel"], "always_forward_resources": []})
     assert result["data"] == {"extra_entities": ["sensor.future"]}
+
+
+@pytest.mark.parametrize("cards", [[], ["statistics"], ["settings"], ["statistics", "settings"]])
+async def test_optional_card_selections(loona_hass, cards):
+    flow = LoonaConfigFlow()
+    flow.hass, flow.handler, flow.context = loona_hass, "loona", {"source": "user"}
+    result = await flow.async_step_cards({"dashboard_cards": cards})
+    if cards:
+        assert result["step_id"] == "finish"
+        result = await flow.async_step_finish({})
+    assert result["type"] == "create_entry"
+    assert result["data"]["dashboard_cards"] == cards
+
+
+@pytest.mark.parametrize("cards", [["unknown"], ["settings", "settings"], "settings", [None]])
+async def test_invalid_card_selections(loona_hass, cards):
+    flow = LoonaConfigFlow()
+    flow.hass, flow.handler, flow.context = loona_hass, "loona", {"source": "user"}
+    result = await flow.async_step_cards({"dashboard_cards": cards})
+    assert result["errors"]["base"] == "invalid_selection"

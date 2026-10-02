@@ -1,31 +1,30 @@
 /* Prefilled administrator settings using native Loona validation and storage. */
-import { language, text, translate } from "./i18n.js?v=0.8.3";
+import { language, text, translate, renderNotices } from "./i18n.js?v=0.9.0";
 
 const groups = {
   controls: "Filters and performance", dashboards: "Dashboards", targets: "Accounts",
-  extra_entities: "Extra entities", rules: "Advanced entity rules", resources: "Card files",
+  rules: "Entity rules", resources: "Cards",
 };
 const labels = {
   enabled: "Enabled", entity_filtering: "Entity filtering", registry_filtering: "Registry filtering",
-  resource_filtering: "Resource filtering", visible_first_graphs: "Visible-first graphs",
+  resource_filtering: "Resource filtering", visible_first_graphs: "Delay graph loading",
   pause_animations_during_loading: "Pause animations during loading", dashboards: "Dashboards",
-  user_ids: "Accounts", extra_entities: "Extra entities", include_domains: "Include entity types",
-  include_globs: "Include entities or patterns", exclude_globs: "Exclude entities or patterns",
+  user_ids: "Accounts", extra_entities: "Entities", include_domains: "Entity types",
+  include_globs: "Entities or patterns", exclude_globs: "Entities or patterns",
   always_forward_resources: "Additional files to load",
 };
 const help = {
-  enabled: "Master switch for all Loona filters and loading features.",
-  entity_filtering: "Send only entities needed by your selected dashboards and rules.",
-  registry_filtering: "Shorten entity and device lists. Turn off if an editor is missing choices.",
-  resource_filtering: "Skip unchecked optional files. Review Card files, then reload the browser page.",
-  visible_first_graphs: "Load on-screen graphs first. Scrolling to a waiting graph starts it immediately.",
+  enabled: "Turn off to restore standard dashboard behavior immediately.",
+  entity_filtering: "Automatically find the entities used by your selected dashboards.",
+  registry_filtering: "Reduce the entity and device information sent to dashboards, including names, icons and areas.",
+  resource_filtering: "Load required files and any additional files selected under Cards. Refresh the browser after changes.",
+  visible_first_graphs: "Delay off-screen graphs until the dashboard has loaded. Scrolling to a graph loads it immediately.",
   pause_animations_during_loading: "Pause repeating animations while loading, then resume them automatically.",
 };
 const groupHelp = {
-  dashboards: "Every filtered account receives entities from all dashboards selected here.",
-  targets: "Filtering affects every tab, device and app using these accounts, including administrators.",
-  extra_entities: "Add entities a card needs but Loona did not find, or entities needed on other pages using these accounts.",
-  rules: "Choose entity types such as light, entities, or patterns such as sensor.*. Exclusions override inclusions and can leave cards without data.",
+  dashboards: "Choose which dashboards you want to filter.",
+  targets: "Choose which accounts receive filtered data while viewing selected dashboards.",
+  rules: "Loona finds dashboard entities automatically. Use these rules to add anything it missed or exclude entities you do not need.",
 };
 const statusLabels = { unused: "Not used in selected dashboards", unclassified: "Usage unknown" };
 const make = (tag, content, cls) => {
@@ -49,6 +48,8 @@ function install() {
           :host { display:block; color:var(--primary-text-color); }
           ha-card { padding:24px; overflow:hidden; }
           header { display:flex; align-items:start; justify-content:space-between; gap:16px; }
+          header>div { flex:1; min-width:0; }
+          header>button { flex-shrink:0; white-space:nowrap; }
           h2 { margin:0; font-size:20px; font-weight:500; line-height:1.4; }
           p { margin:8px 0 0; font-size:14px; line-height:1.5; color:var(--secondary-text-color); }
           button,input,select { font:inherit; }
@@ -66,7 +67,35 @@ function install() {
           ::selection { background:var(--primary-color); color:var(--text-primary-color,#fff); }
           details { border-top:1px solid var(--divider-color); margin-top:20px; padding-top:16px; }
           summary { min-height:36px; cursor:pointer; font-size:15px; line-height:1.5; }
+          #sections { margin-top:20px; }
+          #sections>details { margin-top:0; padding-top:0; }
+          #sections>details>summary { box-sizing:border-box; min-height:48px; padding:12px 0; font-weight:500; }
+          #sections>details[open] { padding-bottom:20px; }
           .field { margin-top:16px; }
+          .rule-groups { display:grid; gap:24px; margin-top:24px; }
+          .rule-group { min-width:0; margin:0; padding:0 16px 16px; border:1px solid var(--divider-color); border-radius:12px; }
+          .rule-group legend { padding:0 8px; font-size:18px; font-weight:600; }
+          .rule-group legend ha-icon { margin-inline-end:8px; --mdc-icon-size:20px; }
+          .rule-group>p { margin:4px 0 16px; }
+          .rule-field { margin-top:12px; padding-top:12px; }
+          .rule-field summary { display:flex; align-items:center; justify-content:space-between; gap:12px; list-style:revert; }
+          .rule-field summary::after { content:"+"; font-size:20px; }
+          .rule-field[open] summary::after { content:"-"; }
+          .rule-field summary span { font-weight:500; }
+          .rule-field summary small { margin-inline-start:auto; color:var(--secondary-text-color); font-variant-numeric:tabular-nums; }
+          .rule-field .field { margin-top:8px; }
+          .rule-field .field>label { font-size:0; }
+          .rule-field input[type=search] { font-size:14px; }
+          .selected-choices { background:var(--secondary-background-color); border-radius:8px; padding:0 10px; }
+          .choice-list:empty { display:none; }
+          .loona-notices { margin-top:20px; }
+          .loona-notices ul { list-style:none; padding:0; margin:0; }
+          .loona-notices li { padding:16px 0; border-top:1px solid var(--divider-color); }
+          .loona-notices li:first-child { border-top:0; }
+          .loona-notices h3 { font-size:14px; margin:0; line-height:1.5; }
+          .loona-notices .notice-items { max-height:160px; overflow:auto; overflow-wrap:anywhere; font-size:12px; }
+          #version { font-size:12px; }
+
           .field>label { display:block; font-size:14px; margin-bottom:8px; }
           .selection-title { font-size:13px; color:var(--secondary-text-color); margin:12px 0 4px; }
           .choice { display:flex; gap:12px; align-items:center; min-height:44px; font-size:14px; line-height:1.5;
@@ -84,7 +113,7 @@ function install() {
         <ha-card><header><div><h2 data-i18n="Loona settings">Loona settings</h2>
           <p id="state" role="status" data-i18n="Loading settings...">Loading settings...</p></div>
           <button id="refresh" data-i18n="Refresh">Refresh</button></header>
-          <p id="error" role="alert" hidden></p><div id="sections"></div>
+          <p id="version"></p><p id="error" role="alert" hidden></p><div id="notices"></div><div id="sections"></div>
           <div id="maintenance" hidden><div class="actions">
             <button data-action="rescan" data-i18n="Rescan dashboards">Rescan dashboards</button>
             <button data-action="reset_live_statistics" data-i18n="Reset live statistics">Reset live statistics</button>
@@ -117,6 +146,8 @@ function install() {
         this._sequence++; this._data = undefined; this._drafts = {}; this._conflicts.clear();
         this._searches = {}; this._limits = {}; this._loading = false; this._saving = undefined; this._error = undefined; this._saved = undefined; this._rendered = false; this._acting = undefined; this._actionStatus = undefined;
         this.shadowRoot.getElementById("sections").replaceChildren();
+        this.shadowRoot.getElementById("notices").replaceChildren();
+        this.shadowRoot.getElementById("version").textContent = "";
         this.shadowRoot.getElementById("error").hidden = true;
       }
       if (changedLanguage) this._localize();
@@ -145,6 +176,8 @@ function install() {
     _edit(group, key, value) {
       this._drafts[group] = { ...(this._drafts[group] || structuredClone(this._data.values[group])), [key]:value };
       if (JSON.stringify(this._drafts[group]) === JSON.stringify(this._data.values[group])) delete this._drafts[group];
+      const count=this.shadowRoot.querySelector(`[data-rule-count="${key}"]`);
+      if (count) count.textContent=this._t("{count} selected",{count:value.length});
       this._sync();
     }
     async _press(key) {
@@ -155,6 +188,10 @@ function install() {
         await this._hass.callService("button", "press", { entity_id: entity });
         if (sequence === this._sequence) {
           this._actionStatus = key === "rescan" ? "Dashboards rescanned" : "Live statistics reset";
+          const report = await this._hass.callWS({type:"loona/statistics"});
+          if (sequence !== this._sequence || !this._hass?.user?.is_admin) return;
+          this._data.notices = report.notices;
+          renderNotices(this.shadowRoot.getElementById("notices"), this._hass, report.notices || []);
           if (key === "reset_live_statistics") window.dispatchEvent(new Event("loona-statistics-reset"));
         }
       } catch {
@@ -182,7 +219,7 @@ function install() {
       refresh.disabled = !admin || this._loading || Boolean(this._saving) || Boolean(this._acting) || Object.keys(this._drafts).length > 0;
       refresh.title = Object.keys(this._drafts).length ? this._t("Refresh is unavailable while you have unsaved changes.") : "";
       this.shadowRoot.getElementById("state").textContent = !admin ? this._t("Sign in as an administrator to change Loona settings.")
-        : this._data ? this._t("Changes affect every tab, device and app using the selected accounts.") : this._t("Loading settings...");
+        : this._data ? this._t("Filtering applies only to selected accounts viewing selected dashboards.") : this._t("Loading settings...");
       const error = this.shadowRoot.getElementById("error"); error.hidden = !this._error || !admin; error.textContent = this._error ? this._t(this._error) : "";
       for (const element of this.shadowRoot.querySelectorAll("[data-save]")) element.disabled = !this._drafts[element.dataset.save] || Boolean(this._saving) || Boolean(this._acting) || this._conflicts.has(element.dataset.save);
       for (const element of this.shadowRoot.querySelectorAll("[data-cancel]")) element.disabled = !this._drafts[element.dataset.cancel] || Boolean(this._saving) || Boolean(this._acting);
@@ -195,8 +232,11 @@ function install() {
       for (const element of this.shadowRoot.querySelectorAll("[data-action]")) element.disabled = !admin || !this._data?.action_entities?.[element.dataset.action] || this._loading || Boolean(this._saving) || Boolean(this._acting);
     }
     _render() {
+      this.shadowRoot.getElementById("version").textContent = this._t("Version: {version}", {version:this._data.version});
+      renderNotices(this.shadowRoot.getElementById("notices"), this._hass, this._data.notices || []);
       const container = this.shadowRoot.getElementById("sections");
       const open = new Set([...container.querySelectorAll("details[data-group][open]")].map(e => e.dataset.group));
+      const openFields = new Set([...container.querySelectorAll("details[data-rule-field][open]")].map(e => e.dataset.ruleField));
       const focused = this.shadowRoot.activeElement;
       const focusKey = focused?.dataset.field;
       container.replaceChildren();
@@ -224,7 +264,26 @@ function install() {
             const list=make("ul",undefined,"required"); this._data.required_resources.forEach(url=>list.append(make("li",url))); required.append(list); section.append(required);
             section.append(make("p",this._t(this._data.resources_editable ? "Checked files load; unchecked files are skipped when Resource filtering is on. Save, then reload the browser page." : "File choices are unavailable on this installation.")));
           }
-          for (const key of Object.keys(values)) {
+          if (group === "rules") {
+            const panels = make("div", undefined, "rule-groups");
+            for (const [kind, title, description, keys, icon] of [
+              ["included", "Included", "Add entities to the automatic dashboard list.", ["extra_entities", "include_domains", "include_globs"], "mdi:plus-circle-outline"],
+              ["excluded", "Excluded", "Exclusions override inclusions and may leave cards without data. Loona's own controls and statistics stay included.", ["exclude_globs"], "mdi:minus-circle-outline"],
+            ]) {
+              const panel = make("fieldset", undefined, "rule-group"); panel.dataset.ruleGroup=kind;
+              const legend = make("legend"); const symbol=make("ha-icon"); symbol.setAttribute("icon",icon); symbol.setAttribute("aria-hidden","true");
+              legend.append(symbol,make("span",this._t(title))); panel.append(legend,make("p",this._t(description)));
+              for (const key of keys) {
+                const field=make("details",undefined,"rule-field"); field.dataset.ruleField=key; field.open=openFields.has(key);
+                const summary=make("summary"); const count=make("small",this._t("{count} selected",{count:values[key].length})); count.dataset.ruleCount=key;
+                summary.append(make("span",this._t(labels[key])),count); field.append(summary);
+                this._field(field,group,key); panel.append(field);
+              }
+              panels.append(panel);
+            }
+            section.append(panels);
+          }
+          for (const key of group === "rules" ? [] : Object.keys(values)) {
             if (key === "target_mode" || key === "user_ids" && values.target_mode === "all" || group === "resources" && !this._data.resources_editable) continue;
             this._field(section,group,key);
           }
@@ -271,7 +330,7 @@ function install() {
         else if (row.status) content.append(make("small",this._t(statusLabels[row.status] || "optional")));
         label.append(checkbox,content); return label;
       };
-      const selectedRows=make("div",undefined,"choice-list");
+      const selectedRows=make("div",undefined,"choice-list selected-choices");
       values.slice(0,limit).forEach(value=>selectedRows.append(renderRow(byValue.get(value) || {value,label:value,unavailable:true},true)));
       if (!values.length) selectedRows.append(make("p",this._t("No selections"))); root.append(selectedRows);
       root.append(make("p",this._t("Available choices"),"selection-title"));

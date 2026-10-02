@@ -25,7 +25,7 @@ async def async_setup_entry(
                 (CONTROL_ENTITIES, "Entity filtering"),
                 (CONTROL_REGISTRIES, "Registry filtering"),
                 (CONTROL_RESOURCES, "Resource filtering"),
-                (CONTROL_GRAPHS, "Visible-first graphs"),
+                (CONTROL_GRAPHS, "Delay graph loading"),
                 (CONTROL_MOTION, "Pause animations during loading"),
             )
             if key in entry.runtime_data.available_controls

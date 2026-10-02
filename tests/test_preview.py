@@ -5,9 +5,7 @@ import pytest
 from homeassistant.helpers import entity_registry as er
 
 from custom_components.loona import async_setup_entry, async_unload_entry
-from custom_components.loona.config_flow import LoonaOptionsFlow
-from custom_components.loona.const import DEPENDENCY_PAGE_SIZE
-from custom_components.loona.preview import dependency_rows, statistics_report
+from custom_components.loona.preview import statistics_report
 
 
 @pytest.fixture
@@ -26,16 +24,13 @@ async def preview_runtime(loona_hass, make_entry, dashboards, frontend_http):
     await entry._async_process_on_unload(loona_hass)
 
 
-async def test_dependency_preview_privacy_and_excluded_reasons(preview_runtime, make_user, make_connection):
-    runtime = preview_runtime
-    rows = {row['entity_id']: row for row in dependency_rows(runtime)}
-    assert rows['sensor.wall']['status'] == 'excluded'
-    assert rows['sensor.wall']['dashboards'] == ['wall-panel']
-    assert rows['sensor.wall']['reasons']
-    assert rows['sensor.future']['unresolved'] and rows['sensor.future']['status'] == 'retained'
+async def test_statistics_privacy_and_removed_dependency_preview(preview_runtime, make_user, make_connection):
     admin, output = make_connection(make_user(admin=True))
-    admin.async_handle({'id': 1, 'type': 'loona/statistics', 'status': 'excluded', 'include_dependencies': True})
-    assert output[-1]['result']['dependencies'] == [rows['sensor.wall']]
+    admin.async_handle({'id': 1, 'type': 'loona/statistics'})
+    assert output[-1]['success']
+    assert 'dependencies' not in output[-1]['result']
+    notices = {row['code']: row for row in output[-1]['result']['notices']}
+    assert notices['excluded_dependencies']['items'] == ['sensor.wall']
     reader, denied = make_connection(make_user(allowed={'sensor.wall'}))
     reader.async_handle({'id': 1, 'type': 'loona/statistics'})
     assert not denied[-1]['success'] and 'result' not in denied[-1]
@@ -43,28 +38,12 @@ async def test_dependency_preview_privacy_and_excluded_reasons(preview_runtime, 
     assert not output[-1]['success']
     admin.async_handle({'id': 3, 'type': 'loona/statistics', 'search': 'x' * 161})
     assert not output[-1]['success']
-    flow = LoonaOptionsFlow(runtime.entry.entry_id)
-    flow.hass = runtime.hass
-    before = dict(runtime.entry.options)
-    form = await flow.async_step_dependency_preview({'entity': 'sensor.wall'})
-    assert form['description_placeholders']['excluded'] == 'sensor.wall'
-    assert 'wall-panel:' in form['description_placeholders']['detail']
-    form = await flow.async_step_dependency_preview({'entity': 'sensor.invented'})
-    assert form['errors']['base'] == 'invalid_selection'
-    assert runtime.entry.options == before
 
 
-async def test_paging_native_reset_and_own_telemetry_exclusion(preview_runtime, make_user, make_connection):
+async def test_native_reset_and_own_telemetry_exclusion(preview_runtime, make_user, make_connection):
     runtime = preview_runtime
-    values = [f'sensor.extra_{index:03}' for index in range(DEPENDENCY_PAGE_SIZE + 3)]
-    runtime.hass.config_entries.async_update_entry(runtime.entry, options={'extra_entities': values})
+    runtime.hass.config_entries.async_update_entry(runtime.entry, options={'extra_entities': ['sensor.future']})
     await runtime.async_scan()
-    report = statistics_report(runtime, search='sensor.extra_', include_dependencies=True)
-    assert len(report['dependencies']) == DEPENDENCY_PAGE_SIZE
-    assert report['total'] == len(values)
-    next_page = statistics_report(runtime, search='sensor.extra_', offset=DEPENDENCY_PAGE_SIZE, include_dependencies=True)
-    assert len(next_page['dependencies']) == 3
-    assert not set(row['entity_id'] for row in report['dependencies']) & set(row['entity_id'] for row in next_page['dependencies'])
     connection, _ = make_connection(make_user(admin=True))
     connection.async_handle({'id': 1, 'type': 'loona/subscribe_panel', 'dashboard': 'wall-panel'})
     connection.async_handle({'id': 2, 'type': 'subscribe_entities'})
@@ -130,11 +109,8 @@ async def test_optional_dashboard_failure_keeps_filtering_alive(preview_runtime,
     assert runtime.adapter.managed_count == 1
 
 
-async def test_statistics_card_does_not_request_dependency_details(preview_runtime, monkeypatch, make_user, make_connection):
-    def fail_preview(*args):
-        raise AssertionError('Statistics polling must not scan dependencies')
-    monkeypatch.setattr('custom_components.loona.preview.dependency_rows', fail_preview)
+async def test_statistics_endpoint_rejects_removed_dependency_queries(preview_runtime, make_user, make_connection):
     connection, output = make_connection(make_user(admin=True))
-    connection.async_handle({'id': 1, 'type': 'loona/statistics'})
-    assert output[-1]['success']
-    assert output[-1]['result']['dependencies'] == []
+    connection.async_handle({'id': 1, 'type': 'loona/statistics', 'include_dependencies': True})
+    assert not output[-1]['success']
+    assert 'dependencies' not in statistics_report(preview_runtime)

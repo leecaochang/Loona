@@ -1,58 +1,20 @@
 /* Shared English/Simplified Chinese messages for Loona cards. */
 const chinese = {
-  "Loona": "Loona",
-  "Select dashboards": "选择仪表盘",
   "Dashboards": "仪表盘",
-  "Select accounts": "选择账户",
   "Apply filtering to": "筛选哪些账户",
   "Accounts": "账户",
   "Selected accounts": "指定账户",
   "All accounts": "所有账户",
-  "Select at least one dashboard.": "请至少选择一个仪表盘。",
-  "Select at least one active account.": "请至少选择一个有效账户。",
-  "Some choices are no longer available or were selected twice. Choose from the current list.": "部分选项已失效或被重复选择。请从当前列表中重新选择。",
-  "Choose an entity type such as light, or a pattern such as sensor.room_*. Patterns cannot contain spaces or unpaired brackets.": "请选择 light 等实体类型，或 sensor.room_* 等匹配规则。规则不能包含空格或未配对的括号。",
-  "Loona is not running. Reload the integration, then try again.": "Loona 尚未运行。请重新加载集成，然后重试。",
-  "Only one Loona integration can be configured.": "只能配置一个 Loona 集成。",
   "Loona settings": "Loona 设置",
   "Filters and performance": "筛选与性能",
-  "Extra entities": "额外实体",
-  "Advanced entity rules": "高级实体规则",
-  "Card files": "卡片文件",
-  "Why entities are included": "实体包含原因",
-  "All filtered accounts receive the entities from every dashboard selected here.": "被筛选的账户都会收到这里所有所选仪表盘的实体。",
   "Entity filtering": "实体筛选",
   "Registry filtering": "注册表筛选",
-  "Visible-first graphs": "优先加载可见图表",
   "Pause animations during loading": "加载期间暂停动画",
   "Resource filtering": "资源筛选",
-  "Add entities a card needs but Loona did not find, or entities needed on other pages using these accounts.": "添加卡片需要但 Loona 未发现的实体，或这些账户在其他页面需要的实体。",
-  "Include entity types": "包含实体类型",
-  "Include entities or patterns": "包含实体或匹配规则",
-  "Exclude entities or patterns": "排除实体或匹配规则",
   "Additional files to load": "额外加载的文件",
-  "Entity": "实体",
-  "Loona is not running. Reload the integration, then reopen this page.": "Loona 尚未运行。请重新加载集成，再打开此页面。",
-  "Loona could not read the card file list. Reload the integration and try again.": "Loona 无法读取卡片文件列表。请重新加载集成，然后重试。",
   "Enabled": "启用",
   "Rescan dashboards": "重新扫描仪表盘",
   "Reset live statistics": "重置实时统计",
-  "Entities included": "包含的实体数",
-  "Available included entities": "包含且可用的实体数",
-  "Tracked update feeds": "跟踪的更新订阅数",
-  "Filtered update feeds": "已筛选的更新订阅数",
-  "Last successful scan": "上次成功扫描",
-  "Scan duration": "扫描耗时",
-  "Referenced entities": "仪表盘引用的实体数",
-  "Entities not found": "未找到的实体数",
-  "Entity updates sent per second": "每秒发送的实体更新",
-  "Entity updates filtered per second": "每秒筛掉的实体更新",
-  "Entity updates sent": "已发送的实体更新",
-  "Entity updates filtered": "已筛掉的实体更新",
-  "A Loona feature is unavailable": "Loona 的部分功能无法使用",
-  "Loona is sending all entities": "Loona 正在发送全部实体",
-  "An excluded entity is used by a dashboard": "排除的实体正在被仪表盘使用",
-  "Check which card files Loona loads": "请检查 Loona 加载的卡片文件",
   "A feature is unavailable. Check Loona diagnostics.": "部分功能无法使用。请查看 Loona 诊断信息。",
   "Loona card title must be text": "Loona 卡片标题必须为文本",
   "Loona statistics": "Loona 统计",
@@ -69,11 +31,9 @@ const chinese = {
   "Entities currently included": "当前包含的实体",
   "Latest page loads": "最近页面加载",
   "Each dashboard's latest browser reload. Entity counts include all selected dashboards. File counts cover registered card files, not Home Assistant's own files or files loaded separately.": "每个仪表盘最近一次浏览器刷新的记录。实体计数包含所有所选仪表盘。文件计数只包含已注册的卡片文件，不包括 Home Assistant 自身文件或单独加载的文件。",
-  "Sign in as an administrator to view Loona statistics.": "请使用管理员账户登录以查看 Loona 统计。",
   "Could not load statistics. Check that Loona is running, then press Refresh.": "无法加载统计。请确认 Loona 正在运行，再点击“刷新”。",
   "Unable to load statistics": "无法加载统计",
   "Could not reset statistics. Try Reset live statistics on the Loona device page.": "无法重置统计。请尝试 Loona 设备页面上的“重置实时统计”按钮。",
-  "Compatibility issue": "兼容性问题",
   "Dashboard scan incomplete. All entities are being sent.": "仪表盘扫描不完整，正在发送全部实体。",
   "Entity filtering is disabled": "实体筛选已关闭",
   "Entity filtering is active": "实体筛选已启用",
@@ -111,38 +71,71 @@ const chinese = {
   "Usage unknown": "用途不确定",
   "Files kept automatically ({count})": "自动保留的文件（{count}）",
   "These files are needed by your dashboards or shared styling.": "这些文件用于仪表盘卡片或共享样式。",
-  "Changes affect every tab, device and app using the selected accounts.": "修改会影响所选账户使用的所有标签页、设备和应用。",
   "Checked files load; unchecked files are skipped when Resource filtering is on. Save, then reload the browser page.": "开启资源筛选时，勾选的文件会加载，未勾选的文件会跳过。保存后，请刷新浏览器页面。",
   "Refresh is unavailable while you have unsaved changes.": "有未保存的修改时无法刷新。",
   "Change filters, dashboards and accounts": "修改筛选、仪表盘和账户",
-  "Configure": "配置",
-  "Choose the dashboards these accounts will use. Loona includes entities from all selected dashboards. Save an automatically generated dashboard before selecting it.": "选择这些账户会使用的仪表盘。Loona 会包含所有所选仪表盘的实体。自动生成的仪表盘需要先保存，再选择。",
-  "Filtering applies to every tab, device and app using these accounts, including administrators. Other pages may need entities outside your selected dashboards. Reload open pages after setup.": "筛选会影响这些账户使用的所有标签页、设备和应用，也包括管理员账户。其他页面可能需要所选仪表盘之外的实体。设置完成后，请刷新已打开的页面。",
-  "Turn on Enabled to use these features. Optional features start off.\n\nEntity filtering sends only the entities your selected dashboards need. Registry filtering also shortens entity and device lists; turn it off if an editor is missing choices.\n\nVisible-first graphs loads on-screen graphs first. Off-screen graphs load later, or immediately when you scroll to them. Pause animations during loading restores animations automatically.\n\nResource filtering skips optional card files you have not selected. Review Card files before enabling it. Reload the browser page after changing resource choices or comparing graph loading.": "这些功能需要开启“启用”总开关。可选功能默认关闭。\n\n实体筛选只发送所选仪表盘需要的实体。注册表筛选还会缩短实体和设备列表；如果编辑器缺少选项，请关闭它。\n\n优先加载可见图表会先加载屏幕内的图表。屏幕外的图表稍后加载，滚动到它们时则立即加载。加载期间暂停的动画会自动恢复。\n\n资源筛选会跳过未勾选的可选卡片文件。开启前，请检查“卡片文件”。修改文件选择或比较图表加载效果后，请刷新浏览器页面。",
-  "Include an entity type such as light, individual entities, or a pattern such as sensor.*. Saved patterns remain available. Exclusions override inclusions and may leave cards without data. Loona always keeps its own controls and statistics.": "可以包含 light 等实体类型、单个实体，或 sensor.* 等匹配规则。已保存的规则仍可选择。排除规则会覆盖包含规则，可能导致卡片没有数据。Loona 自身的控制和统计实体始终保留。",
-  "Your Home Assistant version or another integration prevents Loona from using a feature. The affected feature is off; Home Assistant handles its requests normally. Check Loona diagnostics for the affected feature and supported versions. After reloading Loona, reload your browser pages.": "当前 Home Assistant 版本或其他集成导致 Loona 的某项功能无法使用。该功能已停用，相关请求由 Home Assistant 正常处理。请查看 Loona 诊断信息，确认受影响的功能和支持的版本。重新加载 Loona 后，请刷新浏览器页面。",
-  "Loona could not build a reliable entity list for your dashboards. Entity and registry filtering are temporarily paused, even if their switches are on. In Loona settings, check that your selected dashboards and accounts still exist. Save automatically generated dashboards. Unsupported templates or auto-entities rules can also prevent a complete scan. Loona resumes filtering when the scan succeeds. Download diagnostics to see what failed.": "Loona 无法确定仪表盘需要的完整实体列表。实体筛选和注册表筛选已暂时停止，即使开关仍然开启。请在 Loona 设置中确认所选仪表盘和账户仍然存在，并保存自动生成的仪表盘。不受支持的模板或 auto-entities 规则也可能导致扫描不完整。扫描成功后会自动恢复筛选。可下载诊断信息查看失败原因。",
-  "A rule removes an entity that a dashboard card uses. The card may show missing or incorrect data. Open Advanced entity rules in Loona settings and remove that exclusion, or turn off Enabled to send all entities.": "某条规则排除了仪表盘卡片使用的实体，可能导致数据缺失或显示错误。请在 Loona 设置中打开“高级实体规则”，移除对应排除规则，或关闭“启用”总开关以发送全部实体。",
-  "Resource filtering is on. Loona cannot confirm every file your dashboards may need, or a saved file is no longer registered. This warning does not mean a card is broken.\n\nOpen Card files in Loona settings. Files Loona knows are needed stay enabled. Check any additional files you need. If everything works, you can leave your choices as they are.\n\nIf a card or icon is missing, turn off Resource filtering and reload the browser page. You can then enable it again with the missing file checked.": "资源筛选已开启，但 Loona 无法确定仪表盘需要的所有文件，或某个已保存的文件已不再注册。此提示不代表卡片已经出错。\n\n请在 Loona 设置中打开“卡片文件”。已确认需要的文件会自动保留。请勾选其他需要的文件。如果一切正常，可以保持当前选择。\n\n如果卡片或图标缺失，请关闭资源筛选并刷新浏览器页面。勾选缺失的文件后，可以再次开启资源筛选。",
-  "Master switch for all Loona filters and loading features.": "Loona 所有筛选和加载功能的总开关。",
-  "Send only entities needed by your selected dashboards and rules.": "只发送所选仪表盘和规则需要的实体。",
-  "Shorten entity and device lists. Turn off if an editor is missing choices.": "缩短实体和设备列表。如果编辑器缺少选项，请关闭它。",
-  "Skip unchecked optional files. Review Card files, then reload the browser page.": "跳过未勾选的可选文件。请检查“卡片文件”，然后刷新浏览器页面。",
-  "Load on-screen graphs first. Scrolling to a waiting graph starts it immediately.": "先加载屏幕内的图表。滚动到等待中的图表时，会立即开始加载。",
   "Pause repeating animations while loading, then resume them automatically.": "加载期间暂停循环动画，随后自动恢复。",
-  "Every filtered account receives entities from all dashboards selected here.": "被筛选的账户都会收到这里所有所选仪表盘的实体。",
-  "Filtering affects every tab, device and app using these accounts, including administrators.": "筛选会影响这些账户使用的所有标签页、设备和应用，也包括管理员账户。",
-  "Choose entity types such as light, entities, or patterns such as sensor.*. Exclusions override inclusions and can leave cards without data.": "请选择 light 等实体类型、单个实体，或 sensor.* 等匹配规则。排除规则会覆盖包含规则，可能导致卡片没有数据。",
   "An update feed receives live entity changes; one tab can have more than one. The entity reduction estimate compares included entities with all current entities, even when filtering is off.": "更新订阅用于接收实体的实时变化，一个标签页可能有多个订阅。实体减少估算通过比较包含的实体与当前全部实体得出，关闭筛选时也会显示。",
   "Rescan checks dashboard changes now. Reset clears live counters and page-load records; entity counts and recorded history stay unchanged.": "重新扫描会立即检查仪表盘变化。重置会清零实时计数并清除页面加载记录，不影响实体数量或已记录的历史数据。",
   "Working...": "正在处理…",
   "Dashboards rescanned": "已重新扫描仪表盘",
   "Live statistics reset": "已重置实时统计",
   "Action failed. Check that Loona is running, then try again.": "操作失败。请确认 Loona 正在运行，然后重试。",
-  "Compatibility": "兼容性",
-  "Dashboard scan": "仪表盘扫描",
   "Estimated entity reduction": "实体数量减少估算",
-  "Live update reduction": "实时更新减少比例"
+  "Entity rules": "实体规则",
+  "Cards": "卡片",
+  "Delay graph loading": "延迟加载图表",
+  "Included": "包含",
+  "Excluded": "排除",
+  "Entities": "实体",
+  "Entity types": "实体类型",
+  "Entities or patterns": "实体或匹配规则",
+  "{count} selected": "已选择 {count} 项",
+  "Loona finds dashboard entities automatically. Use these rules to add anything it missed or exclude entities you do not need.": "Loona 会自动查找仪表盘使用的实体。可用这些规则补充遗漏的实体，或排除不需要的实体。",
+  "Add entities to the automatic dashboard list.": "在自动发现的仪表盘实体列表中添加实体。",
+  "Exclusions override inclusions and may leave cards without data. Loona's own controls and statistics stay included.": "排除规则优先于包含规则，可能导致卡片缺少数据。Loona 自身的控制和统计实体始终保留。",
+  "Turn off to restore standard dashboard behavior immediately.": "关闭后，仪表盘立即恢复标准行为。",
+  "Automatically find the entities used by your selected dashboards.": "自动查找所选仪表盘使用的实体。",
+  "Reduce the entity and device information sent to dashboards, including names, icons and areas.": "减少发送给仪表盘的实体和设备信息，包括名称、图标和区域等。",
+  "Load required files and any additional files selected under Cards. Refresh the browser after changes.": "加载必需的文件和在“卡片”中勾选的其他文件。修改后请刷新浏览器。",
+  "Delay off-screen graphs until the dashboard has loaded. Scrolling to a graph loads it immediately.": "等仪表盘加载完成后再加载屏幕外的图表。滚动到图表时立即加载。",
+  "Choose which dashboards you want to filter.": "选择需要筛选的仪表盘。",
+  "Choose which accounts receive filtered data while viewing selected dashboards.": "选择哪些账户在查看所选仪表盘时接收筛选后的数据。",
+  "Filtering applies only to selected accounts viewing selected dashboards.": "仅当所选账户查看所选仪表盘时应用筛选。",
+  "Version: {version}": "版本：{version}",
+  "Warnings and checks ({count})": "警告与检查（{count}）",
+  "No warnings": "没有警告",
+  "Warning": "警告",
+  "Check": "检查",
+  "Affected items ({count})": "相关项目（{count}）",
+  "Entity filtering is unavailable": "实体筛选无法使用",
+  "Home Assistant is handling entity updates normally. Check Loona diagnostics and the supported Home Assistant versions, then reload Loona and your browser.": "Home Assistant 正在正常处理实体更新。请查看 Loona 诊断信息和支持的 Home Assistant 版本，然后重新加载 Loona 并刷新浏览器。",
+  "Dashboard detection is unavailable": "无法识别当前仪表盘",
+  "Loona cannot identify the active dashboard, so filtering is bypassed. Reload Loona and refresh the browser. If this continues, check diagnostics.": "Loona 无法识别当前仪表盘，因此已跳过筛选。请重新加载 Loona 并刷新浏览器。如果问题持续，请查看诊断信息。",
+  "Registry filtering is unavailable": "注册表筛选无法使用",
+  "Home Assistant is sending normal entity and device information. Check Loona diagnostics for a compatibility problem, then reload Loona.": "Home Assistant 正在发送正常的实体和设备信息。请查看 Loona 诊断信息中的兼容性问题，然后重新加载 Loona。",
+  "Loading optimizations are unavailable": "加载优化无法使用",
+  "Graphs and animations use normal Home Assistant behavior. Check the supported Home Assistant versions and Loona diagnostics.": "图表和动画使用 Home Assistant 的标准行为。请检查支持的 Home Assistant 版本和 Loona 诊断信息。",
+  "Resource filtering is unavailable": "资源筛选无法使用",
+  "Home Assistant is loading its normal card files. Check Loona diagnostics, then reload Loona and the browser.": "Home Assistant 正在正常加载卡片文件。请查看 Loona 诊断信息，然后重新加载 Loona 并刷新浏览器。",
+  "The Loona dashboard could not be created": "无法创建 Loona 仪表盘",
+  "Check for an existing dashboard at loona-statistics and check Loona diagnostics. Your other dashboards are preserved. Reload Loona after resolving the problem.": "请检查是否已有路径为 loona-statistics 的仪表盘，并查看 Loona 诊断信息。其他仪表盘会保留。解决问题后请重新加载 Loona。",
+  "Dashboard scan is incomplete": "仪表盘扫描不完整",
+  "Entity and registry filtering are paused. Check the selected dashboards and accounts, save automatically generated dashboards, and rescan. Unsupported templates, strategies or auto-entities rules may need changes. Filtering resumes after a complete scan.": "实体和注册表筛选已暂停。请检查所选仪表盘和账户，保存自动生成的仪表盘，然后重新扫描。不受支持的模板、策略或 auto-entities 规则可能需要修改。扫描完整后会恢复筛选。",
+  "Referenced entities were not found": "未找到引用的实体",
+  "Check these IDs for typos or deleted entities. Temporary entities may return later. Missing references alone do not pause filtering.": "请检查这些 ID 是否拼写错误或对应实体已被删除。临时实体可能稍后恢复。缺少引用的实体本身不会暂停筛选。",
+  "Excluded entities are used by cards": "排除的实体正在被卡片使用",
+  "These exclusions may leave cards without data. Remove the matching exclusions under Entity rules, or keep them if intentional.": "这些排除规则可能导致卡片缺少数据。可在“实体规则”中移除对应的排除项，或在确实需要时保留。",
+  "Custom cards may use additional entities": "自定义卡片可能使用其他实体",
+  "Loona cannot fully inspect every custom card. If card data is missing, add the needed entities under Entity rules. No action is needed if the cards work.": "Loona 无法完整分析所有自定义卡片。如果卡片缺少数据，请在“实体规则”中添加所需实体。卡片正常工作时无需操作。",
+  "Some card files could not be identified": "无法识别部分卡片文件",
+  "Check the required files under Cards if a card or icon is missing. You can turn off Resource filtering and refresh the browser to compare. No action is needed if everything works.": "如果卡片或图标缺失，请在“卡片”中检查所需文件。可以关闭资源筛选并刷新浏览器进行比较。一切正常时无需操作。",
+  "Templates may load additional files": "模板可能加载其他文件",
+  "Template-driven cards can need files Loona cannot detect. If something is missing, select its file under Cards and refresh the browser. No action is needed if everything works.": "由模板控制的卡片可能需要 Loona 无法识别的文件。如果内容缺失，请在“卡片”中选择对应文件并刷新浏览器。一切正常时无需操作。",
+  "Unchecked files have unknown usage": "未勾选文件的用途不确定",
+  "These files are skipped by Resource filtering. If a card, icon or helper is missing, select the needed files under Cards and refresh the browser. No action is needed if everything works.": "资源筛选会跳过这些文件。如果卡片、图标或辅助功能缺失，请在“卡片”中勾选所需文件并刷新浏览器。一切正常时无需操作。",
+  "Saved card files are no longer registered": "已保存的卡片文件不再注册",
+  "Remove unavailable saved files under Cards, or restore their Home Assistant resource registrations if you still need them.": "请在“卡片”中移除不可用的已保存文件；如果仍需使用，请恢复它们在 Home Assistant 中的资源注册。"
 };
 export function language(hass) {
   return String(hass?.language || hass?.locale?.language || hass?.config?.language || "en");
@@ -156,4 +149,89 @@ export function translate(root, hass) {
   root.querySelectorAll("[data-i18n-placeholder]").forEach(element => {
     element.placeholder = text(hass, element.dataset.i18nPlaceholder);
   });
+}
+
+const notices = {
+  "entity_compatibility": [
+    "Entity filtering is unavailable",
+    "Home Assistant is handling entity updates normally. Check Loona diagnostics and the supported Home Assistant versions, then reload Loona and your browser."
+  ],
+  "panel_compatibility": [
+    "Dashboard detection is unavailable",
+    "Loona cannot identify the active dashboard, so filtering is bypassed. Reload Loona and refresh the browser. If this continues, check diagnostics."
+  ],
+  "registry_compatibility": [
+    "Registry filtering is unavailable",
+    "Home Assistant is sending normal entity and device information. Check Loona diagnostics for a compatibility problem, then reload Loona."
+  ],
+  "graph_compatibility": [
+    "Loading optimizations are unavailable",
+    "Graphs and animations use normal Home Assistant behavior. Check the supported Home Assistant versions and Loona diagnostics."
+  ],
+  "resource_compatibility": [
+    "Resource filtering is unavailable",
+    "Home Assistant is loading its normal card files. Check Loona diagnostics, then reload Loona and the browser."
+  ],
+  "card_installation": [
+    "The Loona dashboard could not be created",
+    "Check for an existing dashboard at loona-statistics and check Loona diagnostics. Your other dashboards are preserved. Reload Loona after resolving the problem."
+  ],
+  "scan_incomplete": [
+    "Dashboard scan is incomplete",
+    "Entity and registry filtering are paused. Check the selected dashboards and accounts, save automatically generated dashboards, and rescan. Unsupported templates, strategies or auto-entities rules may need changes. Filtering resumes after a complete scan."
+  ],
+  "missing_entities": [
+    "Referenced entities were not found",
+    "Check these IDs for typos or deleted entities. Temporary entities may return later. Missing references alone do not pause filtering."
+  ],
+  "excluded_dependencies": [
+    "Excluded entities are used by cards",
+    "These exclusions may leave cards without data. Remove the matching exclusions under Entity rules, or keep them if intentional."
+  ],
+  "unknown_cards": [
+    "Custom cards may use additional entities",
+    "Loona cannot fully inspect every custom card. If card data is missing, add the needed entities under Entity rules. No action is needed if the cards work."
+  ],
+  "unmatched_resources": [
+    "Some card files could not be identified",
+    "Check the required files under Cards if a card or icon is missing. You can turn off Resource filtering and refresh the browser to compare. No action is needed if everything works."
+  ],
+  "dynamic_resources": [
+    "Templates may load additional files",
+    "Template-driven cards can need files Loona cannot detect. If something is missing, select its file under Cards and refresh the browser. No action is needed if everything works."
+  ],
+  "unchecked_resources": [
+    "Unchecked files have unknown usage",
+    "These files are skipped by Resource filtering. If a card, icon or helper is missing, select the needed files under Cards and refresh the browser. No action is needed if everything works."
+  ],
+  "stale_resources": [
+    "Saved card files are no longer registered",
+    "Remove unavailable saved files under Cards, or restore their Home Assistant resource registrations if you still need them."
+  ]
+};
+
+export function renderNotices(root, hass, items) {
+  const open = root.querySelector("details")?.open;
+  root.replaceChildren();
+  if (!items.length) {
+    const healthy=document.createElement("p"); healthy.textContent=text(hass,"No warnings"); root.append(healthy); return;
+  }
+  const section=document.createElement("details"); section.className="loona-notices"; section.open=Boolean(open);
+  const summary=document.createElement("summary"); summary.textContent=text(hass,"Warnings and checks ({count})",{count:items.length}); section.append(summary);
+  const list=document.createElement("ul");
+  for (const item of items) {
+    const message=notices[item.code]; if (!message) continue;
+    const row=document.createElement("li"); row.dataset.notice=item.code;
+    const title=document.createElement("h3"); title.textContent=text(hass,item.severity === "warning" ? "Warning" : "Check")+": "+text(hass,message[0]);
+    const body=document.createElement("p"); body.textContent=text(hass,message[1]); row.append(title,body);
+    if (item.items?.length) {
+      const details=document.createElement("details"); const heading=document.createElement("summary");
+      heading.textContent=text(hass,"Affected items ({count})",{count:item.items.length});
+      const values=document.createElement("div"); values.className="notice-items";
+      for (const value of item.items) { const line=document.createElement("p"); line.textContent=value; values.append(line); }
+      details.append(heading,values); row.append(details);
+    }
+    list.append(row);
+  }
+  section.append(list); root.append(section);
 }

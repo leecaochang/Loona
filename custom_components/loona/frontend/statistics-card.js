@@ -1,5 +1,5 @@
 /* Native-themed live filtering statistics. */
-import { language, text, translate } from "./i18n.js?v=0.8.3";
+import { language, text, translate, renderNotices } from "./i18n.js?v=0.9.0";
 
 const command = "loona/statistics";
 const elementName = "loona-statistics-card";
@@ -32,6 +32,8 @@ function install() {
           :host { display:block; color:var(--primary-text-color); }
           ha-card { padding:24px; overflow:hidden; }
           header { display:flex; justify-content:space-between; align-items:start; gap:16px; }
+          header>div { flex:1; min-width:0; }
+          header>button { flex-shrink:0; white-space:nowrap; }
           h2 { margin:0; font-size:20px; line-height:1.4; font-weight:500; }
           p { margin:8px 0 0; font-size:14px; line-height:1.5; color:var(--secondary-text-color); }
           .state { color:var(--primary-text-color); }
@@ -59,6 +61,12 @@ function install() {
           summary { cursor:pointer; min-height:36px; font-size:15px; line-height:1.5; }
           .rows { margin:0; padding:0; list-style:none; }
           .rows>li { border-top:1px solid var(--divider-color); padding:12px 0; }
+          #version { font-size:12px; }
+          .loona-notices ul { list-style:none; padding:0; margin:0; }
+          .loona-notices li { padding:16px 0; border-top:1px solid var(--divider-color); }
+          .loona-notices li:first-child { border-top:0; }
+          .loona-notices h3 { margin:0; font-size:14px; line-height:1.5; }
+          .loona-notices .notice-items { max-height:160px; overflow:auto; overflow-wrap:anywhere; font-size:12px; }
           #error { color:var(--error-color); overflow-wrap:anywhere; }
           [hidden] { display:none !important; }
           @media(max-width:480px) { ha-card { padding:16px; } .rates { gap:16px 10px; }
@@ -70,6 +78,7 @@ function install() {
             <button id="refresh" aria-label="Refresh Loona statistics" data-i18n="Refresh">Refresh</button></header>
           <p id="error" role="alert" hidden></p>
           <div id="content" hidden>
+            <p id="version"></p><div id="notices"></div>
             <dl class="rates">
               <div><dt data-i18n="Sent">Sent</dt><dd><span id="forwarded">0</span><small data-i18n="updates/s">updates/s</small></dd></div>
               <div><dt data-i18n="Filtered out">Filtered out</dt><dd><span id="avoided">0</span><small data-i18n="updates/s">updates/s</small></dd></div>
@@ -128,6 +137,8 @@ function install() {
         this._loading = false;
         this._get("content").hidden = true;
         this._get("load-rows").replaceChildren();
+        this._get("notices").replaceChildren();
+        this._get("version").textContent = "";
       }
       if (!value?.user?.is_admin) {
         this._get("content").hidden = true;
@@ -199,14 +210,16 @@ function install() {
     }
     _render(data) {
       const metrics = data.metrics;
-      const format = (value) => Number(value).toLocaleString(language(this._hass), { maximumFractionDigits: 3 });
+      this._get("version").textContent = text(this._hass, "Version: {version}", {version:data.version});
+      renderNotices(this._get("notices"), this._hass, data.notices || []);
+      const format = (value) => Number(value).toLocaleString(language(this._hass), { maximumFractionDigits: 1 });
       this._get("content").hidden = false;
       this._get("state").textContent = data.compatibility_problem ? text(this._hass, "A feature is unavailable. Check Loona diagnostics.")
         : !data.complete ? text(this._hass, "Dashboard scan incomplete. All entities are being sent.")
         : !data.controls.enabled || !data.controls.entity_filtering ? text(this._hass, "Entity filtering is disabled")
         : metrics.filtered_subscriptions ? text(this._hass, "Entity filtering is active") : text(this._hass, "No filtered update feed yet. Open a dashboard with a selected account.");
       for (const [id, key] of [["forwarded", "forwarded_rate"], ["avoided", "avoided_rate"], ["reduction", "update_reduction"],
-        ["forwarded-total", "forwarded_updates"], ["avoided-total", "avoided_updates"]]) this._get(id).textContent = format(metrics[key]);
+        ["forwarded-total", "forwarded_updates"], ["avoided-total", "avoided_updates"]]) this._get(id).textContent = key.endsWith("_rate") ? Number(metrics[key]).toLocaleString(language(this._hass), {minimumFractionDigits:1, maximumFractionDigits:1}) : format(metrics[key]);
       this._get("interval").textContent = (data.sample_seconds
         ? text(this._hass, "Measured over the last {seconds} seconds.", { seconds: format(data.sample_seconds) })
         : text(this._hass, "Rates update within {seconds} seconds.", { seconds: format(data.interval_seconds) }))

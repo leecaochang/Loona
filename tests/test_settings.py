@@ -71,7 +71,7 @@ async def test_prefilled_choices_and_private_dispatch(settings_runtime, make_use
     denied, errors = make_connection(make_user())
     before = dict(runtime.entry.options), dict(runtime.controls)
     for name, fields in [('loona/settings', {}), ('loona/save_settings', {
-        'group': 'extra_entities', 'revision': report['revision'], 'values': {'extra_entities': []},
+        'group': 'rules', 'revision': report['revision'], 'values': {'extra_entities': []},
     })]:
         response = await request(runtime, denied, errors, name, **fields)
         assert not response['success'] and response['error']['code'] == 'unauthorized'
@@ -85,9 +85,9 @@ async def test_prefilled_choices_and_private_dispatch(settings_runtime, make_use
     ('dashboards', {'dashboards': ['invented']}, 'invalid_selection'),
     ('targets', {'target_mode': 'selected', 'user_ids': []}, 'no_accounts'),
     ('targets', {'target_mode': 'selected', 'user_ids': ['invented']}, 'invalid_selection'),
-    ('extra_entities', {'extra_entities': ['sensor.invented']}, 'invalid_selection'),
-    ('extra_entities', {'extra_entities': ['sensor.wall', 'sensor.wall']}, 'invalid_selection'),
-    ('rules', {'include_domains': [], 'include_globs': ['sensor.invented'], 'exclude_globs': []}, 'invalid_selection'),
+    ('rules', {'extra_entities': ['sensor.invented'], 'include_domains': [], 'include_globs': [], 'exclude_globs': []}, 'invalid_selection'),
+    ('rules', {'extra_entities': ['sensor.wall', 'sensor.wall'], 'include_domains': [], 'include_globs': [], 'exclude_globs': []}, 'invalid_selection'),
+    ('rules', {'extra_entities': [], 'include_domains': [], 'include_globs': ['sensor.invented'], 'exclude_globs': []}, 'invalid_selection'),
     ('resources', {'always_forward_resources': ['/local/invented.js']}, 'invalid_selection'),
     ('controls', {'enabled': True}, 'invalid_selection'),
 ])
@@ -109,8 +109,7 @@ async def test_valid_sections_reconcile_without_replacing_subscriptions(settings
     for group, values in [
         ('dashboards', {'dashboards': ['lovelace', 'wall-panel']}),
         ('targets', {'target_mode': 'selected', 'user_ids': [admin.id]}),
-        ('extra_entities', {'extra_entities': ['sensor.other']}),
-        ('rules', {'include_domains': ['sensor'], 'include_globs': ['sensor.saved_*'], 'exclude_globs': []}),
+        ('rules', {'extra_entities': ['sensor.other'], 'include_domains': ['sensor'], 'include_globs': ['sensor.saved_*'], 'exclude_globs': []}),
         ('resources', {'always_forward_resources': []}),
     ]:
         before = dict(runtime.entry.options)
@@ -123,12 +122,12 @@ async def test_valid_sections_reconcile_without_replacing_subscriptions(settings
     # Changes through Configure or native switches invalidate card revisions.
     old = revision(runtime)
     await runtime.async_set_control('enabled', False)
-    response = await request(runtime, client, output, 'loona/save_settings', group='extra_entities', revision=old, values={'extra_entities': []})
+    response = await request(runtime, client, output, 'loona/save_settings', group='rules', revision=old, values={'extra_entities': []})
     assert response['error']['code'] == 'conflict'
     assert runtime.settings['extra_entities'] == ['sensor.other']
     old = revision(runtime)
     runtime.hass.config_entries.async_update_entry(runtime.entry, options={**runtime.entry.options, 'extra_entities': []})
-    response = await request(runtime, client, output, 'loona/save_settings', group='extra_entities', revision=old, values={'extra_entities': ['sensor.other']})
+    response = await request(runtime, client, output, 'loona/save_settings', group='rules', revision=old, values={'extra_entities': ['sensor.other']})
     assert response['error']['code'] == 'conflict'
 
 

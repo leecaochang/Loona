@@ -35,6 +35,8 @@ from homeassistant.util import dt as dt_util
 from .compatibility import CompatibilityError
 from .const import (
     CONF_DASHBOARDS,
+    CONF_DASHBOARD_CARDS,
+    DASHBOARD_CARDS,
     CONF_ALWAYS_FORWARD,
     CONTROL_RESOURCES,
     RESOURCE_CORE_VERSIONS,
@@ -91,6 +93,7 @@ class LoonaRuntime:
         self.excluded_reasons: dict[str, tuple[str, ...]] = {}
         self.dashboards: dict[str, DiscoveryResult] = {}
         self.unresolved: dict[str, frozenset[str]] = {}
+        self.missing_extra_entities: frozenset[str] = frozenset()
         self.problems: tuple[str, ...] = ()
         self.warnings: tuple[str, ...] = ()
         self.entity_compatibility_problem: str | None = None
@@ -179,7 +182,7 @@ class LoonaRuntime:
             name="Loona",
             manufacturer="Loona",
             model="Loona",
-            sw_version=VERSION,
+            sw_version=None,
         ).id
         for event_type in (
             EVENT_LOVELACE_UPDATED,
@@ -261,7 +264,7 @@ class LoonaRuntime:
         if self.statistics_card.enabled:
             return
         try:
-            await self.statistics_card.set_enabled(True)
+            await self.statistics_card.set_enabled(True, tuple(self.settings.get(CONF_DASHBOARD_CARDS, DASHBOARD_CARDS)))
         except StatisticsCardError as err:
             self.statistics_card_problem = str(err)
         else:
@@ -444,6 +447,7 @@ class LoonaRuntime:
                 key: result.entity_ids - context.entity_ids
                 for key, result in results.items()
             }
+            self.missing_extra_entities = frozenset(settings.get(CONF_EXTRA_ENTITIES, ())) - context.entity_ids
             self.reasons = {key: tuple(sorted(value)) for key, value in reasons.items()}
             self.excluded_reasons = excluded
             self.entity_ids = frozenset(reasons)
@@ -597,33 +601,41 @@ class LoonaRuntime:
 
     @callback
     def _update_issues(self) -> None:
-        for key, active in (
-            ("compatibility", self.compatibility_problem is not None),
-            ("scope", bool(self.problems)),
-            ("resources", bool(
-                self.controls[CONTROL_MASTER] and self.controls[CONTROL_RESOURCES]
-                and (self.resource_preview.get("unresolved_custom_types")
-                     or self.resource_preview.get("dynamic_configuration")
-                     or self.resource_preview.get("stale_exceptions")
-                     or self.resource_preview.get("counts", {}).get("unclassified"))
-            )),
-            (
-                "exclusion",
-                any("exclusion removes" in warning for warning in self.warnings),
-            ),
-        ):
-            issue_id = f"{self.entry.entry_id}_{key}"
+        """Retire previously created Repairs; notices now belong to Loona."""
+        for key in ("compatibility", "scope", "exclusion", "resources"):
+            ir.async_delete_issue(self.hass, DOMAIN, f"{self.entry.entry_id}_{key}")
+
+    def notice_report(self) -> list[dict[str, Any]]:
+        """Describe detected conditions without publishing HA notifications."""
+        notices: list[dict[str, Any]] = []
+
+        def add(code: str, active: Any, *, severity: str = "warning", items: Any = ()) -> None:
             if active:
-                ir.async_create_issue(
-                    self.hass,
-                    DOMAIN,
-                    issue_id,
-                    is_fixable=False,
-                    severity=ir.IssueSeverity.WARNING,
-                    translation_key=key,
-                )
-            else:
-                ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+                notices.append({"code": code, "severity": severity, "items": sorted(set(items))})
+
+        for feature in ("entity", "panel", "registry", "graph", "resource"):
+            add(feature + "_compatibility", getattr(self, feature + "_compatibility_problem"))
+        add("card_installation", self.statistics_card_problem)
+        filtering = self.controls[CONTROL_MASTER] and (
+            self.controls[CONTROL_ENTITIES] or self.controls[CONTROL_REGISTRIES])
+        add("scan_incomplete", filtering and self.problems)
+        missing = set().union(*self.unresolved.values()) if self.unresolved else set()
+        missing.update(self.missing_extra_entities)
+        add("missing_entities", missing, items=missing)
+        excluded = set(self.excluded_reasons) & set().union(
+            *(result.entity_ids for result in self.dashboards.values()))
+        add("excluded_dependencies", filtering and excluded, items=excluded)
+        add("unknown_cards", filtering and any("custom card may need" in item for item in self.warnings), severity="info")
+        if self.controls[CONTROL_MASTER] and self.controls[CONTROL_RESOURCES]:
+            report = self.resource_preview
+            add("unmatched_resources", report.get("unresolved_custom_types"), severity="info",
+                items=report.get("unresolved_custom_types", ()))
+            add("dynamic_resources", report.get("dynamic_configuration"), severity="info")
+            unchecked = [row["url"] for row in report.get("resources", ())
+                         if row["status"] == "unclassified" and not row["forwarded"]]
+            add("unchecked_resources", unchecked, severity="info", items=unchecked)
+            add("stale_resources", report.get("stale_exceptions"), items=report.get("stale_exceptions", ()))
+        return notices
 
     def metrics(self) -> dict[str, Any]:
         """Entity count estimates use current state IDs, not transport bytes."""
@@ -631,6 +643,8 @@ class LoonaRuntime:
         scoped = len(current & self.entity_ids)
         return {
             **self.live_statistics.metrics(),
+            "warnings": sum(item["severity"] == "warning" for item in self.notice_report()),
+            "version": VERSION,
             "union_entities": len(self.entity_ids),
             "current_scope": scoped,
             "reduction_estimate": round(100 * (1 - scoped / len(current)), 1)

@@ -29,7 +29,7 @@ async def async_setup_entry(
 
 
 class LoonaProblem(LoonaEntity, BinarySensorEntity):
-    """Repairs explains an active problem without copying dashboard data."""
+    """Summarize compatibility and scan status without copying dashboard data."""
 
     _attr_device_class = BinarySensorDeviceClass.PROBLEM
     _attr_entity_category = EntityCategory.DIAGNOSTIC

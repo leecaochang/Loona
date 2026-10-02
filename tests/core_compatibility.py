@@ -135,6 +135,10 @@ async def check(hass: HomeAssistant) -> None:
     form = await flow.async_step_user(form["data_schema"]({"dashboards": ["wall-panel"]}))
     assert form["step_id"] == "targets"
     result = await flow.async_step_targets(form["data_schema"]({"target_mode": "all"}))
+    assert result["step_id"] == "cards"
+    result = await flow.async_step_cards({"dashboard_cards": ["statistics", "settings"]})
+    assert result["step_id"] == "finish"
+    result = await flow.async_step_finish({})
     assert result["type"] == "create_entry"
     kwargs = dict(domain=DOMAIN, data=result["data"], options={"statistics_card": False}, version=1, minor_version=1,
                   title="Loona", source="user", unique_id=DOMAIN)
@@ -218,6 +222,23 @@ async def check(hass: HomeAssistant) -> None:
         runtime = entry.runtime_data
         assert not runtime.compatibility_problem, runtime.compatibility_problem
         assert runtime.statistics_card.enabled
+        assert not any(domain == DOMAIN for domain, _ in ir.async_get(hass).issues)
+        from custom_components.loona.statistics_card import StatisticsCard
+        # Exercise each optional installation against the real native collection.
+        await runtime.statistics_card.set_enabled(False)
+        for cards in ((), ("settings",), ("statistics",), ("statistics", "settings")):
+            await runtime.statistics_card.set_enabled(True, cards)
+            boards_now = hass.data[key].dashboards if data_class else hass.data[key]["dashboards"]
+            if cards:
+                generated_cards = (await boards_now["loona-statistics"].async_load(False))["views"][0]["cards"]
+                assert [row["type"] for row in generated_cards] == [f"custom:loona-{name}-card" for name in cards]
+                assert boards_now["loona-statistics"].config["icon"] == "mdi:weather-night"
+            else:
+                assert "loona-statistics" not in boards_now
+            # Reloaded ownership must remove one-card dashboards too.
+            await StatisticsCard(hass, entry.entry_id).set_enabled(False)
+            runtime.statistics_card.unload()
+        await runtime.statistics_card.set_enabled(True)
         statistics_board = hass.data[key].dashboards["loona-statistics"] if data_class else hass.data[key]["dashboards"]["loona-statistics"]
         statistics_id = statistics_board.config["id"]
         generated = await statistics_board.async_load(False)
@@ -275,7 +296,7 @@ async def check(hass: HomeAssistant) -> None:
         rows = er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
         controls = {row.unique_id.rsplit(":", 1)[-1]: row.entity_id for row in rows if row.domain == "switch"}
         assert set(controls) == expected
-        assert len(rows) == 18 + len(expected)
+        assert len(rows) == 20 + len(expected)
         assert all(hass.states.get(row.entity_id) is not None for row in rows)
         assert {row.entity_id for row in rows} <= runtime.entity_ids
         child = dr.async_get(hass).async_get(runtime.dashboard_devices["wall-panel"])
@@ -366,26 +387,26 @@ async def check(hass: HomeAssistant) -> None:
         assert any("sensor.wall" in packet.get("event", {}).get("c", {}) for packet in output[before:])
         assert all("sensor.denied" not in packet.get("event", {}).get("c", {}) for packet in limited_output)
 
-        connection.async_handle({"id": 3, "type": "loona/statistics", "search": "sensor.wall", "include_dependencies": True})
-        assert output[-1]["result"]["dependencies"][0]["entity_id"] == "sensor.wall"
+        connection.async_handle({"id": 3, "type": "loona/statistics"})
+        assert "dependencies" not in output[-1]["result"]
         restricted.async_handle({"id": 3, "type": "loona/statistics"})
         assert limited_output[-1]["success"] is False
         connection.async_handle({"id": 4, "type": "loona/settings"})
         await hass.async_block_till_done()
         card_settings = next(row["result"] for row in output if row.get("id") == 4)
         assert set(card_settings["values"]["controls"]) == expected
-        extras = card_settings["values"]["extra_entities"]
-        connection.async_handle({"id": 5, "type": "loona/save_settings", "group": "extra_entities",
-                                 "revision": card_settings["revision"], "values": {"extra_entities": ["sensor.other"]}})
+        extras = card_settings["values"]["rules"]
+        connection.async_handle({"id": 5, "type": "loona/save_settings", "group": "rules",
+                                 "revision": card_settings["revision"], "values": {**extras, "extra_entities": ["sensor.other"]}})
         await hass.async_block_till_done()
         saved = next(row for row in output if row.get("id") == 5)
         assert saved["success"] and runtime.settings["extra_entities"] == ["sensor.other"]
-        connection.async_handle({"id": 6, "type": "loona/save_settings", "group": "extra_entities",
+        connection.async_handle({"id": 6, "type": "loona/save_settings", "group": "rules",
                                  "revision": saved["result"]["revision"], "values": extras})
         await hass.async_block_till_done()
         assert next(row for row in output if row.get("id") == 6)["success"]
         restricted.async_handle({"id": 4, "type": "loona/settings"})
-        restricted.async_handle({"id": 5, "type": "loona/save_settings", "group": "extra_entities",
+        restricted.async_handle({"id": 5, "type": "loona/save_settings", "group": "rules",
                                  "revision": card_settings["revision"], "values": extras})
         assert all(not row["success"] for row in limited_output if row.get("id") in {4, 5} and row.get("type") == "result")
         assert runtime.live_statistics.forwarded > 0 and runtime.live_statistics.avoided > 0

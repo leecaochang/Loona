@@ -14,6 +14,7 @@ from .config_flow import entity_rule_choices, human_accounts, validate_dashboard
 from .const import (
     CONF_ALWAYS_FORWARD, CONF_DASHBOARDS, CONF_EXTRA_ENTITIES,
     CONF_TARGET_MODE, CONF_USER_IDS, DOMAIN, TARGET_SELECTED, CONTROL_RESOURCES, CONTROL_DEFAULTS,
+    VERSION,
     SETTINGS_COMMAND, SETTINGS_SAVE_COMMAND, SETTINGS_GROUPS, SETTINGS_CHOICE_PAGE, SETTINGS_EMPTY_DEFAULTS,
 )
 from .dashboard import dashboard_titles
@@ -50,13 +51,14 @@ async def settings_report(runtime: LoonaRuntime) -> dict[str, Any]:
     available_entities = known_entities(runtime)
     entities = available_entities | set(settings.get(CONF_EXTRA_ENTITIES, []))
     return {
+        "version": VERSION,
+        "notices": runtime.notice_report(),
         "revision": _revision(settings, controls),
         "choice_page": SETTINGS_CHOICE_PAGE,
         "values": {
             "controls": {key: controls[key] for key in CONTROL_DEFAULTS if key in runtime.available_controls},
             "dashboards": {CONF_DASHBOARDS: list(settings.get(CONF_DASHBOARDS, []))},
             "targets": {CONF_TARGET_MODE: settings.get(CONF_TARGET_MODE, TARGET_SELECTED), CONF_USER_IDS: list(settings.get(CONF_USER_IDS, []))},
-            "extra_entities": {CONF_EXTRA_ENTITIES: list(settings.get(CONF_EXTRA_ENTITIES, []))},
             "rules": {key: list(settings.get(key, [])) for key in rules},
             "resources": {CONF_ALWAYS_FORWARD: list(settings.get(CONF_ALWAYS_FORWARD, []))},
         },
@@ -68,7 +70,8 @@ async def settings_report(runtime: LoonaRuntime) -> dict[str, Any]:
             CONF_EXTRA_ENTITIES: [{"value": key, "label": (registry.entities[key].name or registry.entities[key].original_name or key)
                                    if key in registry.entities else key, "unavailable": key not in available_entities}
                                  for key in sorted(entities)],
-            **{key: [{"value": value, "label": value} for value in values] for key, values in rules.items()},
+            **{key: [{"value": value, "label": value} for value in values]
+               for key, values in rules.items() if key != CONF_EXTRA_ENTITIES},
             CONF_ALWAYS_FORWARD: [{"value": row["url"], "label": row["url"], "status": row["status"]}
                                   for row in resources["resources"] if row["status"] != "required"]
                 + [{"value": url, "label": url, "unavailable": True} for url in resources["stale_exceptions"]],
@@ -133,9 +136,7 @@ async def websocket_save_settings(hass: HomeAssistant, connection: websocket_api
                     raise ValueError(error)
             else:
                 choices = entity_rule_choices(hass, runtime.settings)
-                if group == "extra_entities":
-                    choices = {CONF_EXTRA_ENTITIES: sorted(known_entities(runtime) | set(runtime.settings.get(CONF_EXTRA_ENTITIES, [])))}
-                elif group == "resources":
+                if group == "resources":
                     if CONTROL_RESOURCES not in runtime.available_controls:
                         raise ValueError("unsupported")
                     report = await runtime.async_resource_preview()

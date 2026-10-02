@@ -10,11 +10,13 @@ from homeassistant.config_entries import (
     ConfigFlowResult,
     OptionsFlow,
 )
-from homeassistant.core import HomeAssistant, callback, valid_entity_id
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er, selector
 
 from .const import (
     CONF_DASHBOARDS,
+    CONF_DASHBOARD_CARDS,
+    DASHBOARD_CARDS,
     CONF_ALWAYS_FORWARD,
     CONTROL_RESOURCES,
     CONF_TARGET_MODE,
@@ -35,7 +37,6 @@ from .const import (
 )
 from .compatibility import CompatibilityError
 from .dashboard import dashboard_titles
-from .preview import dependency_rows
 
 
 def entity_rule_choices(
@@ -46,6 +47,7 @@ def entity_rule_choices(
     domains = {entity_id.split(".", 1)[0] for entity_id in entities}
     patterns = entities | {f"{domain}.*" for domain in domains}
     choices = {
+        CONF_EXTRA_ENTITIES: entities,
         CONF_INCLUDE_DOMAINS: domains,
         CONF_INCLUDE_GLOBS: patterns.copy(),
         CONF_EXCLUDE_GLOBS: patterns.copy(),
@@ -159,7 +161,7 @@ class LoonaConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     def __init__(self) -> None:
-        """Collect the two short setup forms."""
+        """Collect dashboard, account and optional card choices."""
         super().__init__()
         self._settings: dict[str, Any] = {}
 
@@ -198,12 +200,42 @@ class LoonaConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors["base"] = error
             else:
                 self._settings.update(user_input)
-                return self.async_create_entry(title="Loona", data=self._settings)
+                return await self.async_step_cards()
         return self.async_show_form(
             step_id="targets",
             data_schema=await target_schema(self.hass, user_input or self._settings),
             errors=errors,
         )
+
+    async def async_step_cards(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Offer either bundled card, both, or no generated dashboard."""
+        schema = vol.Schema({vol.Optional(CONF_DASHBOARD_CARDS, default=[]):
+            selector.SelectSelector(selector.SelectSelectorConfig(
+                options=list(DASHBOARD_CARDS), multiple=True,
+                translation_key="dashboard_cards", mode=selector.SelectSelectorMode.LIST,
+            ))})
+        errors = {}
+        if user_input is not None:
+            try:
+                values = schema(user_input)
+                cards = values[CONF_DASHBOARD_CARDS]
+                if len(cards) != len(set(cards)):
+                    raise vol.Invalid("Duplicate card")
+            except vol.Invalid:
+                errors["base"] = "invalid_selection"
+            else:
+                self._settings.update(values)
+                if cards:
+                    return await self.async_step_finish()
+                return self.async_create_entry(title="Loona", data=self._settings)
+        return self.async_show_form(step_id="cards", data_schema=schema, errors=errors)
+
+    async def async_step_finish(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Make the browser refresh requirement visible before completing setup."""
+        if user_input is not None:
+            return self.async_create_entry(title="Loona", data=self._settings)
+        return self.async_show_form(step_id="finish", data_schema=vol.Schema({}), last_step=True)
+
 
 class LoonaOptionsFlow(OptionsFlow):
     """Update one category while preserving every other saved option."""
@@ -245,10 +277,8 @@ class LoonaOptionsFlow(OptionsFlow):
                 "dashboards",
                 "targets",
                 "filters",
-                "extra_entities",
                 "rules",
                 "resource_preview",
-                "dependency_preview",
             ],
         )
 
@@ -267,34 +297,6 @@ class LoonaOptionsFlow(OptionsFlow):
             data_schema=dashboard_schema(self.hass, self.settings),
             errors=errors,
         )
-
-    async def async_step_dependency_preview(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Inspect one dependency at a time without storing any configuration."""
-        runtime = getattr(self.config_entry, "runtime_data", None)
-        if runtime is None:
-            return self.async_abort(reason="not_loaded")
-        rows = {row["entity_id"]: row for row in dependency_rows(runtime)}
-        selected = (user_input or {}).get("entity", "")
-        errors = {} if selected in rows or not selected else {"base": "invalid_selection"}
-        row = rows.get(selected)
-        reasons = row["reasons"] if row else []
-        # Localized prose belongs to HA translations; provenance paths stay literal.
-        special = {"extra entity", "include rule", "Loona control or statistic"}
-        detail = "\n".join("- " + reason.replace("`", "") for reason in reasons if reason not in special)
-        return self.async_show_form(step_id="dependency_preview", errors=errors,
-            description_placeholders={
-                "count": str(len(rows)), "detail": detail or "-",
-                "retained": selected if row and row["status"] == "retained" else "-",
-                "excluded": selected if row and row["status"] == "excluded" else "-",
-                "unresolved": selected if row and row["unresolved"] else "-",
-                "extra": selected if "extra entity" in reasons else "-",
-                "rule": selected if "include rule" in reasons else "-",
-                "protected": selected if "Loona control or statistic" in reasons else "-",
-            },
-            data_schema=vol.Schema({vol.Optional("entity", default=selected if selected in rows else ""):
-                selector.SelectSelector(selector.SelectSelectorConfig(
-                    options=[""] + list(rows), mode=selector.SelectSelectorMode.DROPDOWN,
-                ))}))
 
     async def async_step_targets(
         self, user_input: dict[str, Any] | None = None
@@ -336,38 +338,6 @@ class LoonaOptionsFlow(OptionsFlow):
                         CONTROL_ENTITIES, CONTROL_REGISTRIES, CONTROL_RESOURCES, CONTROL_GRAPHS, CONTROL_MOTION
                     )
                     if runtime is not None and key in runtime.available_controls
-                }
-            ),
-        )
-
-    async def async_step_extra_entities(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Augment discovered dependencies through the native entity picker."""
-        errors: dict[str, str] = {}
-        if user_input is not None:
-            raw = user_input.get(CONF_EXTRA_ENTITIES, [])
-            entities = [
-                er.async_resolve_entity_id(er.async_get(self.hass), item) or item
-                for item in raw
-            ]
-            if any(not valid_entity_id(item) for item in entities) or len(
-                entities
-            ) != len(set(entities)):
-                errors["base"] = "invalid_selection"
-            else:
-                return self.finish({CONF_EXTRA_ENTITIES: entities})
-        return self.async_show_form(
-            step_id="extra_entities",
-            errors=errors,
-            data_schema=vol.Schema(
-                {
-                    vol.Optional(
-                        CONF_EXTRA_ENTITIES,
-                        default=self.settings.get(CONF_EXTRA_ENTITIES, []),
-                    ): selector.EntitySelector(
-                        selector.EntitySelectorConfig(multiple=True)
-                    )
                 }
             ),
         )

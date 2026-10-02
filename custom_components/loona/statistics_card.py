@@ -10,7 +10,7 @@ from homeassistant.components.lovelace.dashboard import DashboardsCollection
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
-from .const import DOMAIN, STATISTICS_ASSET, STATISTICS_DASHBOARD, SETTINGS_ASSET, I18N_ASSET, VERSION
+from .const import DOMAIN, STATISTICS_ASSET, STATISTICS_DASHBOARD, SETTINGS_ASSET, I18N_ASSET, VERSION, DASHBOARD_CARDS
 from .dashboard import dashboard_objects
 
 
@@ -18,10 +18,10 @@ class StatisticsCardError(ValueError):
     """Installation cannot safely complete without changing user-owned data."""
 
 
-def card_dashboard_config() -> dict[str, Any]:
+def card_dashboard_config(cards: tuple[str, ...] = DASHBOARD_CARDS) -> dict[str, Any]:
     """Only this exact generated configuration may be automatically removed."""
     return {"views": [{"title": "Loona", "path": "statistics", "cards": [
-        {"type": "custom:loona-statistics-card"}, {"type": "custom:loona-settings-card"}
+        {"type": f"custom:loona-{card}-card"} for card in cards
     ]}]}
 
 
@@ -30,7 +30,7 @@ class StatisticsCard:
 
     def __init__(self, hass: HomeAssistant, entry_id: str) -> None:
         self.hass = hass
-        self.store: Store[dict[str, str]] = Store(hass, 1, f"{DOMAIN}.{entry_id}.statistics_dashboard")
+        self.store: Store[dict[str, Any]] = Store(hass, 1, f"{DOMAIN}.{entry_id}.statistics_dashboard")
         self.url = f"{STATISTICS_ASSET}?v={VERSION}"
         self.module_urls = (self.url, f"{SETTINGS_ASSET}?v={VERSION}")
         self.lock = asyncio.Lock()
@@ -80,21 +80,27 @@ class StatisticsCard:
                 raise StatisticsCardError("Native frontend asset API is unavailable")
             self.hass.data[key] = True
 
-    async def set_enabled(self, enabled: bool) -> None:
+    async def set_enabled(self, enabled: bool, cards: tuple[str, ...] = DASHBOARD_CARDS) -> None:
         """Create/remove only the dedicated dashboard recorded as ours."""
         try:
-            await self._set_enabled(enabled)
+            await self._set_enabled(enabled, cards)
         except StatisticsCardError:
             raise
         except Exception as err:
             raise StatisticsCardError("Native statistics dashboard operation failed") from err
 
-    async def _set_enabled(self, enabled: bool) -> None:
+    async def _set_enabled(self, enabled: bool, cards: tuple[str, ...]) -> None:
         """Serialize installation and preserve native failures for diagnosis."""
         async with self.lock:
             owned = await self.store.async_load() or {}
             if not enabled and not owned:
                 self.unload()
+                return
+            if enabled and not cards and not owned:
+                await self.register_asset()
+                for url in self.module_urls:
+                    frontend.add_extra_js_url(self.hass, url)
+                self.enabled = True
                 return
             collection = self.collection()
             board = dashboard_objects(self.hass).get(STATISTICS_DASHBOARD)
@@ -109,7 +115,7 @@ class StatisticsCard:
                         config = await board.async_load(False)
                     except Exception as err:
                         raise StatisticsCardError("Cannot verify the statistics dashboard") from err
-                    if config != card_dashboard_config():
+                    if config != card_dashboard_config(tuple(owned.get("cards", DASHBOARD_CARDS))):
                         raise StatisticsCardError("The statistics dashboard was edited; remove it manually first")
                     await collection.async_delete_item(owned["id"])
                 await self.store.async_remove()
@@ -122,11 +128,11 @@ class StatisticsCard:
                 if board is None:
                     created = await collection.async_create_item({
                         "url_path": STATISTICS_DASHBOARD, "title": "Loona",
-                        "icon": "mdi:chart-box-outline", "require_admin": True, "show_in_sidebar": True,
+                        "icon": "mdi:weather-night", "require_admin": True, "show_in_sidebar": True,
                     })
                     try:
-                        await self.store.async_save({"id": created["id"]})
-                        await dashboard_objects(self.hass)[STATISTICS_DASHBOARD].async_save(card_dashboard_config())
+                        await self.store.async_save({"id": created["id"], "cards": list(cards)})
+                        await dashboard_objects(self.hass)[STATISTICS_DASHBOARD].async_save(card_dashboard_config(cards))
                     except Exception:
                         await collection.async_delete_item(created["id"])
                         await self.store.async_remove()
@@ -135,8 +141,13 @@ class StatisticsCard:
                     existing = await board.async_load(False)
                     legacy = {"views": [{"title": "Statistics", "path": "statistics", "cards": [{"type": "custom:loona-statistics-card"}]}]}
                     if existing == legacy:
-                        await board.async_save(card_dashboard_config())
-                        await collection.async_update_item(owned["id"], {"title": "Loona"})
+                        await board.async_save(card_dashboard_config(cards))
+                        await self.store.async_save({"id": owned["id"], "cards": list(cards)})
+                        if (board.config or {}).get("title") == "Statistics":
+                            await collection.async_update_item(owned["id"], {"title": "Loona"})
+                    metadata = board.config or {}
+                    if metadata.get("icon") == "mdi:chart-box-outline":
+                        await collection.async_update_item(owned["id"], {"icon": "mdi:weather-night"})
             except Exception:
                 self._remove_module()
                 raise

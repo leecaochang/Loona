@@ -116,7 +116,7 @@ async def test_empty_or_dynamic_scopes_bypass_entire_union(
     assert runtime.scope_problem
     assert runtime.last_scan == last_success
     assert set(wire[-1]["event"]["a"]) == {"sensor.wall", "sensor.other"}
-    assert ir.async_get(runtime.hass).async_get_issue(
+    assert not ir.async_get(runtime.hass).async_get_issue(
         DOMAIN, f"{runtime.entry.entry_id}_scope"
     )
     await dashboards["wall-panel"].async_save({"cards": [{"entity": "sensor.wall"}]})
@@ -409,3 +409,48 @@ async def test_upgrade_preserves_legacy_dashboard_device_id(
         assert child.parent_device_id == parent.id
     finally:
         await runtime.async_stop()
+
+
+async def test_notices_replace_repairs_and_clear_after_recovery(runtime, dashboards):
+    """Publish real scan failures locally and retire persisted Repair issues."""
+    ir.async_create_issue(runtime.hass, DOMAIN, f"{runtime.entry.entry_id}_scope",
+                          is_fixable=False, severity=ir.IssueSeverity.WARNING,
+                          translation_key="scope")
+    await dashboards["wall-panel"].async_save({"strategy": {"type": "unknown"}})
+    await runtime.async_scan()
+    assert "scan_incomplete" in {item["code"] for item in runtime.notice_report()}
+    assert runtime.metrics()["warnings"] >= 1
+    assert not any(domain == DOMAIN for domain, _ in ir.async_get(runtime.hass).issues)
+    await dashboards["wall-panel"].async_save({"cards": [{"entity": "sensor.wall"}]})
+    await runtime.async_scan()
+    assert "scan_incomplete" not in {item["code"] for item in runtime.notice_report()}
+    assert runtime.metrics()["warnings"] == 0
+
+
+async def test_missing_excluded_and_unknown_card_notices(runtime, dashboards):
+    """Separate missing references and actual exclusions from uncertain cards."""
+    await dashboards["wall-panel"].async_save({"cards": [
+        {"type": "custom:unrecognized", "entity": "sensor.wall"},
+        {"entity": "sensor.deleted"},
+    ]})
+    runtime.hass.config_entries.async_update_entry(runtime.entry, options={
+        "extra_entities": ["sensor.missing_extra"], "exclude_globs": ["sensor.wall"],
+    })
+    await runtime.async_scan()
+    notices = {item["code"]: item for item in runtime.notice_report()}
+    assert notices["missing_entities"]["items"] == ["sensor.deleted", "sensor.missing_extra"]
+    assert notices["excluded_dependencies"]["items"] == ["sensor.wall"]
+    assert notices["unknown_cards"]["severity"] == "info"
+    assert runtime.metrics()["warnings"] == 2
+    await runtime.async_set_control("enabled", False)
+    notices = {item["code"]: item for item in runtime.notice_report()}
+    assert "excluded_dependencies" not in notices and "unknown_cards" not in notices
+    assert runtime.metrics()["warnings"] == 1
+
+
+@pytest.mark.parametrize("feature", ["entity", "panel", "registry", "graph", "resource"])
+async def test_each_compatibility_warning_is_reported_independently(runtime, feature):
+    setattr(runtime, feature + "_compatibility_problem", "Function ownership changed")
+    assert feature + "_compatibility" in {item["code"] for item in runtime.notice_report()}
+    setattr(runtime, feature + "_compatibility_problem", None)
+    assert feature + "_compatibility" not in {item["code"] for item in runtime.notice_report()}

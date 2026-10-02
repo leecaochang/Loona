@@ -4,18 +4,29 @@
     "step": {
       "user": {
         "title": "选择仪表盘",
-        "description": "选择这些账户会使用的仪表盘。Loona 会包含所有所选仪表盘的实体。自动生成的仪表盘需要先保存，再选择。",
+        "description": "选择需要筛选的仪表盘。自动生成的仪表盘需要先保存，再选择。",
         "data": {
           "dashboards": "仪表盘"
         }
       },
       "targets": {
         "title": "选择账户",
-        "description": "筛选会影响这些账户使用的所有标签页、设备和应用，也包括管理员账户。其他页面可能需要所选仪表盘之外的实体。设置完成后，请刷新已打开的页面。",
+        "description": "选择指定账户或所有账户。仅当这些账户查看所选仪表盘时应用筛选。Home Assistant 的权限设置仍然有效。",
         "data": {
           "target_mode": "筛选哪些账户",
           "user_ids": "账户"
         }
+      },
+      "cards": {
+        "title": "添加仪表盘卡片",
+        "description": "可选择任一卡片、两张卡片，或都不选择。所选卡片将添加到仅管理员可见的 Loona 仪表盘。以后也可以将内置卡片添加到自己的仪表盘。",
+        "data": {
+          "dashboard_cards": "仪表盘卡片"
+        }
+      },
+      "finish": {
+        "title": "完成设置",
+        "description": "**完成设置后，请刷新浏览器。** 浏览器加载 Loona 卡片文件后，才能查看新卡片。"
       }
     },
     "error": {
@@ -37,22 +48,20 @@
           "dashboards": "仪表盘",
           "targets": "账户",
           "filters": "筛选与性能",
-          "extra_entities": "额外实体",
-          "rules": "高级实体规则",
-          "resource_preview": "卡片文件",
-          "dependency_preview": "实体包含原因"
+          "rules": "实体规则",
+          "resource_preview": "卡片"
         }
       },
       "dashboards": {
         "title": "仪表盘",
-        "description": "被筛选的账户都会收到这里所有所选仪表盘的实体。",
+        "description": "选择需要筛选的仪表盘。",
         "data": {
           "dashboards": "仪表盘"
         }
       },
       "targets": {
         "title": "选择账户",
-        "description": "筛选会影响这些账户使用的所有标签页、设备和应用，也包括管理员账户。其他页面可能需要所选仪表盘之外的实体。设置完成后，请刷新已打开的页面。",
+        "description": "选择指定账户或所有账户。仅当这些账户查看所选仪表盘时应用筛选。Home Assistant 的权限设置仍然有效。",
         "data": {
           "target_mode": "筛选哪些账户",
           "user_ids": "账户"
@@ -60,44 +69,31 @@
       },
       "filters": {
         "title": "筛选与性能",
-        "description": "这些功能需要开启“启用”总开关。可选功能默认关闭。\n\n实体筛选只发送所选仪表盘需要的实体。注册表筛选还会缩短实体和设备列表；如果编辑器缺少选项，请关闭它。\n\n优先加载可见图表会先加载屏幕内的图表。屏幕外的图表稍后加载，滚动到它们时则立即加载。加载期间暂停的动画会自动恢复。\n\n资源筛选会跳过未勾选的可选卡片文件。开启前，请检查“卡片文件”。修改文件选择或比较图表加载效果后，请刷新浏览器页面。",
+        "description": "按需开启或关闭功能。实体筛选会自动查找所需实体。注册表筛选会减少实体和设备详情。延迟加载图表会让屏幕外的图表稍后加载，滚动到它们时立即加载。暂停的动画会自动恢复。资源筛选会加载必需的文件和在“卡片”中勾选的文件。修改资源设置后，请刷新浏览器。",
         "data": {
           "entity_filtering": "实体筛选",
           "registry_filtering": "注册表筛选",
-          "visible_first_graphs": "优先加载可见图表",
+          "visible_first_graphs": "延迟加载图表",
           "pause_animations_during_loading": "加载期间暂停动画",
           "resource_filtering": "资源筛选"
         }
       },
-      "extra_entities": {
-        "title": "额外实体",
-        "description": "添加卡片需要但 Loona 未发现的实体，或这些账户在其他页面需要的实体。",
-        "data": {
-          "extra_entities": "额外实体"
-        }
-      },
       "rules": {
-        "title": "高级实体规则",
-        "description": "可以包含 light 等实体类型、单个实体，或 sensor.* 等匹配规则。已保存的规则仍可选择。排除规则会覆盖包含规则，可能导致卡片没有数据。Loona 自身的控制和统计实体始终保留。",
+        "title": "实体规则",
+        "description": "在包含项中添加 Loona 遗漏的实体。需要时可包含整个实体类型或 sensor.* 等匹配规则。排除规则始终优先于包含规则。Loona 自身的控制和统计实体会保留。",
         "data": {
-          "include_domains": "包含实体类型",
-          "include_globs": "包含实体或匹配规则",
-          "exclude_globs": "排除实体或匹配规则"
+          "extra_entities": "包含：实体",
+          "include_domains": "包含：实体类型",
+          "include_globs": "包含：实体或匹配规则",
+          "exclude_globs": "排除：实体或匹配规则"
         }
       },
       "resource_preview": {
-        "title": "卡片文件",
+        "title": "卡片",
         "description": "{required_start}自动保留的文件（{required_count}）{required_summary_end}\n\n这些文件用于仪表盘卡片或共享样式。\n\n{required}\n\n{required_end}\n\n无法匹配到文件的卡片类型（{unresolved_count}）：{unresolved}\n\n已保存但不再注册的文件（{stale_count}）：{stale}\n\n开启资源筛选后，下方勾选的文件也会加载，未勾选的文件会跳过。新出现的可选文件默认不勾选。“启用”总开关也需要开启。关闭资源筛选时，所有已注册的文件都会加载。\n\n模板可能需要 Loona 无法识别的文件。如果卡片或图标缺失，请勾选对应文件，或关闭资源筛选。取消勾选已失效的文件即可移除保存的选择。没有显示开关时，表示当前安装无法使用此功能。保存后，请刷新浏览器页面；已加载的文件会保留到刷新为止。",
         "data": {
           "resource_filtering": "资源筛选",
           "always_forward_resources": "额外加载的文件"
-        }
-      },
-      "dependency_preview": {
-        "title": "实体包含原因",
-        "description": "从所选仪表盘和规则中找到 {count} 个实体。选择实体并提交，即可查看包含它的原因。此页面不会修改设置。\n\n已包含：{retained}\n\n被规则排除：{excluded}\n\n在 Home Assistant 中未找到：{unresolved}\n\n通过“额外实体”添加：{extra}\n\n匹配了包含规则：{rule}\n\nLoona 控制或统计实体：{protected}\n\n引用该实体的位置：\n\n{detail}\n\n如果仪表盘扫描失败或筛选已关闭，Home Assistant 会发送完整实体列表。",
-        "data": {
-          "entity": "实体"
         }
       }
     },
@@ -125,7 +121,7 @@
         "name": "注册表筛选"
       },
       "visible_first_graphs": {
-        "name": "优先加载可见图表"
+        "name": "延迟加载图表"
       },
       "pause_animations_during_loading": {
         "name": "加载期间暂停动画"
@@ -200,25 +196,13 @@
       },
       "avoided_updates": {
         "name": "已筛掉的实体更新"
+      },
+      "warnings": {
+        "name": "警告"
+      },
+      "version": {
+        "name": "版本"
       }
-    }
-  },
-  "issues": {
-    "compatibility": {
-      "title": "Loona 的部分功能无法使用",
-      "description": "当前 Home Assistant 版本或其他集成导致 Loona 的某项功能无法使用。该功能已停用，相关请求由 Home Assistant 正常处理。请查看 Loona 诊断信息，确认受影响的功能和支持的版本。重新加载 Loona 后，请刷新浏览器页面。"
-    },
-    "scope": {
-      "title": "Loona 正在发送全部实体",
-      "description": "Loona 无法确定仪表盘需要的完整实体列表。实体筛选和注册表筛选已暂时停止，即使开关仍然开启。请在 Loona 设置中确认所选仪表盘和账户仍然存在，并保存自动生成的仪表盘。不受支持的模板或 auto-entities 规则也可能导致扫描不完整。扫描成功后会自动恢复筛选。可下载诊断信息查看失败原因。"
-    },
-    "exclusion": {
-      "title": "排除的实体正在被仪表盘使用",
-      "description": "某条规则排除了仪表盘卡片使用的实体，可能导致数据缺失或显示错误。请在 Loona 设置中打开“高级实体规则”，移除对应排除规则，或关闭“启用”总开关以发送全部实体。"
-    },
-    "resources": {
-      "title": "请检查 Loona 加载的卡片文件",
-      "description": "资源筛选已开启，但 Loona 无法确定仪表盘需要的所有文件，或某个已保存的文件已不再注册。此提示不代表卡片已经出错。\n\n请在 Loona 设置中打开“卡片文件”。已确认需要的文件会自动保留。请勾选其他需要的文件。如果一切正常，可以保持当前选择。\n\n如果卡片或图标缺失，请关闭资源筛选并刷新浏览器页面。勾选缺失的文件后，可以再次开启资源筛选。"
     }
   },
   "selector": {
@@ -226,6 +210,12 @@
       "options": {
         "selected": "指定账户",
         "all": "所有账户"
+      }
+    },
+    "dashboard_cards": {
+      "options": {
+        "statistics": "Loona 统计",
+        "settings": "Loona 设置"
       }
     }
   }

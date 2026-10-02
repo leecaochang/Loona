@@ -18,6 +18,8 @@ from .entity import LoonaEntity
 from .runtime import LoonaConfigEntry, LoonaRuntime
 
 _METRICS = {
+    "warnings": "Warnings",
+    "version": "Version",
     "union_entities": "Union entities",
     "current_scope": "Current scope entities",
     "reduction_estimate": "Entity count reduction estimate",
@@ -110,9 +112,11 @@ class LoonaSensor(LoonaEntity, SensorEntity):
     ) -> None:
         super().__init__(runtime, key, name, dashboard)
         self.key = key
+        if key == "warnings":
+            self._attr_icon = "mdi:alert-outline"
         if key == "last_scan":
             self._attr_device_class = SensorDeviceClass.TIMESTAMP
-        else:
+        elif key != "version":
             self._attr_state_class = SensorStateClass.MEASUREMENT
         if key in ("reduction_estimate", "update_reduction"):
             self._attr_native_unit_of_measurement = PERCENTAGE
@@ -120,6 +124,7 @@ class LoonaSensor(LoonaEntity, SensorEntity):
             self._attr_native_unit_of_measurement = UnitOfTime.MILLISECONDS
         elif key in ("forwarded_rate", "avoided_rate"):
             self._attr_native_unit_of_measurement = "updates/s"
+            self._attr_suggested_display_precision = 1
         elif key in ("forwarded_updates", "avoided_updates"):
             self._attr_state_class = SensorStateClass.TOTAL_INCREASING
             self._attr_native_unit_of_measurement = "updates"
