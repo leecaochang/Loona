@@ -47,7 +47,7 @@ async def test_dependency_preview_privacy_and_excluded_reasons(preview_runtime, 
     flow.hass = runtime.hass
     before = dict(runtime.entry.options)
     form = await flow.async_step_dependency_preview({'entity': 'sensor.wall'})
-    assert 'excluded' in form['description_placeholders']['detail']
+    assert form['description_placeholders']['excluded'] == 'sensor.wall'
     assert 'wall-panel:' in form['description_placeholders']['detail']
     form = await flow.async_step_dependency_preview({'entity': 'sensor.invented'})
     assert form['errors']['base'] == 'invalid_selection'

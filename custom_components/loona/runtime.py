@@ -551,8 +551,16 @@ class LoonaRuntime:
         """Persist a single source of truth and reconcile existing listeners."""
         if key not in self.available_controls or not isinstance(enabled, bool):
             raise ValueError("Invalid Loona control")
+        await self.async_set_controls({key: enabled})
+
+    async def async_set_controls(self, changes: dict[str, bool], *, expected: dict[str, bool] | None = None, expected_settings: dict[str, Any] | None = None) -> None:
+        """Persist a validated card section once, preserving native switches."""
+        if set(changes) - self.available_controls or any(not isinstance(v, bool) for v in changes.values()):
+            raise ValueError("Invalid Loona control")
         async with self._control_lock:
-            candidate = {**self.controls, key: enabled}
+            if (expected is not None and expected != self.controls) or (expected_settings is not None and expected_settings != self.settings):
+                raise ValueError("conflict")
+            candidate = {**self.controls, **changes}
             await self._store.async_save(candidate)
             self.controls = candidate
             self._apply_policy()

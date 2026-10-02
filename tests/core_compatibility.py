@@ -218,6 +218,16 @@ async def check(hass: HomeAssistant) -> None:
         assert runtime.statistics_card.enabled
         statistics_board = hass.data[key].dashboards["loona-statistics"] if data_class else hass.data[key]["dashboards"]["loona-statistics"]
         statistics_id = statistics_board.config["id"]
+        generated = await statistics_board.async_load(False)
+        assert [row["type"] for row in generated["views"][0]["cards"]] == ["custom:loona-statistics-card", "custom:loona-settings-card"]
+        await statistics_board.async_save({"views": [{"title": "Statistics", "path": "statistics", "cards": [{"type": "custom:loona-statistics-card"}]}]})
+        await runtime.statistics_card.set_enabled(True)
+        assert await statistics_board.async_load(False) == generated
+        edited_statistics = {"views": [{"title": "User edit", "cards": []}]}
+        await statistics_board.async_save(edited_statistics)
+        await runtime.statistics_card.set_enabled(True)
+        assert await statistics_board.async_load(False) == edited_statistics
+        await statistics_board.async_save(generated)
         assert not runtime.scope_problem, runtime.problems
         assert not runtime.resource_compatibility_problem, runtime.resource_compatibility_problem
         resource_client, resource_output = client(admin)
@@ -358,6 +368,24 @@ async def check(hass: HomeAssistant) -> None:
         assert output[-1]["result"]["dependencies"][0]["entity_id"] == "sensor.wall"
         restricted.async_handle({"id": 2, "type": "loona/statistics"})
         assert limited_output[-1]["success"] is False
+        connection.async_handle({"id": 3, "type": "loona/settings"})
+        await hass.async_block_till_done()
+        card_settings = next(row["result"] for row in output if row.get("id") == 3)
+        assert set(card_settings["values"]["controls"]) == expected
+        extras = card_settings["values"]["extra_entities"]
+        connection.async_handle({"id": 4, "type": "loona/save_settings", "group": "extra_entities",
+                                 "revision": card_settings["revision"], "values": {"extra_entities": ["sensor.other"]}})
+        await hass.async_block_till_done()
+        saved = next(row for row in output if row.get("id") == 4)
+        assert saved["success"] and runtime.settings["extra_entities"] == ["sensor.other"]
+        connection.async_handle({"id": 5, "type": "loona/save_settings", "group": "extra_entities",
+                                 "revision": saved["result"]["revision"], "values": extras})
+        await hass.async_block_till_done()
+        assert next(row for row in output if row.get("id") == 5)["success"]
+        restricted.async_handle({"id": 3, "type": "loona/settings"})
+        restricted.async_handle({"id": 4, "type": "loona/save_settings", "group": "extra_entities",
+                                 "revision": card_settings["revision"], "values": extras})
+        assert all(not row["success"] for row in limited_output if row.get("id") in {3, 4} and row.get("type") == "result")
         assert runtime.live_statistics.forwarded > 0 and runtime.live_statistics.avoided > 0
         reset = next(row.entity_id for row in rows if row.unique_id.endswith(":reset_live_statistics"))
         await hass.services.async_call("button", "press", {"entity_id": reset}, blocking=True)
@@ -453,10 +481,18 @@ async def check(hass: HomeAssistant) -> None:
         assert all(hass.data[websocket_api.DOMAIN][name] is handler for name, handler in registry_originals.items())
         assert all(table[name] is handler for name, handler in resource_originals.items())
         assert not runtime._unsubscribers and not runtime._listeners
-        assert "loona/statistics" not in table and "loona/page_load" not in table
+        assert not {"loona/statistics", "loona/page_load", "loona/settings", "loona/save_settings"} & table.keys()
+        hass.config.language = "zh-Hans"
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
         runtime = entry.runtime_data
+        translated_rows = er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
+        assert {row.entity_id for row in translated_rows} == {row.entity_id for row in rows}
+        for row in translated_rows:
+            if row.translation_key == "discovered_entities":
+                assert row.original_name == "发现的实体数"
+            elif row.translation_key == "unresolved_entities":
+                assert row.original_name == "未解析的实体数"
         assert not runtime.controls["enabled"] and runtime.controls["entity_filtering"]
         assert runtime.available_controls == expected
         board_map = hass.data[key].dashboards if data_class else hass.data[key]["dashboards"]
@@ -465,7 +501,7 @@ async def check(hass: HomeAssistant) -> None:
         assert hass.data[websocket_api.DOMAIN]["subscribe_entities"] is native
         assert await hass.config_entries.async_remove(entry.entry_id)
         assert "loona-statistics" not in board_map
-        assert runtime.statistics_card.url not in hass.data[frontend.DATA_EXTRA_MODULE_URL].urls
+        assert not set(runtime.statistics_card.module_urls) & hass.data[frontend.DATA_EXTRA_MODULE_URL].urls
         print(f"Passed full native backend acceptance on Core {ha_const.__version__}: setup, storage/YAML, discovery, controls/options, permissions, live updates, bypass, persistence and unload")
     finally:
         if runtime:
@@ -502,7 +538,8 @@ async def main() -> None:
         "Error handling message: Unauthorized (unauthorized) Resource reader",
         "Error handling message: Unauthorized (unauthorized) Limited",
     }
-    assert all(errors.count(error) == 1 for error in expected_denials), errors
+    assert errors.count("Error handling message: Unauthorized (unauthorized) Resource reader") == 1, errors
+    assert errors.count("Error handling message: Unauthorized (unauthorized) Limited") == 3, errors
     assert not [error for error in errors if error not in expected_denials], errors
 
 

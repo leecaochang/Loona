@@ -1,4 +1,6 @@
 /* Native-themed live filtering statistics. */
+import { language, text, translate } from "./i18n.js?v=0.8.1";
+
 const command = "loona/statistics";
 const elementName = "loona-statistics-card";
 
@@ -64,26 +66,26 @@ function install() {
             .actions p { max-width:55%; } }
         </style>
         <ha-card>
-          <header><div><h2>Loona statistics</h2><p class="state" id="state" role="status">Loading statistics...</p></div>
-            <button id="refresh" aria-label="Refresh Loona statistics">Refresh</button></header>
+          <header><div><h2 data-i18n="Loona statistics">Loona statistics</h2><p class="state" id="state" role="status" data-i18n="Loading statistics...">Loading statistics...</p></div>
+            <button id="refresh" aria-label="Refresh Loona statistics" data-i18n="Refresh">Refresh</button></header>
           <p id="error" role="alert" hidden></p>
           <div id="content" hidden>
             <dl class="rates">
-              <div><dt>Forwarded</dt><dd><span id="forwarded">0</span><small>updates/s</small></dd></div>
-              <div><dt>Avoided</dt><dd><span id="avoided">0</span><small>updates/s</small></dd></div>
-              <div><dt>Live reduction</dt><dd><span id="reduction">0</span>%<small>eligible updates</small></dd></div>
+              <div><dt data-i18n="Forwarded">Forwarded</dt><dd><span id="forwarded">0</span><small data-i18n="updates/s">updates/s</small></dd></div>
+              <div><dt data-i18n="Avoided">Avoided</dt><dd><span id="avoided">0</span><small data-i18n="updates/s">updates/s</small></dd></div>
+              <div><dt data-i18n="Live reduction">Live reduction</dt><dd><span id="reduction">0</span>%<small data-i18n="eligible updates">eligible updates</small></dd></div>
             </dl>
             <p id="interval"></p>
             <dl class="facts">
-              <dt>Updates forwarded since reset</dt><dd id="forwarded-total"></dd>
-              <dt>Updates avoided since reset</dt><dd id="avoided-total"></dd>
-              <dt>Filtered / managed subscriptions</dt><dd id="subscriptions"></dd>
-              <dt>Current entity scope</dt><dd id="scope"></dd>
-              <dt>Entity count reduction estimate</dt><dd id="estimate"></dd>
+              <dt data-i18n="Updates forwarded since reset">Updates forwarded since reset</dt><dd id="forwarded-total"></dd>
+              <dt data-i18n="Updates avoided since reset">Updates avoided since reset</dt><dd id="avoided-total"></dd>
+              <dt data-i18n="Filtered / managed subscriptions">Filtered / managed subscriptions</dt><dd id="subscriptions"></dd>
+              <dt data-i18n="Current entity scope">Current entity scope</dt><dd id="scope"></dd>
+              <dt data-i18n="Entity count reduction estimate">Entity count reduction estimate</dt><dd id="estimate"></dd>
             </dl>
-            <div class="actions"><p id="reset-time"></p><button id="reset">Reset live statistics</button></div>
-            <details id="loads"><summary>Latest page loads <span id="load-count"></span></summary>
-              <p>Latest full browser load for each dashboard. Entity snapshots use the selected dashboards' combined scope.
+            <div class="actions"><p id="reset-time"></p><button id="reset" data-i18n="Reset live statistics">Reset live statistics</button></div>
+            <details id="loads"><summary><span data-i18n="Latest page loads">Latest page loads</span> <span id="load-count"></span></summary>
+              <p data-i18n="Latest full browser load for each dashboard. Entity snapshots use the selected dashboards' combined scope. Resource counts cover registered Lovelace resources, excluding core bundles and extra modules.">Latest full browser load for each dashboard. Entity snapshots use the selected dashboards' combined scope.
                 Resource counts cover registered Lovelace resources, excluding core bundles and extra modules.</p>
               <ul id="load-rows" class="rows"></ul>
             </details>
@@ -95,25 +97,41 @@ function install() {
 
     static getStubConfig() { return { type: "custom:loona-statistics-card" }; }
     setConfig(config) {
-      if (config.title !== undefined && typeof config.title !== "string") throw new Error("Loona card title must be text");
-      this.shadowRoot.querySelector("h2").textContent = config.title || "Loona statistics";
+      if (config.title !== undefined && typeof config.title !== "string") throw new Error(text(this._hass, "Loona card title must be text"));
+      this._customTitle = config.title;
+      this._localize();
+    }
+    _localize() {
+      translate(this.shadowRoot, this._hass);
+      this.shadowRoot.querySelector("h2").textContent = this._customTitle || text(this._hass, "Loona statistics");
+      this._get("refresh").setAttribute("aria-label", text(this._hass, "Refresh"));
+      if (this._data) this._render(this._data);
+      if (this._errorKey) {
+        this._get("error").textContent = text(this._hass, this._errorKey);
+        if (!this._data) this._get("state").textContent = text(this._hass, "Unable to load statistics");
+      }
+      const metadata = window.customCards?.find(card => card.type === elementName);
+      if (metadata) { metadata.name = text(this._hass, "Loona statistics"); metadata.description = text(this._hass, "Live filtering statistics and latest page loads"); }
     }
     getCardSize() { return 7; }
     getGridOptions() { return { columns: 12, min_columns: 6 }; }
     _get(id) { return this.shadowRoot.getElementById(id); }
     set hass(value) {
       const changedUser = this._hass?.user?.id !== value?.user?.id;
+      const changedLanguage = language(this._hass) !== language(value);
       this._hass = value;
+      if (changedLanguage) this._localize();
       if (changedUser || !value?.user?.is_admin) {
         this._sequence++;
         this._data = undefined;
+        this._errorKey = undefined; this._get("error").hidden = true;
         this._loading = false;
         this._get("content").hidden = true;
         this._get("load-rows").replaceChildren();
       }
       if (!value?.user?.is_admin) {
         this._get("content").hidden = true;
-        this._get("state").textContent = "Administrator access is required for Loona statistics.";
+        this._get("state").textContent = text(this._hass, 'Administrator access is required for Loona statistics.');
         this._get("refresh").disabled = true;
         return;
       }
@@ -145,13 +163,15 @@ function install() {
         const data = await this._hass.callWS({ type: command });
         if (sequence !== this._sequence || !this._hass?.user?.is_admin) return;
         this._data = data;
+        this._errorKey = undefined;
         this._get("error").hidden = true;
         this._render(data);
       } catch (error) {
         if (sequence !== this._sequence) return;
-        this._get("error").textContent = "Statistics unavailable. Check that Loona is loaded, then refresh. " + (error.message || "");
+        this._errorKey = "Statistics unavailable. Check that Loona is loaded, then refresh.";
+        this._get("error").textContent = text(this._hass, this._errorKey);
         this._get("error").hidden = false;
-        if (!this._data) this._get("state").textContent = "Unable to load statistics";
+        if (!this._data) this._get("state").textContent = text(this._hass, 'Unable to load statistics');
       } finally {
         if (sequence === this._sequence) {
           this._loading = false;
@@ -167,7 +187,8 @@ function install() {
         await this._hass.callService("button", "press", { entity_id: this._data.reset_entity });
         await this._fetch();
       } catch {
-        this._get("error").textContent = "Reset failed. Check the Reset live statistics button in Loona's settings.";
+        this._errorKey = "Reset failed. Check the Reset live statistics button in Loona's settings.";
+        this._get("error").textContent = text(this._hass, this._errorKey);
         this._get("error").hidden = false;
       } finally {
         this._resetting = false;
@@ -176,36 +197,37 @@ function install() {
     }
     _render(data) {
       const metrics = data.metrics;
-      const format = (value) => Number(value).toLocaleString(undefined, { maximumFractionDigits: 3 });
+      const format = (value) => Number(value).toLocaleString(language(this._hass), { maximumFractionDigits: 3 });
       this._get("content").hidden = false;
-      this._get("state").textContent = data.compatibility_problem ? "Compatibility issue: " + data.compatibility_problem
-        : !data.complete ? "Incomplete scope: filtering passes through full data"
-        : !data.controls.enabled || !data.controls.entity_filtering ? "Entity filtering is disabled"
-        : metrics.filtered_subscriptions ? "Entity filtering is active" : "Waiting for a filtered subscription";
+      this._get("state").textContent = data.compatibility_problem ? text(this._hass, "Compatibility issue. Check Loona diagnostics.")
+        : !data.complete ? text(this._hass, "Incomplete scope: filtering passes through full data")
+        : !data.controls.enabled || !data.controls.entity_filtering ? text(this._hass, "Entity filtering is disabled")
+        : metrics.filtered_subscriptions ? text(this._hass, "Entity filtering is active") : text(this._hass, "Waiting for a filtered subscription");
       for (const [id, key] of [["forwarded", "forwarded_rate"], ["avoided", "avoided_rate"], ["reduction", "update_reduction"],
         ["forwarded-total", "forwarded_updates"], ["avoided-total", "avoided_updates"]]) this._get(id).textContent = format(metrics[key]);
-      this._get("interval").textContent = (data.sample_seconds ? "Latest " + data.sample_seconds + "-second sample. "
-        : "Waiting for the next rate sample, up to " + data.interval_seconds + " seconds. ")
-        + "Counts are logical entity updates per selected-account subscription, not bytes or load-time savings.";
+      this._get("interval").textContent = (data.sample_seconds
+        ? text(this._hass, "Latest {seconds}-second sample.", { seconds: format(data.sample_seconds) })
+        : text(this._hass, "Waiting for the next rate sample, up to {seconds} seconds.", { seconds: format(data.interval_seconds) }))
+        + " " + text(this._hass, "Counts are logical entity updates per selected-account subscription, not bytes or load-time savings.");
       this._get("subscriptions").textContent = format(metrics.filtered_subscriptions) + " / " + format(metrics.managed_subscriptions);
-      this._get("scope").textContent = format(metrics.current_scope) + " entities";
+      this._get("scope").textContent = text(this._hass, "{count} entities", { count: format(metrics.current_scope) });
       this._get("estimate").textContent = format(metrics.reduction_estimate) + "%";
-      this._get("reset-time").textContent = "Since " + new Date(data.reset_at).toLocaleString();
+      this._get("reset-time").textContent = text(this._hass, "Since {time}", { time: new Date(data.reset_at).toLocaleString(language(this._hass)) });
       this._get("reset").disabled = !data.reset_entity || this._resetting;
       this._get("load-count").textContent = "(" + data.page_loads.length + ")";
       this._get("load-rows").replaceChildren(...(data.page_loads.length ? data.page_loads.map(row => {
         const item = node("li"); item.append(node("strong", row.title));
-        item.append(node("p", new Date(row.at).toLocaleString()));
-        item.append(node("p", "Entities sent: " + row.entities.sent + " / " + row.entities.available));
-        item.append(node("p", row.resources ? "Resources sent: " + row.resources.sent + " / " + row.resources.available : "Resource filtering counts were not observed."));
+        item.append(node("p", new Date(row.at).toLocaleString(language(this._hass))));
+        item.append(node("p", text(this._hass, "Entities sent: {sent} / {available}", row.entities)));
+        item.append(node("p", row.resources ? text(this._hass, "Resources sent: {sent} / {available}", row.resources) : text(this._hass, "Resource filtering counts were not observed.")));
         return item;
-      }) : [node("li", "No page loads recorded yet. Reload a dashboard after installing this card.")]));
+      }) : [node("li", text(this._hass, "No page loads recorded yet. Reload a dashboard after installing this card."))]));
     }
   }
 
   customElements.define(elementName, LoonaStatisticsCard);
   window.customCards = window.customCards || [];
-  window.customCards.push({ type: elementName, name: "Loona statistics", description: "Live filtering statistics and latest page loads", preview: true });
+  window.customCards.push({ type: elementName, name: text(app.hass, "Loona statistics"), description: text(app.hass, "Live filtering statistics and latest page loads"), preview: true });
   // One report per full page load; SPA navigation does not create a new snapshot.
   const dashboard = location.pathname.split("/")[1] || "lovelace";
   let attempts = 0;

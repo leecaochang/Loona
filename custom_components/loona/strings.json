@@ -87,7 +87,7 @@
       },
       "resource_preview": {
         "title": "Resource dependencies",
-        "description": "{required_start}Required resources ({required_count}){required_summary_end}\n\nRequired resources stay enabled automatically and have no checkbox.\n\n{required}\n\n{required_end}\n\n{notes}\n\nEnable Resource filtering to apply the optional selections below. Checked resources also load; unchecked resources are omitted. New optional resources default to unchecked. When Resource filtering is off, Home Assistant loads its full resource list. Loona's Enabled switch must also be on. Save your choices, then hard-reload the browser page.",
+        "description": "{required_start}Required resources ({required_count}){required_summary_end}\n\nRequired resources stay enabled automatically and have no checkbox.\n\n{required}\n\n{required_end}\n\nUnresolved custom types ({unresolved_count}): {unresolved}\n\nUnavailable saved resources ({stale_count}): {stale}\n\nUncheck unavailable saved resources to remove their selections. Templates or strategies may need additional resources. If the Resource filtering control is unavailable, this Home Assistant version or its adapter does not currently support resource filtering.\n\nEnable Resource filtering to apply the optional selections below. Checked resources also load; unchecked resources are omitted. New optional resources default to unchecked. When Resource filtering is off, Home Assistant loads its full resource list. Loona's Enabled switch must also be on. Save your choices, then hard-reload the browser page.",
         "data": {
           "resource_filtering": "Resource filtering",
           "always_forward_resources": "Optional resources to load"
@@ -95,7 +95,7 @@
       },
       "dependency_preview": {
         "title": "Entity dependencies",
-        "description": "{summary}\n\n{detail}\n\nThis preview is read-only. When the scope is incomplete or filtering is disabled, Home Assistant sends full entity data.",
+        "description": "{count} dependencies. Exclusions apply after inclusions. Select an entity and submit to inspect its dependencies.\n\nRetained: {retained}\n\nExcluded: {excluded}\n\nUnresolved: {unresolved}\n\nExtra entity: {extra}\n\nInclude rule: {rule}\n\nLoona control or statistic: {protected}\n\nConfiguration paths:\n\n{detail}\n\nThis preview is read-only. When the scope is incomplete or filtering is disabled, Home Assistant sends full entity data.",
         "data": {
           "entity": "Entity"
         }
@@ -211,6 +211,14 @@
     "resources": {
       "title": "Loona resource dependencies need attention",
       "description": "Resource filtering omits unchecked optional modules. Open Resource dependencies in Loona options to inspect unresolved custom types, dynamic configuration and missing selections. Required resources remain enabled automatically. If a card, icon or helper is missing, select its optional resource or turn off Resource filtering, then hard-reload. Saved resource registrations are preserved."
+    }
+  },
+  "selector": {
+    "target_mode": {
+      "options": {
+        "selected": "Selected accounts",
+        "all": "All accounts"
+      }
     }
   }
 }

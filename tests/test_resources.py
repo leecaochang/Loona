@@ -279,7 +279,7 @@ async def test_preview_is_read_only_when_resource_adapter_unavailable(resources_
     flow.hass, flow.handler = runtime.hass, runtime.entry.entry_id
     form = await flow.async_step_resource_preview()
     assert not form["data_schema"].schema
-    assert "unavailable" in form["description_placeholders"]["notes"]
+    assert form["description_placeholders"]["stale_count"] == "0"
     invalid = await flow.async_step_resource_preview({"resource_filtering": True})
     assert invalid["errors"] == {"base": "invalid_selection"}
 

@@ -24,7 +24,7 @@ async def test_two_step_setup_targets_admin(loona_hass, dashboards):
     await loona_hass.auth.async_create_system_user("Service")
     accounts = await human_accounts(loona_hass)
     assert list(accounts) == [admin.id]
-    assert "administrator" in accounts[admin.id]
+    assert accounts[admin.id] == "Administrator"
     flow = LoonaConfigFlow()
     flow.hass = loona_hass
     flow.handler = "loona"

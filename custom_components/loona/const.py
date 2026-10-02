@@ -12,7 +12,7 @@ SUPPORTED_CORE_VERSIONS: Final = frozenset(
 )
 REGISTRY_CORE_VERSIONS: Final = SUPPORTED_CORE_VERSIONS
 FRONTEND_CORE_VERSIONS: Final = frozenset({"2026.9.3", "2026.9.4"})
-VERSION: Final = "0.7.1"
+VERSION: Final = "0.8.1"
 CONF_DASHBOARDS: Final = "dashboards"
 CONF_TARGET_MODE: Final = "target_mode"
 CONF_USER_IDS: Final = "user_ids"
@@ -114,6 +114,20 @@ LIVE_RATE_PRECISION: Final = 3
 DEPENDENCY_PAGE_SIZE: Final = 50
 STATISTICS_DASHBOARD: Final = "loona-statistics"
 STATISTICS_ASSET: Final = "/loona/statistics-card.js"
+SETTINGS_ASSET: Final = "/loona/settings-card.js"
+I18N_ASSET: Final = "/loona/i18n.js"
+SETTINGS_COMMAND: Final = "loona/settings"
+SETTINGS_SAVE_COMMAND: Final = "loona/save_settings"
+SETTINGS_GROUPS: Final = {
+    "controls": frozenset(),
+    "dashboards": frozenset({CONF_DASHBOARDS}),
+    "targets": frozenset({CONF_TARGET_MODE, CONF_USER_IDS}),
+    "extra_entities": frozenset({CONF_EXTRA_ENTITIES}),
+    "rules": frozenset({CONF_INCLUDE_DOMAINS, CONF_INCLUDE_GLOBS, CONF_EXCLUDE_GLOBS}),
+    "resources": frozenset({CONF_ALWAYS_FORWARD}),
+}
+SETTINGS_EMPTY_DEFAULTS: Final = frozenset({CONF_EXTRA_ENTITIES, CONF_INCLUDE_DOMAINS, CONF_INCLUDE_GLOBS, CONF_EXCLUDE_GLOBS, CONF_ALWAYS_FORWARD})
+SETTINGS_CHOICE_PAGE: Final = 50
 STATISTICS_COMMAND: Final = "loona/statistics"
 PAGE_LOAD_COMMAND: Final = "loona/page_load"
 PAGE_LOAD_LIMIT: Final = 30

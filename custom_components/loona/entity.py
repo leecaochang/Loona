@@ -21,7 +21,7 @@ class LoonaEntity(Entity):
         self.runtime = runtime
         self.dashboard = dashboard
         self._attr_unique_id = f"{runtime.entry.entry_id}:{dashboard or 'global'}:{key}"
-        self._attr_name = name
+        # Native translations supply the name; registry IDs remain stable.
         self._attr_translation_key = key
 
     @property

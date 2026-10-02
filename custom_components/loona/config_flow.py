@@ -58,7 +58,7 @@ def entity_rule_choices(
 async def human_accounts(hass: HomeAssistant) -> dict[str, str]:
     """Keep active human accounts selectable, including administrators."""
     return {
-        user.id: f"{user.name or 'Unnamed account'}{' (administrator)' if user.is_admin else ''}"
+        user.id: user.name or user.id
         for user in await hass.auth.async_get_users()
         if user.is_active and not user.system_generated
     }
@@ -68,7 +68,7 @@ def dashboard_schema(hass: HomeAssistant, current: dict[str, Any]) -> vol.Schema
     """Keep stale values visible so users can remove them deliberately."""
     titles = dashboard_titles(hass)
     for key in current.get(CONF_DASHBOARDS, []):
-        titles.setdefault(key, f"{key} (unavailable)")
+        titles.setdefault(key, key)
     return vol.Schema(
         {
             vol.Required(
@@ -91,21 +91,15 @@ async def target_schema(hass: HomeAssistant, current: dict[str, Any]) -> vol.Sch
     """Expose account-wide targeting in a standard form."""
     accounts = await human_accounts(hass)
     for key in current.get(CONF_USER_IDS, []):
-        accounts.setdefault(key, "Unavailable account")
+        accounts.setdefault(key, key)
     return vol.Schema(
         {
             vol.Required(
                 CONF_TARGET_MODE, default=current.get(CONF_TARGET_MODE, TARGET_SELECTED)
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
-                    options=[
-                        selector.SelectOptionDict(
-                            value=TARGET_SELECTED, label="Selected accounts"
-                        ),
-                        selector.SelectOptionDict(
-                            value=TARGET_ALL, label="All accounts"
-                        ),
-                    ],
+                    options=[TARGET_SELECTED, TARGET_ALL],
+                    translation_key="target_mode",
                     mode=selector.SelectSelectorMode.DROPDOWN,
                 )
             ),
@@ -283,17 +277,23 @@ class LoonaOptionsFlow(OptionsFlow):
         selected = (user_input or {}).get("entity", "")
         errors = {} if selected in rows or not selected else {"base": "invalid_selection"}
         row = rows.get(selected)
-        detail = "Select an entity and submit to inspect its dependencies. Close this preview when finished."
-        if row:
-            detail = f"{selected}: {row['status']}" + ("; unresolved" if row["unresolved"] else "")
-            detail += "\n\n" + "\n".join("- " + reason.replace("`", "") for reason in row["reasons"])
+        reasons = row["reasons"] if row else []
+        # Localized prose belongs to HA translations; provenance paths stay literal.
+        special = {"extra entity", "include rule", "Loona control or statistic"}
+        detail = "\n".join("- " + reason.replace("`", "") for reason in reasons if reason not in special)
         return self.async_show_form(step_id="dependency_preview", errors=errors,
-            description_placeholders={"summary": f"{len(rows)} dependencies; exclusions apply after inclusions.", "detail": detail},
+            description_placeholders={
+                "count": str(len(rows)), "detail": detail or "-",
+                "retained": selected if row and row["status"] == "retained" else "-",
+                "excluded": selected if row and row["status"] == "excluded" else "-",
+                "unresolved": selected if row and row["unresolved"] else "-",
+                "extra": selected if "extra entity" in reasons else "-",
+                "rule": selected if "include rule" in reasons else "-",
+                "protected": selected if "Loona control or statistic" in reasons else "-",
+            },
             data_schema=vol.Schema({vol.Optional("entity", default=selected if selected in rows else ""):
                 selector.SelectSelector(selector.SelectSelectorConfig(
-                    options=[selector.SelectOptionDict(value="", label="Choose an entity")] + [
-                        selector.SelectOptionDict(value=entity_id, label=f"{entity_id} ({item['status']}{'; unresolved' if item['unresolved'] else ''})")
-                        for entity_id, item in rows.items()], mode=selector.SelectSelectorMode.DROPDOWN,
+                    options=[""] + list(rows), mode=selector.SelectSelectorMode.DROPDOWN,
                 ))}))
 
     async def async_step_targets(
@@ -420,12 +420,12 @@ class LoonaOptionsFlow(OptionsFlow):
             return self.async_abort(reason="resources_unavailable")
         required = {row["url"] for row in report["resources"] if row["status"] == "required"}
         choices = {
-            row["url"]: f"{row['url']} ({row['type']}, {row['status']})"
+            row["url"]: f"{row['url']} ({row['type']})"
             for row in report["resources"] if row["status"] != "required"
         }
         current = self.settings.get(CONF_ALWAYS_FORWARD, [])
         for url in report["stale_exceptions"]:
-            choices[url] = f"{url} (unavailable; uncheck to remove)"
+            choices[url] = url
         editable = CONTROL_RESOURCES in runtime.available_controls
         errors = {}
         if user_input is not None:
@@ -454,18 +454,9 @@ class LoonaOptionsFlow(OptionsFlow):
                 saved = (set(selected) - required) | (set(current) & required)
                 return self.finish({CONF_ALWAYS_FORWARD: sorted(saved)})
         fixed = [
-            f"- `{row['url']}` ({row['type']}) - {row['reason']}"
+            f"- `{row['url']}` ({row['type']})"
             for row in report["resources"] if row["status"] == "required"
         ]
-        notes = []
-        if report["unresolved_custom_types"]:
-            notes.append("Unresolved custom types: " + ", ".join(report["unresolved_custom_types"]))
-        if report["dynamic_configuration"]:
-            notes.append("Templates or strategies may need additional resources.")
-        if report["stale_exceptions"]:
-            notes.append("Some saved resources are unavailable. Uncheck them to remove their saved selection.")
-        if not editable:
-            notes.append("Resource filtering is unavailable on this Home Assistant version or while its adapter has a compatibility problem.")
         schema: dict[Any, Any] = {}
         if editable:
             schema[vol.Required(CONTROL_RESOURCES, default=runtime.controls[CONTROL_RESOURCES])] = selector.BooleanSelector()
@@ -485,9 +476,12 @@ class LoonaOptionsFlow(OptionsFlow):
                 "required_start": "<details><summary>",
                 "required_summary_end": "</summary>",
                 "required_end": "</details>",
-                "required": "\n".join(fixed) or "No required Lovelace resources detected.",
+                "required": "\n".join(fixed),
                 "required_count": str(len(fixed)),
-                "notes": "\n\n".join(notes),
+                "unresolved": ", ".join(report["unresolved_custom_types"]) or "-",
+                "unresolved_count": str(len(report["unresolved_custom_types"])),
+                "stale": ", ".join(report["stale_exceptions"]) or "-",
+                "stale_count": str(len(report["stale_exceptions"])),
             },
         )
 

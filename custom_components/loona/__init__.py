@@ -5,10 +5,11 @@ from homeassistant.core import HomeAssistant
 from homeassistant.components import websocket_api
 
 from .compatibility import CompatibilityError
-from .const import DOMAIN, STATISTICS_COMMAND, PAGE_LOAD_COMMAND
+from .const import DOMAIN, STATISTICS_COMMAND, PAGE_LOAD_COMMAND, SETTINGS_COMMAND, SETTINGS_SAVE_COMMAND
 from .graph_loading import async_register_frontend
 from .runtime import LoonaConfigEntry, LoonaRuntime
 from .preview import websocket_statistics, websocket_page_load
+from .settings import websocket_settings, websocket_save_settings
 from .statistics_card import StatisticsCard, StatisticsCardError
 
 _PLATFORMS = (Platform.SWITCH, Platform.SENSOR, Platform.BINARY_SENSOR, Platform.BUTTON)
@@ -19,7 +20,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: LoonaConfigEntry) -> boo
     runtime = LoonaRuntime(hass, entry)
     entry.runtime_data = runtime
     table = hass.data[websocket_api.DOMAIN]
-    if any(name in table for name in (STATISTICS_COMMAND, PAGE_LOAD_COMMAND)):
+    if any(name in table for name in (STATISTICS_COMMAND, PAGE_LOAD_COMMAND, SETTINGS_COMMAND, SETTINGS_SAVE_COMMAND)):
         raise CompatibilityError("Another handler owns Loona statistics")
     try:
         await runtime.async_start()
@@ -48,7 +49,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: LoonaConfigEntry) -> boo
     hass.data[DOMAIN] = runtime
     websocket_api.async_register_command(hass, websocket_statistics)
     websocket_api.async_register_command(hass, websocket_page_load)
-    owned = {name: table[name] for name in (STATISTICS_COMMAND, PAGE_LOAD_COMMAND)}
+    websocket_api.async_register_command(hass, websocket_settings)
+    websocket_api.async_register_command(hass, websocket_save_settings)
+    owned = {name: table[name] for name in (STATISTICS_COMMAND, PAGE_LOAD_COMMAND, SETTINGS_COMMAND, SETTINGS_SAVE_COMMAND)}
     def remove_command() -> None:
         for name, command in owned.items():
             if table.get(name) is command:

@@ -61,7 +61,7 @@ Options changes also update existing managed subscriptions. After reloading the 
 
 ## Change settings
 
-Use Loona's **Configure** menu under **Settings > Devices & services**.
+Use Loona's **Configure** menu under **Settings > Devices & services**, or the administrator-only **Loona settings** card on the automatically created **Loona** dashboard.
 
 | Menu | Use |
 | --- | --- |
@@ -97,11 +97,15 @@ The Loona device provides the sensors below. Scope counts and percentages are ga
 
 Subscription counts refresh about every 30 seconds. Each selected dashboard also has a related device with **Discovered entities** and **Unresolved entities** sensors. On Core 2026.9 these use native child devices; older releases use the native via-device relationship. These count that dashboard's dependencies before advanced rules; unresolved IDs have neither a registry entry nor a current state. They do not measure traffic for an individual dashboard.
 
-## Statistics dashboard and live reset
+## Loona dashboard and live reset
 
-Loona automatically creates **Loona statistics** in the sidebar for administrators. Reload the browser after installation or upgrading. The bundled card shows filtering status, live rates, totals, the current scope and the latest full browser load for each dashboard. Latest loads start collapsed. Detailed entity dependencies remain available under **Loona > Configure > Entity dependencies**. You can also place `type: custom:loona-statistics-card` on your own dashboards.
+Loona automatically creates **Loona** in the sidebar for administrators, with statistics and settings cards. Reload the browser after installation or upgrading. The statistics card shows filtering status, live rates, totals, the current scope and the latest full browser load for each dashboard. Latest loads start collapsed. Detailed entity dependencies remain available under **Loona > Configure > Entity dependencies**. You can also place `type: custom:loona-statistics-card` and `type: custom:loona-settings-card` on your own dashboards.
 
-The generated dashboard uses native storage and is managed separately from the dashboards you filter. It is created during integration setup, including upgrades from installations that previously opted out. There is no installation checkbox. Uninstalling Loona removes its module registration and unedited generated dashboard. User-edited dashboards are preserved; remove any Loona cards from those dashboards before uninstalling. Downloaded modules remain in an already-open page until it is reloaded.
+The settings card has collapsible sections for supported controls, dashboards, accounts, extra entities, advanced entity rules and optional resources. Search the prefilled choices, then use **Save** or **Cancel** for that section. Typing only searches existing choices; it cannot add arbitrary IDs. Required resources always load and have no checkbox. Optional resources load when checked. Unavailable saved selections remain visible for removal. Edits made elsewhere can invalidate a draft; cancel it and refresh before saving again. The card loads settings on demand rather than polling. Changes affect all sessions using the selected accounts. Resource changes require a hard reload. Detailed entity dependency previews remain in Configure.
+
+Loona's setup/options forms, Repairs messages and both cards support English and Simplified Chinese. Chinese HA UI language settings, including Traditional Chinese locales, use Loona's Simplified Chinese translations; other languages fall back to English. The same installed cards follow each user's current HA language, including changes made while they are open. Native entity names on HA device pages use the system language under **Settings > System > General > Language**, independently of each user's profile language. Reload Loona after changing the system language to refresh its native entity names. Your own dashboard names, account names, entity IDs and custom card titles stay as configured.
+
+The generated dashboard uses native storage and is managed separately from the dashboards you filter. It is created during integration setup, including upgrades from installations that previously opted out. There is no installation checkbox. Upgrading an unedited generated statistics dashboard adds the settings card automatically. An edited dashboard is preserved; add the settings card manually if wanted. Uninstalling Loona removes its module registrations and unedited generated dashboard. User-edited dashboards are preserved; remove any Loona cards from those dashboards before uninstalling. Downloaded modules remain in an already-open page until it is reloaded.
 
 Rates normally refresh every 30 seconds. The first reading after startup or reset waits for the next sampling tick; the card shows the measured interval. Initial snapshots, policy-reconciliation snapshots, explicit native scopes, unselected-account subscriptions, denied entities and Loona's own telemetry/control changes are excluded from live update counters. Each eligible change is counted once per managed selected-account subscription, so multiple tabs can increase the totals. Bypassed selected-account subscriptions count eligible changes as forwarded. Statistics reset on integration reload or HA restart; they are not persisted.
 

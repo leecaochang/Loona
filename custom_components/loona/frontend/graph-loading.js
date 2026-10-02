@@ -1,10 +1,10 @@
-import { StartupMotion } from "./startup-motion.js?v=0.7.1";
+import { StartupMotion } from "./startup-motion.js?v=0.8.1";
 
 // Optional graph scheduling for the tested native Home Assistant card container.
 // Dashboard configuration and loaded card elements remain native.
 if (!window[Symbol.for("loona.graph-loading")]) {
   window[Symbol.for("loona.graph-loading")] = true;
-  const moduleVersion = "0.7.1";
+  const moduleVersion = "0.8.1";
   const motion = new StartupMotion(moduleVersion);
   const connectedCards = new Set();
   const records = new WeakMap();

@@ -10,7 +10,7 @@ from homeassistant.components.lovelace.dashboard import DashboardsCollection
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
-from .const import DOMAIN, STATISTICS_ASSET, STATISTICS_DASHBOARD, VERSION
+from .const import DOMAIN, STATISTICS_ASSET, STATISTICS_DASHBOARD, SETTINGS_ASSET, I18N_ASSET, VERSION
 from .dashboard import dashboard_objects
 
 
@@ -20,8 +20,8 @@ class StatisticsCardError(ValueError):
 
 def card_dashboard_config() -> dict[str, Any]:
     """Only this exact generated configuration may be automatically removed."""
-    return {"views": [{"title": "Statistics", "path": "statistics", "cards": [
-        {"type": "custom:loona-statistics-card"}
+    return {"views": [{"title": "Loona", "path": "statistics", "cards": [
+        {"type": "custom:loona-statistics-card"}, {"type": "custom:loona-settings-card"}
     ]}]}
 
 
@@ -32,6 +32,7 @@ class StatisticsCard:
         self.hass = hass
         self.store: Store[dict[str, str]] = Store(hass, 1, f"{DOMAIN}.{entry_id}.statistics_dashboard")
         self.url = f"{STATISTICS_ASSET}?v={VERSION}"
+        self.module_urls = (self.url, f"{SETTINGS_ASSET}?v={VERSION}")
         self.lock = asyncio.Lock()
         self.enabled = False
 
@@ -63,15 +64,18 @@ class StatisticsCard:
         """Register the route before Core freezes its HTTP router."""
         key = "loona_statistics_asset_registered"
         if not self.hass.data.get(key):
-            path = str(Path(__file__).parent / "frontend" / "statistics-card.js")
+            assets = [(asset, str(Path(__file__).parent / "frontend" / filename)) for asset, filename in (
+                (STATISTICS_ASSET, "statistics-card.js"), (SETTINGS_ASSET, "settings-card.js"), (I18N_ASSET, "i18n.js")
+            )]
             if callable(getattr(self.hass.http, "async_register_static_paths", None)):
                 from homeassistant.components.http import StaticPathConfig
                 await self.hass.http.async_register_static_paths([
-                    StaticPathConfig(STATISTICS_ASSET, path, cache_headers=False)
+                    StaticPathConfig(asset, path, cache_headers=False) for asset, path in assets
                 ])
             elif callable(register := getattr(self.hass.http, "register_static_path", None)):
                 # Core 2024.5's native API registers the router synchronously.
-                register(STATISTICS_ASSET, path, cache_headers=False)
+                for asset, path in assets:
+                    register(asset, path, cache_headers=False)
             else:
                 raise StatisticsCardError("Native frontend asset API is unavailable")
             self.hass.data[key] = True
@@ -112,11 +116,12 @@ class StatisticsCard:
                 self.unload()
                 return
             await self.register_asset()
-            frontend.add_extra_js_url(self.hass, self.url)
+            for url in self.module_urls:
+                frontend.add_extra_js_url(self.hass, url)
             try:
                 if board is None:
                     created = await collection.async_create_item({
-                        "url_path": STATISTICS_DASHBOARD, "title": "Loona statistics",
+                        "url_path": STATISTICS_DASHBOARD, "title": "Loona",
                         "icon": "mdi:chart-box-outline", "require_admin": True, "show_in_sidebar": True,
                     })
                     try:
@@ -126,6 +131,12 @@ class StatisticsCard:
                         await collection.async_delete_item(created["id"])
                         await self.store.async_remove()
                         raise
+                if board is not None:
+                    existing = await board.async_load(False)
+                    legacy = {"views": [{"title": "Statistics", "path": "statistics", "cards": [{"type": "custom:loona-statistics-card"}]}]}
+                    if existing == legacy:
+                        await board.async_save(card_dashboard_config())
+                        await collection.async_update_item(owned["id"], {"title": "Loona"})
             except Exception:
                 self._remove_module()
                 raise
@@ -134,9 +145,11 @@ class StatisticsCard:
     def _remove_module(self) -> None:
         """Use Core's module remover or its older native URL manager."""
         if callable(remove := getattr(frontend, "remove_extra_js_url", None)):
-            remove(self.hass, self.url)
+            for url in self.module_urls:
+                remove(self.hass, url)
         else:
-            self.hass.data[frontend.DATA_EXTRA_MODULE_URL].remove(self.url)
+            for url in self.module_urls:
+                self.hass.data[frontend.DATA_EXTRA_MODULE_URL].remove(url)
 
     def unload(self) -> None:
         """Unload the module registration while retaining the saved dashboard."""
