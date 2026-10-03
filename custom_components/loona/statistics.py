@@ -5,7 +5,7 @@ from typing import Any
 
 from homeassistant.util import dt as dt_util
 
-from .const import LIVE_RATE_PRECISION
+from .const import LIVE_RATE_PRECISION, NOISY_ENTITY_LIMIT, NOISY_ENTITY_REPORT_LIMIT
 
 
 class LiveStatistics:
@@ -14,6 +14,7 @@ class LiveStatistics:
     def __init__(self) -> None:
         self.ignored: frozenset[str] = frozenset()
         self.page_loads: dict[str, dict[str, Any]] = {}
+        self.browser_reports: dict[str, dict[str, Any]] = {}
         self.reset()
 
     def reset(self) -> None:
@@ -25,13 +26,28 @@ class LiveStatistics:
         self._sample_time = monotonic()
         self.reset_at = dt_util.utcnow()
         self.page_loads.clear()
+        self.browser_reports.clear()
+        self.noisy_entities: dict[str, int] = {}
+        self.noisy_overflow = 0
 
-    def record(self, forwarded: bool) -> None:
+    def record(self, forwarded: bool, entity_id: str | None = None) -> None:
         """One entity change for one ordinary, selected-account subscription."""
         if forwarded:
             self.forwarded += 1
+            if entity_id is not None:
+                if entity_id in self.noisy_entities or len(self.noisy_entities) < NOISY_ENTITY_LIMIT:
+                    self.noisy_entities[entity_id] = self.noisy_entities.get(entity_id, 0) + 1
+                else:
+                    self.noisy_overflow += 1
         else:
             self.avoided += 1
+
+    def noisy_report(self) -> dict[str, Any]:
+        """Bounded sent-update counts since reset, including per-feed duplication."""
+        rows = sorted(self.noisy_entities.items(), key=lambda item: (-item[1], item[0]))
+        return {"entities": [{"entity_id": entity_id, "updates": count}
+                             for entity_id, count in rows[:NOISY_ENTITY_REPORT_LIMIT]],
+                "untracked_updates": self.noisy_overflow}
 
     def sample(self) -> None:
         """Publish a bounded rate interval; an idle interval produces zero."""

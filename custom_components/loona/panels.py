@@ -11,7 +11,7 @@ from homeassistant.components import frontend, websocket_api
 from homeassistant.core import HomeAssistant, callback
 
 from .compatibility import CompatibilityError, probe_error, HandlerEntry
-from .const import PANEL_ASSET, PANEL_COMMAND, PANEL_SUBSCRIBE, PANEL_POLL_MS, VERSION
+from .const import PANEL_ASSET, PANEL_COMMAND, PANEL_SUBSCRIBE, PANEL_POLL_MS, VERSION, BROWSER_MEASURE_MS
 
 
 @callback
@@ -36,13 +36,17 @@ async def _async_register_frontend(hass: HomeAssistant) -> Callable[[], None]:
         path = str(Path(__file__).parent / "frontend" / "panel-context.js")
         if callable(getattr(hass.http, "async_register_static_paths", None)):
             from homeassistant.components.http import StaticPathConfig
-            await hass.http.async_register_static_paths([StaticPathConfig(PANEL_ASSET, path, cache_headers=True)])
+            await hass.http.async_register_static_paths([
+                StaticPathConfig(PANEL_ASSET, path, cache_headers=True),
+                StaticPathConfig("/loona/performance.js", str(Path(__file__).parent / "frontend" / "performance.js"), cache_headers=True),
+            ])
         elif callable(register := getattr(hass.http, "register_static_path", None)):
             register(PANEL_ASSET, path, cache_headers=True)
+            register("/loona/performance.js", str(Path(__file__).parent / "frontend" / "performance.js"), cache_headers=True)
         else:
             raise CompatibilityError("Frontend panel context registration is unavailable")
         hass.data[key] = True
-    url = f"{PANEL_ASSET}?v={VERSION}&poll={PANEL_POLL_MS}"
+    url = f"{PANEL_ASSET}?v={VERSION}&poll={PANEL_POLL_MS}&measure={BROWSER_MEASURE_MS}"
     frontend.add_extra_js_url(hass, url)
 
     def remove() -> None:

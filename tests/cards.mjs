@@ -17,7 +17,7 @@ globalThis.window=window;
 globalThis.IntersectionObserver=class { observe() {} disconnect() {} };
 const app=document.createElement("home-assistant"); document.body.append(app);
 let current={
-  version:"0.9.2",revision:"a".repeat(64),choice_page:50,
+  version:"0.9.3",revision:"a".repeat(64),choice_page:50,
   values:{controls:{enabled:true,entity_filtering:true},dashboards:{dashboards:["wall-panel"]},targets:{target_mode:"all",user_ids:[]},
     rules:{extra_entities:[],include_domains:[],include_globs:[],exclude_globs:[]},resources:{always_forward_resources:[]},cards:{dashboard_cards:[]}},
   choices:{dashboards:[{value:"wall-panel",label:"Wall"}],user_ids:[],extra_entities:[{value:"sensor.wall",label:"Wall"}],include_domains:[],include_globs:[],exclude_globs:[],always_forward_resources:[],dashboard_cards:[{value:"statistics",label:"statistics"}]},
@@ -26,7 +26,7 @@ let current={
 const copy=value=>JSON.parse(JSON.stringify(value));
 let conflict=false;
 const requests=[];
-const statistics={version:"0.9.2",controls:{enabled:true,entity_filtering:true},complete:true,metrics:{current_scope:1,filtered_subscriptions:1,managed_subscriptions:1,forwarded_rate:1,avoided_rate:2,update_reduction:3,forwarded_updates:4,avoided_updates:5,reduction_estimate:6},reset_at:"2026-10-02T01:00:00Z",page_loads:[],notices:[],interval_seconds:30};
+const statistics={version:"0.9.3",controls:{enabled:true,entity_filtering:true},complete:true,metrics:{current_scope:1,filtered_subscriptions:1,managed_subscriptions:1,forwarded_rate:1,avoided_rate:2,update_reduction:3,forwarded_updates:4,avoided_updates:5,reduction_estimate:6},reset_at:"2026-10-02T01:00:00Z",page_loads:[],notices:[],interval_seconds:30};
 const hass={user:{id:"admin",is_admin:true},language:"en",connection:{connected:true},locale:{language:"en",number_format:"decimal_comma",time_format:"24",time_zone:"server"},config:{time_zone:"UTC"},
   async callWS(request) {
     requests.push(request);
@@ -50,6 +50,20 @@ await new Promise(setImmediate);
 assert.equal(stats.shadowRoot.getElementById("scope").textContent,"1 entity");
 assert.equal(stats.shadowRoot.getElementById("forwarded").textContent,"1,0");
 assert.ok(stats.shadowRoot.getElementById("reset-time").textContent.includes("01:00:00"));
+let finishMeasurement;
+window.loonaMeasurePerformance = () => new Promise(resolve => { finishMeasurement = resolve; });
+const measurement = stats._measure();
+await stats._fetch();
+finishMeasurement();
+await measurement;
+assert.equal(stats.shadowRoot.getElementById("measure-status").textContent,"Measurement saved.","Normal polling must not discard a completed measurement");
+const staleMeasurement = stats._measure();
+stats.hass = {...hass,user:{id:"reader",is_admin:false}};
+finishMeasurement();
+await staleMeasurement;
+assert.equal(stats.shadowRoot.getElementById("measure-status").textContent, "", "An account change clears measurement status");
+stats.hass = hass;
+await new Promise(setImmediate);
 const state=settings.shadowRoot.getElementById("state");
 let announcements=0;
 const observer=new MutationObserver(rows=>announcements+=rows.length);

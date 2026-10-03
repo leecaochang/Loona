@@ -11,7 +11,7 @@ PANEL_POLL_MS: Final = 2000
 BOOTSTRAP_TIMEOUT_MS: Final = 2000
 RECORDER_CLEANUP_SECONDS: Final = 15
 MIN_CORE_VERSION: Final = "2024.6.0"
-VERSION: Final = "0.9.2"
+VERSION: Final = "0.9.3"
 CONF_DASHBOARD_CARDS: Final = "dashboard_cards"
 DASHBOARD_CARDS: Final = ("statistics", "settings")
 CONF_DASHBOARDS: Final = "dashboards"
@@ -73,10 +73,25 @@ RESOURCE_CARDS: Final = {
 }
 # card-mod also applies theme styles and patches native cards globally.
 RESOURCE_SHARED: Final = frozenset({"card-mod.js", "kiosk-mode.js"})
+# Only these fields are known to produce scalar display values or CSS.
+RESOURCE_VALUE_FIELDS: Final = {
+    "custom:button-card": frozenset({"styles", "name", "label", "state_display", "icon", "color"}),
+    "custom:mushroom-template-card": frozenset({"primary", "secondary", "icon", "icon_color", "color", "badge_icon", "badge_color"}),
+    "custom:bubble-card": frozenset({"styles"}),
+}
+NOISY_ENTITY_LIMIT: Final = 1024
+NOISY_ENTITY_REPORT_LIMIT: Final = 20
+BROWSER_REPORT_COMMAND: Final = "loona/browser_report"
+BROWSER_REPORT_LIMIT: Final = 30
+BROWSER_SCRIPT_LIMIT: Final = 40
+BROWSER_SUBSCRIPTION_LIMIT: Final = 40
+BROWSER_MEASURE_MS: Final = 30000
 # These cards are installed as frontend modules, outside Lovelace's file list.
 BUNDLED_CARD_TYPES: Final = frozenset({"loona-statistics-card", "loona-settings-card"})
 # Browser Mod registers this resource for Cast as well as an extra frontend module.
-RESOURCE_SHARED_PATHS: Final = {"/browser_mod.js": "Browser Mod frontend service and Cast companion"}
+RESOURCE_SHARED_PATHS: Final = {"/browser_mod.js": "Browser Mod frontend service and Cast companion",
+                               "/uix/uix.js": "UI eXtension styling and Cast companion"}
+RESOURCE_SHARED_TYPES: Final = {"/uix/uix.js": frozenset({"mod-card", "uix-forge"})}
 CONTROL_GRAPHS: Final = "visible_first_graphs"
 CONTROL_MOTION: Final = "pause_animations_during_loading"
 MOTION_QUIET_MS: Final = 750

@@ -1,5 +1,5 @@
 /* Native-themed live filtering statistics. */
-import { language, text, translate, renderNotices, setText, formatNumber, formatDateTime } from "./i18n.js?v=0.9.2";
+import { language, text, translate, renderNotices, setText, formatNumber, formatDateTime } from "./i18n.js?v=0.9.3";
 
 const command = "loona/statistics";
 const elementName = "loona-statistics-card";
@@ -25,6 +25,7 @@ function install() {
       super();
       this.attachShadow({ mode: "open" });
       this._sequence = 0;
+      this._measureSequence = 0;
       this._visible = true;
       this._lastRequest = 0;
       this.shadowRoot.innerHTML = `
@@ -59,7 +60,7 @@ function install() {
           .actions p { margin:0; font-size:12px; }
           details { margin-top:20px; border-top:1px solid var(--divider-color); padding-top:16px; }
           summary { cursor:pointer; min-height:36px; font-size:15px; line-height:1.5; }
-          .rows { margin:0; padding:0; list-style:none; }
+          .rows { margin:0; padding:0; list-style:none; overflow-wrap:anywhere; }
           .rows>li { border-top:1px solid var(--divider-color); padding:12px 0; }
           #version { font-size:12px; }
           .loona-notices ul { list-style:none; padding:0; margin:0; }
@@ -98,10 +99,19 @@ function install() {
               <p data-i18n="Initial snapshots are filtered when startup dashboard detection succeeds. Startup fallback retains full data. File counts cover registered Lovelace files for the whole page session.">Initial snapshots are filtered when startup dashboard detection succeeds. Startup fallback retains full data. File counts cover registered Lovelace files for the whole page session.</p>
               <ul id="load-rows" class="rows"></ul>
             </details>
+            <details><summary data-i18n="Performance diagnostics">Performance diagnostics</summary>
+              <p data-i18n="Measurements belong to this browser and dashboard. Long frames show only part of CPU work; buffered entries precede the measurement window.">Measurements belong to this browser and dashboard. Long frames show only part of CPU work; buffered entries precede the measurement window.</p>
+              <button id="measure" data-i18n="Measure this dashboard for 30 seconds">Measure this dashboard for 30 seconds</button>
+              <p id="measure-status" role="status"></p>
+              <ul id="performance-rows" class="rows"></ul>
+              <p data-i18n="Busiest tracked entities since reset">Busiest tracked entities since reset</p>
+              <ul id="noisy-rows" class="rows"></ul>
+            </details>
           </div>
         </ha-card>`;
       this._get("refresh").addEventListener("click", () => this._fetch());
       this._get("reset").addEventListener("click", () => this._reset());
+      this._get("measure").addEventListener("click", () => this._measure());
     }
 
     static getStubConfig() { return { type: "custom:loona-statistics-card" }; }
@@ -132,12 +142,16 @@ function install() {
       if (changedLanguage) this._localize();
       if (changedUser || !value?.user?.is_admin) {
         this._sequence++;
+        this._measureSequence++;
         this._data = undefined;
         this._errorKey = undefined; this._get("error").hidden = true;
         this._loading = false;
         this._get("content").hidden = true;
         this._get("load-rows").replaceChildren();
         this._get("notices").replaceChildren();
+        this._get("noisy-rows").replaceChildren();
+        this._get("performance-rows").replaceChildren();
+        this._get("measure-status").textContent = "";
         this._get("version").textContent = "";
       }
       if (!value?.user?.is_admin) {
@@ -167,6 +181,7 @@ function install() {
       window.clearInterval(this._timer);
       this._observer?.disconnect();
       this._sequence++;
+      this._measureSequence++;
       this._loading = false;
     }
     async _fetch() {
@@ -211,6 +226,25 @@ function install() {
         this._get("reset").disabled = !this._data?.reset_entity;
       }
     }
+    async _measure() {
+      if (!this._hass?.user?.is_admin || this._measuring) return;
+      this._measuring = true;
+      const sequence = this._measureSequence;
+      this._get("measure").disabled = true;
+      this._get("measure-status").textContent = text(this._hass, "Measuring. Keep this dashboard open.");
+      try {
+        if (typeof window.loonaMeasurePerformance !== "function") throw new Error("Reporter unavailable");
+        await window.loonaMeasurePerformance(this._hass);
+        if (sequence !== this._measureSequence) return;
+        this._get("measure-status").textContent = text(this._hass, "Measurement saved.");
+        await this._fetch();
+      } catch {
+        if (sequence === this._measureSequence) this._get("measure-status").textContent = text(this._hass, "Measurement failed. Refresh and keep the dashboard open.");
+      } finally {
+        this._measuring = false;
+        this._get("measure").disabled = false;
+      }
+    }
     _render(data) {
       const metrics = data.metrics;
       this._get("version").textContent = text(this._hass, "Version: {version}", {version:data.version});
@@ -240,6 +274,26 @@ function install() {
         item.append(node("p", row.resources ? text(this._hass, "Card files sent: {sent} / {available}", row.resources) : text(this._hass, "No card file count was recorded for this load.")));
         return item;
       }) : [node("li", text(this._hass, "No page loads recorded yet. Reload one of your dashboards."))]));
+      this._get("noisy-rows").replaceChildren(...(data.noisy_entities?.entities || []).map(row =>
+        node("li", `${row.entity_id}: ${format(row.updates)}`)));
+      if (data.noisy_entities?.untracked_updates) this._get("noisy-rows").append(node("li",
+        text(this._hass, "Tracking limit reached: {count} sent updates were not attributed.", {count:format(data.noisy_entities.untracked_updates)})));
+      this._get("performance-rows").replaceChildren(...(data.browser_reports || []).map(row => {
+        const item = node("li");
+        item.append(node("strong", row.dashboard));
+        item.append(node("p", formatDateTime(this._hass, row.at)));
+        item.append(node("p", row.loaf_supported ? text(this._hass, "Long frames: {count}; blocking: {ms} ms", {count:format(row.frames), ms:format(row.blocking_ms)})
+          : text(this._hass, "Long Animation Frames are unavailable in this browser.")));
+        for (const script of row.scripts) item.append(node("p", text(this._hass,
+          "{source} ({phase}): {ms} ms; forced layout: {layout} ms", {source:script.source,
+            phase:text(this._hass, script.phase === "buffered" ? "earlier buffered" : "measurement window"),
+            ms:format(script.duration_ms), layout:format(script.forced_layout_ms)})));
+        for (const subscription of row.subscriptions) item.append(node("p", `${subscription.type}: ${format(subscription.count)}`));
+        if (row.subscriptions.some(value => value.type === "subscribe_events/state_changed" || value.type === "subscribe_events/*")) {
+          item.append(node("p", text(this._hass, "A raw event subscription can bypass entity filtering.")));
+        }
+        return item;
+      }));
     }
   }
 

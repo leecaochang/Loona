@@ -28,6 +28,52 @@ async def request(hass, connection, output, name="lovelace/resources/list", **fi
     return next(packet for packet in reversed(output) if packet.get("id") == msg_id)
 
 
+def test_value_templates_keep_static_resource_dependencies():
+    config = {"views": [{"cards": [
+        {"type": "custom:button-card", "entity": "sensor.example", "label": "[[[ return entity.state; ]]]",
+         "styles": {"icon": [{"color": "[[[ return entity.state === 'on' ? 'red' : 'blue'; ]]]"}]}},
+        {"type": "custom:mushroom-template-card", "primary": "{{ states('sensor.example') }}"},
+        {"type": "custom:bubble-card", "styles": ".bubble { color: {{ 'red' }}; }"},
+        {"type": "custom:bubble-card", "entity": "fan.example", "styles": ".bubble { color: ${state === 'off' ? '#fff' : '#000'}; animation: ${hass.states['fan.example'].state === 'on' ? 'rotate ' + (4.5 - (hass.states['fan.example'].attributes.percentage / 25)) + 's linear infinite' : 'none'}; }"},
+        {"type": "custom:bubble-card", "entity": "switch.example", "styles": ".bubble-icon { ${icon.setAttribute('icon', state === 'on' ? 'mdi:shield-check' : 'mdi:shield-off')} }"},
+        {"type": "tile", "card_mod": {"style": {"ha-card": "color: {{ 'red' }};"}}},
+        {"type": "tile", "uix": {"style": "ha-card { color: {{ 'red' }}; }"}},
+    ]}]}
+    dependencies = resource_dependencies([config])
+    assert not dependencies.dynamic
+    report = resource_report([{"url": "/local/apexcharts-card.js", "type": "module"}], dependencies)
+    assert report["unresolved_custom_types"], "Absent required card bundles must still retain the list"
+
+
+@pytest.mark.parametrize("config", [
+    {"type": "[[card_type]]"}, {"layout_type": "${vars[0]}"},
+    {"type": "custom:auto-entities", "filter": {"template": "{{ 'generated cards' }}"}},
+    {"type": "custom:button-card", "label": "[[[ return document.createElement('other-card'); ]]]"},
+    {"type": "custom:button-card", "label": "[[[ return '<other-card></other-card>'; ]]]"},
+    {"type": "custom:button-card", "label": "[[[ return '<' + 'other-card></other-card>'; ]]]"},
+    {"type": "custom:button-card", "custom_fields": {"inner": "[[[ return entity.state; ]]]"}},
+    {"type": "custom:unknown", "styles": "{{ 'unknown contract' }}"},
+    {"type": "custom:button-card", "styles": {"nested": {"type": "${vars[0]}"}}},
+    {"strategy": {"type": "custom:generated"}},
+    {"type": "custom:config-template-card", "card": "${vars[0]}"},
+    {"type": "custom:decluttering-card", "template": "[[template_name]]"},
+    {"type": "custom:bubble-card", "styles": ".bubble { color: ${document.createElement('other-card')}; }"},
+    {"type": "custom:bubble-card", "styles": ".bubble { color: ${new Function('return otherCard')()}; }"},
+    {"type": "custom:bubble-card", "styles": ".bubble { ${icon.setAttribute('onclick', 'arbitraryCode()')} }"},
+])
+def test_card_generating_and_unknown_templates_remain_dynamic(config):
+    assert resource_dependencies([config]).dynamic
+
+
+def test_uix_resolves_legacy_wrapper_without_trusting_remote_names():
+    dependencies = resource_dependencies([{"type": "custom:mod-card"}])
+    for url, resolved in [("/uix/uix.js?v=8.3.1", True), ("https://other.invalid/uix/uix.js", False)]:
+        report = resource_report([{"url": url, "type": "module"},
+                                  {"url": "/local/apexcharts-card.js", "type": "module"}], dependencies)
+        assert bool(report["unresolved_custom_types"]) is not resolved
+        assert report["resources"][1]["forwarded"] is not resolved
+
+
 def test_nested_types_shared_styles_dynamic_and_unclassified_preview():
     dependencies = resource_dependencies([{
         "button_card_templates": {"inner": {"type": "custom:button-card"}},

@@ -1,11 +1,47 @@
 """Exercise dependency privacy, paging, reset and bootstrap attribution."""
 
 import pytest
+from pathlib import Path
+import subprocess
 
 from homeassistant.helpers import entity_registry as er
 
 from custom_components.loona import async_setup_entry, async_unload_entry
 from custom_components.loona.preview import statistics_report
+from custom_components.loona.diagnostics import async_get_config_entry_diagnostics
+
+
+def test_browser_performance_measurement():
+    result = subprocess.run(["node", str(Path(__file__).with_name("performance.mjs"))],
+                            capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+async def test_browser_reports_are_admin_only_bounded_and_separate(preview_runtime, make_user, make_connection):
+    runtime = preview_runtime
+    report = {"type": "loona/browser_report", "dashboard": "wall-panel", "duration_ms": 30000,
+              "loaf_supported": True, "frames": 1, "blocking_ms": 10,
+              "scripts": [{"source": "/hacsfiles/example/card.js", "phase": "window",
+                           "duration_ms": 60, "forced_layout_ms": 5}],
+              "subscriptions": [{"type": "subscribe_events/state_changed", "count": 1}]}
+    admin, output = make_connection(make_user(admin=True))
+    admin.async_handle({"id": 1, **report})
+    assert output[-1]["success"]
+    assert runtime.live_statistics.browser_reports["wall-panel"]["frames"] == 1
+    assert runtime.live_statistics.forwarded == 0
+    diagnostics = await async_get_config_entry_diagnostics(runtime.hass, runtime.entry)
+    assert diagnostics["browser_reports"][0]["scripts"][0]["source"] != report["scripts"][0]["source"]
+    assert report["scripts"][0]["source"] not in str(diagnostics)
+    for i, fields in enumerate([{"blocking_ms": float('nan')}, {"blocking_ms": float('inf')},
+                               {"scripts": report["scripts"] * 41}, {"duration_ms": -1},
+                               {"dashboard": "missing"}, {"sent": 999}], 2):
+        admin.async_handle({"id": i, **report, **fields})
+        assert not output[-1]["success"]
+    reader, denied = make_connection(make_user(allowed={"sensor.wall"}))
+    reader.async_handle({"id": 1, **report})
+    assert not denied[-1]["success"]
+    runtime.live_statistics.reset()
+    assert not runtime.live_statistics.browser_reports
 
 
 @pytest.fixture

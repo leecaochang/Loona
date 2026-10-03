@@ -1,6 +1,7 @@
 """Administrator statistics and server-observed page-load summaries."""
 
 from typing import Any
+import math
 
 import voluptuous as vol
 
@@ -8,7 +9,9 @@ from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 
-from .const import VERSION, DOMAIN, METRIC_SECONDS, PAGE_LOAD_COMMAND, PAGE_LOAD_LIMIT
+from .const import (VERSION, DOMAIN, METRIC_SECONDS, PAGE_LOAD_COMMAND, PAGE_LOAD_LIMIT,
+                    BROWSER_REPORT_COMMAND, BROWSER_REPORT_LIMIT, BROWSER_SCRIPT_LIMIT,
+                    BROWSER_SUBSCRIPTION_LIMIT)
 from .dashboard import dashboard_objects, dashboard_titles
 from homeassistant.util import dt as dt_util
 from .runtime import LoonaRuntime
@@ -30,6 +33,8 @@ def statistics_report(runtime: LoonaRuntime) -> dict[str, Any]:
         "interval_seconds": METRIC_SECONDS,
         "sample_seconds": runtime.live_statistics.sample_seconds,
         "page_loads": list(reversed(runtime.live_statistics.page_loads.values())),
+        "noisy_entities": runtime.live_statistics.noisy_report(),
+        "browser_reports": list(reversed(runtime.live_statistics.browser_reports.values())),
         "reset_entity": next((item.entity_id for item in er.async_get(runtime.hass).entities.values()
                               if item.config_entry_id == runtime.entry.entry_id
                               and item.unique_id.endswith(":reset_live_statistics")), None),
@@ -48,6 +53,55 @@ def websocket_statistics(hass: HomeAssistant, connection: websocket_api.ActiveCo
         connection.send_error(msg["id"], "not_loaded", "Loona is not loaded")
         return
     connection.send_result(msg["id"], statistics_report(runtime))
+
+
+def _finite_duration(value: Any) -> float:
+    """Reject non-finite and unbounded browser-supplied measurements."""
+    try:
+        result = float(value)
+    except (TypeError, ValueError) as err:
+        raise vol.Invalid("Invalid duration") from err
+    if not math.isfinite(result) or not 0 <= result <= 3600000:
+        raise vol.Invalid("Duration is outside the allowed range")
+    return result
+
+
+@callback
+@websocket_api.require_admin
+@websocket_api.websocket_command({
+    vol.Required("type"): BROWSER_REPORT_COMMAND,
+    vol.Required("dashboard"): vol.All(str, vol.Length(max=128)),
+    vol.Required("duration_ms"): _finite_duration,
+    vol.Required("loaf_supported"): bool,
+    vol.Required("frames"): vol.All(int, vol.Range(min=0, max=10000)),
+    vol.Required("blocking_ms"): _finite_duration,
+    vol.Required("scripts"): vol.All([{
+        vol.Required("source"): vol.All(str, vol.Length(max=512), vol.Match(r"^/(?:frontend_latest|hacsfiles|local|uix|loona)/[^?#\s]+$")),
+        vol.Required("phase"): vol.In(("buffered", "window")),
+        vol.Required("duration_ms"): _finite_duration,
+        vol.Required("forced_layout_ms"): _finite_duration,
+    }], vol.Length(max=BROWSER_SCRIPT_LIMIT)),
+    vol.Required("subscriptions"): vol.All([{
+        vol.Required("type"): vol.All(str, vol.Length(max=80), vol.Match(r"^[a-zA-Z0-9_/*:.-]+$")),
+        vol.Required("count"): vol.All(int, vol.Range(min=0, max=10000)),
+    }], vol.Length(max=BROWSER_SUBSCRIPTION_LIMIT)),
+})
+def websocket_browser_report(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Store bounded administrator observations separately from native counters."""
+    runtime = hass.data.get(DOMAIN)
+    if runtime is None:
+        connection.send_error(msg["id"], "not_loaded", "Loona is not loaded")
+        return
+    if msg["dashboard"] not in dashboard_objects(hass):
+        connection.send_error(msg["id"], "invalid_dashboard", "Dashboard is unavailable")
+        return
+    rows = runtime.live_statistics.browser_reports
+    rows.pop(msg["dashboard"], None)
+    rows[msg["dashboard"]] = {key: value for key, value in msg.items() if key not in {"id", "type"}}
+    rows[msg["dashboard"]]["at"] = dt_util.utcnow().isoformat()
+    while len(rows) > BROWSER_REPORT_LIMIT:
+        rows.pop(next(iter(rows)))
+    connection.send_result(msg["id"], None)
 
 
 @callback

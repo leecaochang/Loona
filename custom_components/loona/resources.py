@@ -3,6 +3,7 @@
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from inspect import isawaitable, unwrap
+import re
 from typing import Any, cast
 from urllib.parse import urlsplit
 
@@ -18,7 +19,10 @@ from .compatibility import (
 from .const import (
     BUNDLED_CARD_TYPES, RESOURCE_CARDS, RESOURCE_COMMANDS,
     RESOURCE_SHARED, RESOURCE_SHARED_PATHS, RESOURCE_NATIVE_STRATEGIES,
+    RESOURCE_VALUE_FIELDS, RESOURCE_SHARED_TYPES,
+    MAX_TEMPLATE_LENGTH,
 )
+from .templates import template_dependencies
 from .websocket import ScopePolicy
 
 
@@ -30,30 +34,65 @@ class ResourceDependencies:
     dynamic: bool = False
 
 
+def _scalar_template_safe(source: str, card_type: str, entity_id: str | None) -> bool:
+    """Classify scalar expressions, including Bubble's CSS interpolations."""
+    if len(source) > MAX_TEMPLATE_LENGTH or "[[" in source.replace("[[[", ""):
+        return False
+    if "${" in source:
+        if card_type != "custom:bubble-card":
+            return False
+        expressions = re.findall(r"\$\{([^{}]*)\}", source)
+        if len(expressions) != source.count("${"):
+            return False
+        for expression in expressions:
+            icon_value = re.fullmatch(r"\s*icon\.setAttribute\(\s*(['\"])icon\1\s*,(.*)\)\s*", expression, re.DOTALL)
+            if icon_value is not None:
+                expression = icon_value[2]
+            # Bubble exposes state as the configured entity's scalar state.
+            wrapped = "[[[ const state = entity.state; return (" + expression + "); ]]]"
+            if not template_dependencies(wrapped, card_type="custom:button-card", entity_id=entity_id).complete:
+                return False
+        source = re.sub(r"\$\{[^{}]*\}", "", source)
+    return template_dependencies(source, card_type=card_type, entity_id=entity_id).complete
+
+
 def resource_dependencies(configs: Iterable[dict[str, Any]]) -> ResourceDependencies:
     """Read configuration only; never execute or fetch arbitrary module code."""
     types: set[str] = set()
     dynamic = False
 
-    def walk(node: Any) -> None:
+    def walk(node: Any, card_type: str = "", scalar: bool = False, card_mod: bool = False, entity: str | None = None) -> None:
         nonlocal dynamic
         if isinstance(node, list):
             for value in node:
-                walk(value)
+                walk(value, card_type, scalar, card_mod, entity)
         elif isinstance(node, dict):
+            # A nested configuration starts a new context, even below styles.
+            if isinstance(node.get("type"), str):
+                card_type = node["type"]
+                scalar = card_mod = False
+                entity = node.get("entity") if isinstance(node.get("entity"), str) else None
             for key, value in node.items():
                 if key in {"type", "layout_type"} and isinstance(value, str):
                     if value.startswith("custom:"):
                         types.add(value.removeprefix("custom:"))
-                    if any(marker in value for marker in ("{{", "{%", "[[[")):
+                    if any(marker in value for marker in ("{{", "{%", "[[", "${")):
                         dynamic = True
                 if key == "strategy":
                     if not isinstance(value, dict) or value.get("type") not in RESOURCE_NATIVE_STRATEGIES:
                         dynamic = True
-                walk(value)
-        elif isinstance(node, str) and any(marker in node for marker in ("{{", "{%", "[[[")):
-            # Templates can generate card configurations as well as values.
-            dynamic = True
+                style_context = card_mod or key in {"card_mod", "uix"}
+                value_context = (scalar or key in RESOURCE_VALUE_FIELDS.get(card_type, ())
+                                 or style_context and key == "style")
+                walk(value, card_type, value_context and key not in {"type", "layout_type"}, style_context, entity)
+        elif isinstance(node, str) and any(marker in node for marker in ("{{", "{%", "[[", "${")):
+            # CSS and known display fields cannot be blanket exemptions for
+            # arbitrary JavaScript or strings that construct custom elements.
+            safe = scalar and not re.search(r"<[a-zA-Z][\w]*-[\w-]+|['\"`]\s*<", node)
+            if safe:
+                safe = _scalar_template_safe(node, card_type, entity)
+            if not safe:
+                dynamic = True
 
     for config in configs:
         walk(config)
@@ -70,10 +109,11 @@ def matches(card_type: str, declarations: tuple[str, ...]) -> bool:
 def resource_report(
     rows: list[dict[str, Any]], dependencies: ResourceDependencies,
     always_forward: Iterable[str] = (),
+    provided_types: Iterable[str] = (),
 ) -> dict[str, Any]:
     """Classify a fresh native list, preserving URL queries and resource IDs."""
     exceptions = frozenset(always_forward)
-    found: set[str] = set(BUNDLED_CARD_TYPES)
+    found: set[str] = set(BUNDLED_CARD_TYPES) | set(provided_types)
     report_rows = []
     for row in rows:
         url, kind = row["url"], row["type"]
@@ -91,6 +131,7 @@ def resource_report(
         elif (kind in {"module", "js"} and not parsed.scheme and not parsed.netloc
               and parsed.path in RESOURCE_SHARED_PATHS):
             status, reason = "required", RESOURCE_SHARED_PATHS[parsed.path]
+            found.update(RESOURCE_SHARED_TYPES.get(parsed.path, ()))
         elif local and kind in {"module", "js"} and filename in RESOURCE_SHARED:
             status, reason = "required", "Shared frontend helper"
         elif required:

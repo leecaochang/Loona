@@ -6,6 +6,8 @@ if (!window.__loonaPanelContext) {
   const retired = new WeakMap();
   const entityCallbacks = new WeakMap();
   const prototypes = new WeakSet();
+  const subscriptionKinds = new WeakMap();
+  const subscriptionCallbacks = new WeakMap();
   const pollMs = Number(new URL(import.meta.url).searchParams.get("poll"));
   let rootDashboard = null;
 
@@ -71,10 +73,12 @@ if (!window.__loonaPanelContext) {
       if (state.socket !== connection.socket) {
         state.socket = connection.socket; state.generation++;
         state.subscribed = false; state.pending = false; unsubscribe = undefined;
+        state.prefetch = undefined;
       }
       if (!state.subscribed) { subscribe(); return; }
       const current = dashboard();
       if (state.dashboard === current) return;
+      state.prefetch = undefined;
       state.dashboard = current;
       nativePromise.call(connection, { type: "loona/panel", dashboard: current })
         .catch((error) => {
@@ -87,8 +91,28 @@ if (!window.__loonaPanelContext) {
         });
     }
     state.report = report;
+    state.prefetchDashboard = (path) => {
+      if (!path || path === "lovelace" || state.disabled || state.prefetchStarted) return;
+      state.prefetchStarted = true;
+      const promise = nativePromise.call(connection, {type:"lovelace/config", url_path:path, force:false});
+      state.prefetch = {dashboard:path, socket:connection.socket, promise};
+      promise.catch(() => {});
+      if (location.pathname !== "/" && !window.llResProm) {
+        window.llResProm = nativePromise.call(connection, {type:"lovelace/resources"});
+        window.llResProm.catch(() => {});
+      }
+    };
     connection.sendMessagePromise = function (message, ...args) {
       if (message.type !== "loona/panel") report();
+      const cached = state.prefetch;
+      if (cached && message.type === "lovelace/config" && message.url_path === cached.dashboard
+          && message.force !== false) state.prefetch = undefined;
+      if (cached && cached.socket === connection.socket && cached.dashboard === dashboard()
+          && message.type === "lovelace/config" && message.url_path === cached.dashboard
+          && message.force === false) {
+        state.prefetch = undefined;
+        return cached.promise;
+      }
       return nativePromise.call(this, message, ...args);
     };
     const wrappedPromise = connection.sendMessagePromise;
@@ -113,8 +137,19 @@ if (!window.__loonaPanelContext) {
           original(event);
         };
         entityCallbacks.set(callback, original);
+      } else if (typeof callback === "function") {
+        const original = subscriptionCallbacks.get(callback) || callback;
+        callback = function (event) { return original.call(this, event); };
+        subscriptionCallbacks.set(callback, original);
       }
-      return nativeSubscribe.call(this, callback, message, ...args);
+      const result = nativeSubscribe.call(this, callback, message, ...args);
+      Promise.resolve(result).then(() => {
+        for (const info of connection.commands?.values?.() ?? []) {
+          if (info.callback === callback) subscriptionKinds.set(info,
+            message.type === "subscribe_events" ? `${message.type}/${message.event_type || "*"}` : message.type);
+        }
+      }).catch(() => {});
+      return result;
     };
     const wrappedSubscribe = connection.subscribeMessage;
     const ready = () => report();
@@ -155,7 +190,24 @@ if (!window.__loonaPanelContext) {
     // The result acknowledgement is handled by attach without delaying Core.
     attach(connection);
     const state = connections.get(connection);
+    if (state && !state.disabled) state.prefetchDashboard(dashboard());
     return Boolean(state && !state.disabled && (state.pending || state.subscribed));
+  };
+  window.loonaSubscriptionReport = (connection) => {
+    const counts = new Map();
+    for (const info of connection?.commands?.values?.() ?? []) {
+      if (!("subscribe" in info)) continue;
+      const reported = subscriptionKinds.get(info) || "unclassified";
+      const kind = /^[a-zA-Z0-9_/*:.-]{1,80}$/.test(reported) ? reported : "unclassified";
+      counts.set(kind, (counts.get(kind) || 0) + 1);
+    }
+    return [...counts].slice(0, 40).map(([type, count]) => ({type, count}));
+  };
+  window.loonaMeasurePerformance = async (hass) => {
+    const moduleUrl = new URL("/loona/performance.js", location.href);
+    moduleUrl.search = new URL(import.meta.url).search;
+    const {measure} = await import(moduleUrl.href);
+    return measure(hass, Number(moduleUrl.searchParams.get("measure")));
   };
   window.__loonaBootstrap?.resume?.();
 

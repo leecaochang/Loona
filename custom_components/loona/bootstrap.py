@@ -12,7 +12,7 @@ from homeassistant.components import frontend
 from homeassistant.core import HomeAssistant
 
 from .compatibility import CompatibilityError, probe_error
-from .const import BOOTSTRAP_TIMEOUT_MS, PANEL_ASSET, PANEL_POLL_MS, VERSION
+from .const import BOOTSTRAP_TIMEOUT_MS, PANEL_ASSET, PANEL_POLL_MS, VERSION, BROWSER_MEASURE_MS
 
 
 def route_key(path: str) -> str:
@@ -74,7 +74,7 @@ async def async_install(hass: HomeAssistant, policy: Callable[[], dict] | None =
                     or {name: block.__code__ for name, block in cached.blocks.items()}
                     != {name: block.__code__ for name, block in native.blocks.items()}):
                 raise CompatibilityError("Another owner changed the native frontend template")
-            url = f"{PANEL_ASSET}?v={VERSION}&poll={PANEL_POLL_MS}"
+            url = f"{PANEL_ASSET}?v={VERSION}&poll={PANEL_POLL_MS}&measure={BROWSER_MEASURE_MS}"
             for modules in ([], [url, "/unrelated-module.js"]):
                 args = {"theme_color": "#123456", "extra_modules": modules, "extra_js_es5": []}
                 if cached.render(**args) != native.render(**args):

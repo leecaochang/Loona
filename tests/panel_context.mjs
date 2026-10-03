@@ -55,6 +55,21 @@ assert.deepEqual(socket.sent.map((row) => row.type), [
 ]);
 assert.equal(socket.sent[0].dashboard, "wall-panel");
 
+await window.loonaAttachBootstrapPanel(connection, null);
+await new Promise(setImmediate);
+assert.equal(socket.sent.filter(row => row.type === "lovelace/config").length, 1);
+await connection.sendMessagePromise({type:"lovelace/config", url_path:"wall-panel", force:false});
+assert.equal(socket.sent.filter(row => row.type === "lovelace/config").length, 1, "The panel consumes the prefetched config once");
+await connection.sendMessagePromise({type:"lovelace/config", url_path:"wall-panel", force:true});
+assert.equal(socket.sent.filter(row => row.type === "lovelace/config").length, 2, "Forced refresh remains native");
+await window.loonaAttachBootstrapPanel(connection, null);
+assert.equal(socket.sent.filter(row => row.type === "lovelace/resources").length, 1);
+const raw = await connection.subscribeMessage(() => {}, {type:"subscribe_events", event_type:"state_changed"});
+await new Promise(setImmediate);
+assert.ok(window.loonaSubscriptionReport(connection).some(row => row.type === "subscribe_events/state_changed" && row.count === 1));
+await raw();
+assert.ok(!window.loonaSubscriptionReport(connection).some(row => row.type === "subscribe_events/state_changed"));
+
 location.pathname = "/config/ai_task";
 listeners.get("location-changed")();
 await connection.sendMessagePromise({ type: "config/entity_registry/list" });
@@ -73,6 +88,9 @@ assert.equal(socket.sent.at(-2).type, "loona/panel");
 assert.equal(socket.sent.at(-2).dashboard, "wall-panel");
 
 // Native reconnect replays the original context message after offline navigation.
+let rawCalls = 0;
+const replayRaw = await connection.subscribeMessage(() => { rawCalls++; }, {type:"subscribe_events", event_type:"example.custom:event"});
+await new Promise(setImmediate);
 connection.oldSubscriptions = connection.commands;
 connection.commands = new Map();
 connection.commandId = 1;
@@ -82,6 +100,12 @@ connection._setSocket(replacement);
 await new Promise(setImmediate);
 assert.equal(replacement.sent[0].type, "loona/subscribe_panel");
 assert.equal(replacement.sent[0].dashboard, "developer-tools");
+const replayId = replacement.sent.find(row => row.type === "subscribe_events" && row.event_type === "example.custom:event").id;
+replacement.dispatchEvent(new MessageEvent("message", {data:JSON.stringify({id:replayId,type:"event",event:{}})}));
+await new Promise(setImmediate);
+assert.equal(rawCalls, 1, "Raw callbacks still receive their native event after reconnect");
+assert.ok(window.loonaSubscriptionReport(connection).some(row => row.type === "subscribe_events/example.custom:event" && row.count === 1));
+await replayRaw();
 
 // Registry replacement and a different authenticated connection are rediscovered.
 const nextSocket = new Socket();

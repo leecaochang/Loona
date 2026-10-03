@@ -4,7 +4,23 @@ from dataclasses import replace
 from unittest.mock import patch
 
 from custom_components.loona.statistics import LiveStatistics
+from custom_components.loona.const import NOISY_ENTITY_LIMIT, NOISY_ENTITY_REPORT_LIMIT
 from custom_components.loona.websocket import ScopePolicy, SubscriptionAdapter
+
+
+def test_entity_attribution_bounds_overflow_and_reset():
+    statistics = LiveStatistics()
+    for index in range(NOISY_ENTITY_LIMIT + 1):
+        statistics.record(True, f"sensor.example_{index}")
+    statistics.record(True, "sensor.example_0")
+    statistics.record(False, "sensor.not_sent")
+    report = statistics.noisy_report()
+    assert len(statistics.noisy_entities) == NOISY_ENTITY_LIMIT
+    assert len(report["entities"]) == NOISY_ENTITY_REPORT_LIMIT
+    assert report["entities"][0] == {"entity_id": "sensor.example_0", "updates": 2}
+    assert report["untracked_updates"] == 1
+    statistics.reset()
+    assert statistics.noisy_report() == {"entities": [], "untracked_updates": 0}
 
 
 def test_statistics_rates_idle_window_and_reset():
@@ -54,6 +70,7 @@ async def test_updates_match_native_permission_scope_and_bypass(hass, make_user,
             hass.states.async_set(entity_id, '1')
         await hass.async_block_till_done()
         assert statistics.forwarded == statistics.avoided == 1
+        assert statistics.noisy_report()["entities"] == [{"entity_id": "sensor.keep", "updates": 1}]
         assert len([packet for packet in output if packet.get('id') == 1]) == 2
         assert len([packet for packet in output if packet.get('id') == 2]) == 1
         adapter.set_policy(replace(adapter.policy, enabled=False))

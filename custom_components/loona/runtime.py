@@ -7,6 +7,7 @@ from fnmatch import fnmatchcase
 import logging
 from time import perf_counter
 from typing import TYPE_CHECKING, Any, cast
+from urllib.parse import urlsplit
 
 from homeassistant import auth, const as ha_const
 from homeassistant.components.lovelace.const import EVENT_LOVELACE_UPDATED
@@ -57,6 +58,7 @@ from .const import (
     SCAN_DEBOUNCE,
     TARGET_ALL,
     VERSION,
+    RESOURCE_SHARED_TYPES,
 )
 from .graph_loading import GraphLoadingAdapter
 from .panels import PanelContext
@@ -276,14 +278,20 @@ class LoonaRuntime:
 
     def resource_report(self, rows: list[dict[str, Any]]) -> dict[str, Any]:
         """Evaluate every newly installed resource using the published union."""
-        self.resource_preview = resource_report(
-            rows, self.resource_dependencies,
-            self._policy_settings.get(CONF_ALWAYS_FORWARD, ()),
-        )
-        # Modules are global for the page, including extra_module_url helpers.
         from homeassistant.components import frontend
         manager = self.hass.data.get(frontend.DATA_EXTRA_MODULE_URL)
         extra = manager.urls if manager else ()
+        provided: set[str] = set()
+        for url in extra:
+            parsed = urlsplit(url)
+            if not parsed.scheme and not parsed.netloc:
+                provided.update(RESOURCE_SHARED_TYPES.get(parsed.path, ()))
+        self.resource_preview = resource_report(
+            rows, self.resource_dependencies,
+            self._policy_settings.get(CONF_ALWAYS_FORWARD, ()),
+            provided,
+        )
+        # Modules are global for the page, including extra_module_url helpers.
         for row in self.resource_preview["resources"]:
             if row["url"] in extra:
                 row.update(status="required", forwarded=True, reason="Shared frontend module")

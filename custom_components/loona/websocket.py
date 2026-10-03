@@ -193,7 +193,7 @@ class SubscriptionAdapter:
             if (not user.is_admin and not permissions.access_all_entities(POLICY_READ)
                 and not permissions.check_entity(entity_id, POLICY_READ)):
                 continue
-            statistics.record(record.scope is None or entity_id in record.scope)
+            statistics.record(record.scope is None or entity_id in record.scope, entity_id)
 
     @callback
     def _handle(
