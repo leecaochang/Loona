@@ -17,7 +17,7 @@ globalThis.window=window;
 globalThis.IntersectionObserver=class { observe() {} disconnect() {} };
 const app=document.createElement("home-assistant"); document.body.append(app);
 let current={
-  version:"0.9.3",revision:"a".repeat(64),choice_page:50,
+  version:"0.9.4",revision:"a".repeat(64),choice_page:50,
   values:{controls:{enabled:true,entity_filtering:true},dashboards:{dashboards:["wall-panel"]},targets:{target_mode:"all",user_ids:[]},
     rules:{extra_entities:[],include_domains:[],include_globs:[],exclude_globs:[]},resources:{always_forward_resources:[]},cards:{dashboard_cards:[]}},
   choices:{dashboards:[{value:"wall-panel",label:"Wall"}],user_ids:[],extra_entities:[{value:"sensor.wall",label:"Wall"}],include_domains:[],include_globs:[],exclude_globs:[],always_forward_resources:[],dashboard_cards:[{value:"statistics",label:"statistics"}]},
@@ -26,7 +26,7 @@ let current={
 const copy=value=>JSON.parse(JSON.stringify(value));
 let conflict=false;
 const requests=[];
-const statistics={version:"0.9.3",controls:{enabled:true,entity_filtering:true},complete:true,metrics:{current_scope:1,filtered_subscriptions:1,managed_subscriptions:1,forwarded_rate:1,avoided_rate:2,update_reduction:3,forwarded_updates:4,avoided_updates:5,reduction_estimate:6},reset_at:"2026-10-02T01:00:00Z",page_loads:[],notices:[],interval_seconds:30};
+const statistics={version:"0.9.4",controls:{enabled:true,entity_filtering:true},complete:true,metrics:{current_scope:1,filtered_subscriptions:1,managed_subscriptions:1,forwarded_rate:1,avoided_rate:2,update_reduction:3,forwarded_updates:4,avoided_updates:5,reduction_estimate:6},reset_at:"2026-10-02T01:00:00Z",page_loads:[],notices:[],interval_seconds:30};
 const hass={user:{id:"admin",is_admin:true},language:"en",connection:{connected:true},locale:{language:"en",number_format:"decimal_comma",time_format:"24",time_zone:"server"},config:{time_zone:"UTC"},
   async callWS(request) {
     requests.push(request);

@@ -19,6 +19,7 @@ from .const import (
     DASHBOARD_CARDS,
     CONF_ALWAYS_FORWARD,
     CONTROL_RESOURCES,
+    CONTROL_RESOURCE_DELAY,
     CONF_TARGET_MODE,
     CONF_USER_IDS,
     CONF_EXTRA_ENTITIES,
@@ -337,7 +338,7 @@ class LoonaOptionsFlow(OptionsFlow):
                 {
                     vol.Required(key, default=runtime.controls[key]): selector.BooleanSelector()
                     for key in (
-                        CONTROL_ENTITIES, CONTROL_REGISTRIES, CONTROL_RESOURCES, CONTROL_GRAPHS, CONTROL_MOTION
+                        CONTROL_ENTITIES, CONTROL_REGISTRIES, CONTROL_RESOURCES, CONTROL_RESOURCE_DELAY, CONTROL_GRAPHS, CONTROL_MOTION
                     )
                     if runtime is not None and key in runtime.available_controls
                 }

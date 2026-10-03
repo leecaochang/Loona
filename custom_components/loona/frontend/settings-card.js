@@ -1,5 +1,5 @@
 /* Prefilled administrator settings using native Loona validation and storage. */
-import { language, text, translate, renderNotices, setText } from "./i18n.js?v=0.9.3";
+import { language, text, translate, renderNotices, setText } from "./i18n.js?v=0.9.4";
 
 const groups = {
   controls: "Filters and performance", dashboards: "Dashboards", targets: "Accounts",
@@ -8,6 +8,7 @@ const groups = {
 const labels = {
   enabled: "Enabled", entity_filtering: "Entity filtering", registry_filtering: "Registry filtering",
   resource_filtering: "Resource filtering", visible_first_graphs: "Delay graph loading",
+  delay_card_resources: "Delay card files",
   pause_animations_during_loading: "Pause animations during loading", dashboards: "Dashboards",
   user_ids: "Accounts", extra_entities: "Entities", include_domains: "Entity types",
   include_globs: "Entities or domain.*", exclude_globs: "Entities or domain.*",
@@ -19,6 +20,7 @@ const help = {
   entity_filtering: "Automatically find the entities used by your selected dashboards.",
   registry_filtering: "Keep registry rows related to the included entities and dashboard targets.",
   resource_filtering: "Skip known unused card bundles. Keep unknown and shared modules. Reload after changes.",
+  delay_card_resources: "Load this dashboard's card files first, then the remaining modules. Navigation and editing load pending files immediately. Reload after enabling.",
   visible_first_graphs: "Delay off-screen graphs until the dashboard has loaded. Scrolling to a graph loads it immediately.",
   pause_animations_during_loading: "Pause repeating animations while loading, then resume them automatically.",
 };

@@ -1,4 +1,5 @@
 /* Report dashboard context and recover when Core reconnects before Loona. */
+import "./resource-loading.js?v=0.9.4";
 
 if (!window.__loonaPanelContext) {
   window.__loonaPanelContext = true;
@@ -39,6 +40,7 @@ if (!window.__loonaPanelContext) {
     if (connections.has(connection)) return connections.get(connection).ready || Promise.resolve(false);
     const state = { dashboard: undefined, subscribed: false, pending: false, disabled: false, socket: connection.socket, generation: 0 };
     connections.set(connection, state);
+    state.resources = window.loonaCreateResourceLoader(window.__loonaBootstrap?.status === "waiting");
     const nativePromise = connection.sendMessagePromise;
     const nativeSubscribe = connection.subscribeMessage;
     let unsubscribe;
@@ -49,6 +51,7 @@ if (!window.__loonaPanelContext) {
       state.dashboard = dashboard();
       // Own reconnect recovery so a startup unknown_command can be retried.
       state.ready = Promise.resolve(nativeSubscribe.call(connection, (value) => {
+        if (value?.resources) state.resources.policy(value.resources);
         if (value && value.enabled === false) disable();
         if (value && value.resubscribe && state.recoverySocket !== connection.socket
             && typeof connection.reconnect === "function") {
@@ -69,8 +72,10 @@ if (!window.__loonaPanelContext) {
         .finally(() => { if (generation === state.generation) state.pending = false; });
     }
     function report() {
+      state.resources.route();
       if (!connection.connected || state.disabled) return;
       if (state.socket !== connection.socket) {
+        state.resources.flush();
         state.socket = connection.socket; state.generation++;
         state.subscribed = false; state.pending = false; unsubscribe = undefined;
         state.prefetch = undefined;
@@ -98,12 +103,15 @@ if (!window.__loonaPanelContext) {
       state.prefetch = {dashboard:path, socket:connection.socket, promise};
       promise.catch(() => {});
       if (location.pathname !== "/" && !window.llResProm) {
-        window.llResProm = nativePromise.call(connection, {type:"lovelace/resources"});
+        window.llResProm = connection.sendMessagePromise({type:"lovelace/resources"});
         window.llResProm.catch(() => {});
       }
     };
     connection.sendMessagePromise = function (message, ...args) {
       if (message.type !== "loona/panel") report();
+      if (message.type === "lovelace/config" && message.force === true
+          || message.type.startsWith("lovelace/config/")
+          || /^lovelace\/resources\/(create|update|delete)$/.test(message.type)) state.resources.flush();
       const cached = state.prefetch;
       if (cached && message.type === "lovelace/config" && message.url_path === cached.dashboard
           && message.force !== false) state.prefetch = undefined;
@@ -113,7 +121,8 @@ if (!window.__loonaPanelContext) {
         state.prefetch = undefined;
         return cached.promise;
       }
-      return nativePromise.call(this, message, ...args);
+      const result = nativePromise.call(this, message, ...args);
+      return message.type === "lovelace/resources" ? result.then(rows => state.resources.select(rows)) : result;
     };
     const wrappedPromise = connection.sendMessagePromise;
     connection.subscribeMessage = function (callback, message, ...args) {
@@ -155,6 +164,7 @@ if (!window.__loonaPanelContext) {
     const ready = () => report();
     if (typeof connection.addEventListener === "function") connection.addEventListener("ready", ready);
     function disable() {
+      state.resources.stop();
       state.disabled = true;
       state.subscribed = false;
       if (connection.sendMessagePromise === wrappedPromise) connection.sendMessagePromise = nativePromise;

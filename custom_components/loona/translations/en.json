@@ -68,13 +68,14 @@
       },
       "filters": {
         "title": "Filters and performance",
-        "description": "Enable or disable the features you need. Entity filtering is automatic. Registry filtering reduces entity and device details. Delay graph loading waits to load off-screen graphs; scrolling to them loads them immediately. Animation pausing resumes automatically. Resource filtering loads required files and your selections under Cards. Refresh the browser after resource changes.",
+        "description": "Enable or disable the features you need. Entity filtering is automatic. Registry filtering reduces entity and device details. Delay graph loading waits to load off-screen graphs; scrolling to them loads them immediately. Animation pausing resumes automatically. Resource filtering loads required files and your selections under Cards. Refresh the browser after resource changes. Delay card files loads this dashboard's modules first and the rest later. Reload after enabling.",
         "data": {
           "entity_filtering": "Entity filtering",
           "registry_filtering": "Registry filtering",
           "visible_first_graphs": "Delay graph loading",
           "pause_animations_during_loading": "Pause animations during loading",
-          "resource_filtering": "Resource filtering"
+          "resource_filtering": "Resource filtering",
+          "delay_card_resources": "Delay card files"
         }
       },
       "rules": {
@@ -133,6 +134,9 @@
       },
       "resource_filtering": {
         "name": "Resource filtering"
+      },
+      "delay_card_resources": {
+        "name": "Delay card files"
       }
     },
     "button": {

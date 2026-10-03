@@ -68,13 +68,14 @@
       },
       "filters": {
         "title": "筛选与性能",
-        "description": "按需开启或关闭功能。实体筛选会自动查找所需实体。注册表筛选会减少实体和设备详情。延迟加载图表会让屏幕外的图表稍后加载，滚动到它们时立即加载。暂停的动画会自动恢复。资源筛选会加载必需的文件和在“卡片”中勾选的文件。修改资源设置后，请刷新浏览器。",
+        "description": "按需开启或关闭功能。实体筛选会自动查找所需实体。注册表筛选会减少实体和设备详情。延迟加载图表会让屏幕外的图表稍后加载，滚动到它们时立即加载。暂停的动画会自动恢复。资源筛选会加载必需的文件和在“卡片”中勾选的文件。修改资源设置后，请刷新浏览器。 延迟加载卡片文件会优先加载当前仪表盘所需的模块，再加载其余模块。启用后请刷新页面。",
         "data": {
           "entity_filtering": "实体筛选",
           "registry_filtering": "注册表筛选",
           "visible_first_graphs": "延迟加载图表",
           "pause_animations_during_loading": "加载期间暂停动画",
-          "resource_filtering": "资源筛选"
+          "resource_filtering": "资源筛选",
+          "delay_card_resources": "延迟加载卡片文件"
         }
       },
       "rules": {
@@ -133,6 +134,9 @@
       },
       "resource_filtering": {
         "name": "资源筛选"
+      },
+      "delay_card_resources": {
+        "name": "延迟加载卡片文件"
       }
     },
     "button": {

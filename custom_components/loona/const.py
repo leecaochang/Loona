@@ -11,7 +11,7 @@ PANEL_POLL_MS: Final = 2000
 BOOTSTRAP_TIMEOUT_MS: Final = 2000
 RECORDER_CLEANUP_SECONDS: Final = 15
 MIN_CORE_VERSION: Final = "2024.6.0"
-VERSION: Final = "0.9.3"
+VERSION: Final = "0.9.4"
 CONF_DASHBOARD_CARDS: Final = "dashboard_cards"
 DASHBOARD_CARDS: Final = ("statistics", "settings")
 CONF_DASHBOARDS: Final = "dashboards"
@@ -31,6 +31,11 @@ CONTROL_MASTER: Final = "enabled"
 CONTROL_ENTITIES: Final = "entity_filtering"
 CONTROL_REGISTRIES: Final = "registry_filtering"
 CONTROL_RESOURCES: Final = "resource_filtering"
+CONTROL_RESOURCE_DELAY: Final = "delay_card_resources"
+RESOURCE_DELAY_QUIET_MS: Final = 750
+RESOURCE_DELAY_MAX_MS: Final = 10000
+RESOURCE_DELAY_LOAD_MS: Final = 10000
+RESOURCE_DELAY_IDLE_MS: Final = 1000
 CONF_ALWAYS_FORWARD: Final = "always_forward_resources"
 RESOURCE_COMMANDS: Final = ("lovelace/resources", "lovelace/resources/list")
 # Published bundle names and the custom element families they register.
@@ -119,6 +124,7 @@ CONTROL_DEFAULTS: Final = {
     CONTROL_ENTITIES: True,
     CONTROL_REGISTRIES: False,
     CONTROL_RESOURCES: False,
+    CONTROL_RESOURCE_DELAY: False,
     CONTROL_GRAPHS: False,
     CONTROL_MOTION: False,
 }

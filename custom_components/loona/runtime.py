@@ -40,6 +40,11 @@ from .const import (
     CONF_DASHBOARD_CARDS,
     CONF_ALWAYS_FORWARD,
     CONTROL_RESOURCES,
+    CONTROL_RESOURCE_DELAY,
+    RESOURCE_DELAY_QUIET_MS,
+    RESOURCE_DELAY_MAX_MS,
+    RESOURCE_DELAY_LOAD_MS,
+    RESOURCE_DELAY_IDLE_MS,
     CONF_EXCLUDE_GLOBS,
     CONF_EXTRA_ENTITIES,
     CONF_INCLUDE_DOMAINS,
@@ -98,6 +103,7 @@ class LoonaRuntime:
         self.entity_compatibility_problem: str | None = None
         self.panel_compatibility_problem: str | None = None
         self.bootstrap_compatibility_problem: str | None = None
+        self.bootstrap_installed: bool | None = None
         self.registry_compatibility_problem: str | None = None
         self.last_scan: datetime | None = None
         self.scan_duration = 0.0
@@ -106,11 +112,13 @@ class LoonaRuntime:
         self.statistics_card_problem: str | None = None
         self.adapter: SubscriptionAdapter | None = None
         self.panel_context = PanelContext(hass, self._panel_changed)
+        self.panel_context.resource_plan = self.resource_loading_plan
         self.registry_adapter: RegistryAdapter | None = None
         self.graph_adapter: GraphLoadingAdapter | None = None
         self.graph_compatibility_problem: str | None = None
         self.registry_scope = RegistryScope()
         self.resource_dependencies = ResourceDependencies()
+        self.dashboard_resources: dict[str, ResourceDependencies] = {}
         self.resource_complete = False
         self.resource_adapter: ResourceAdapter | None = None
         self.resource_compatibility_problem: str | None = None
@@ -165,6 +173,7 @@ class LoonaRuntime:
 
     @callback
     def notify(self) -> None:
+        self.panel_context.publish()
         for listener in tuple(self._listeners):
             listener()
 
@@ -276,16 +285,21 @@ class LoonaRuntime:
         self._update_issues()
         self.notify()
 
-    def resource_report(self, rows: list[dict[str, Any]]) -> dict[str, Any]:
-        """Evaluate every newly installed resource using the published union."""
+    def _resource_modules(self) -> tuple[set[str], set[str]]:
+        """Keep extra-module ownership separate from saved resource declarations."""
         from homeassistant.components import frontend
         manager = self.hass.data.get(frontend.DATA_EXTRA_MODULE_URL)
-        extra = manager.urls if manager else ()
+        extra = set(manager.urls) if manager else set()
         provided: set[str] = set()
         for url in extra:
             parsed = urlsplit(url)
             if not parsed.scheme and not parsed.netloc:
                 provided.update(RESOURCE_SHARED_TYPES.get(parsed.path, ()))
+        return extra, provided
+
+    def resource_report(self, rows: list[dict[str, Any]]) -> dict[str, Any]:
+        """Evaluate every newly installed resource using the published union."""
+        extra, provided = self._resource_modules()
         self.resource_preview = resource_report(
             rows, self.resource_dependencies,
             self._policy_settings.get(CONF_ALWAYS_FORWARD, ()),
@@ -301,6 +315,32 @@ class LoonaRuntime:
     async def async_resource_preview(self) -> dict[str, Any]:
         """Read the current native collection for the administrator preview."""
         return self.resource_report(await async_resource_rows(self.hass))
+
+    def resource_loading_plan(self, connection: websocket_api.ActiveConnection, dashboard: str | None) -> dict[str, Any]:
+        """Delay only verified optional files; new URLs remain immediate."""
+        enabled = bool(self.resource_adapter is not None and self.resource_complete
+                       and self.panel_compatibility_problem is None and self.bootstrap_installed is not False
+                       and not self.resource_preview.get("unresolved_custom_types")
+                       and self.panel_context.active(connection) and connection.user.is_active
+                       and self.controls[CONTROL_MASTER] and self.controls[CONTROL_RESOURCE_DELAY]
+                       and (self._policy_settings.get(CONF_TARGET_MODE) == TARGET_ALL
+                            or connection.user.id in self._policy_settings.get(CONF_USER_IDS, ())))
+        if enabled and self.resource_adapter is not None:
+            try:
+                self.resource_adapter.check_ownership()
+            except CompatibilityError:
+                enabled = False
+        dependencies = self.dashboard_resources.get(dashboard or "")
+        delayed: list[str] = []
+        if enabled and dependencies is not None:
+            rows = self.resource_preview.get("resources", [])
+            immediate, provided = self._resource_modules()
+            report = resource_report(rows, dependencies, self._policy_settings.get(CONF_ALWAYS_FORWARD, ()), provided)
+            delayed = [row["url"] for row in report["resources"] if row["type"] == "module"
+                       and not row["forwarded"] and row["url"] not in immediate]
+        return {"enabled": enabled and dependencies is not None, "defer": delayed,
+                "quiet_ms": RESOURCE_DELAY_QUIET_MS, "max_ms": RESOURCE_DELAY_MAX_MS,
+                "load_ms": RESOURCE_DELAY_LOAD_MS, "idle_ms": RESOURCE_DELAY_IDLE_MS}
 
     def _observe_resource_load(self, connection: Any, available: int, sent: int) -> None:
         if self.adapter is not None:
@@ -388,6 +428,7 @@ class LoonaRuntime:
             context = discovery_context(self.hass)
             results: dict[str, DiscoveryResult] = {}
             configs: list[dict[str, Any]] = []
+            dashboard_resources: dict[str, ResourceDependencies] = {}
             problems: list[str] = []
             warnings: list[str] = []
             reasons: dict[str, set[str]] = {}
@@ -396,6 +437,7 @@ class LoonaRuntime:
                 try:
                     config = await load_dashboard(self.hass, key, force=force)
                     configs.append(config)
+                    dashboard_resources[key] = resource_dependencies([config])
                     result = discover(config, context)
                     self._failed_dashboards.discard(key)
                 except Exception as err:
@@ -494,6 +536,7 @@ class LoonaRuntime:
             self.entity_ids = frozenset(reasons)
             self.registry_scope = registry_scope(self.hass, self.entity_ids, results.values())
             self.resource_dependencies = resource_dependencies(resource_configs)
+            self.dashboard_resources = dashboard_resources
             self.resource_scan_problem = resource_scan_problem
             self.resource_complete = resources_complete and valid_targets and not self.resource_dependencies.dynamic
             self.unknown_cards = any(result.unknown_cards for result in results.values())
@@ -561,6 +604,8 @@ class LoonaRuntime:
                                               (CONTROL_REGISTRIES, self.registry_adapter),
                                               (CONTROL_RESOURCES, self.resource_adapter)))
         paths = self._policy_settings.get(CONF_DASHBOARDS, ())
+        useful |= bool(self.resource_adapter is not None and self.resource_complete
+                       and self.controls[CONTROL_MASTER] and self.controls[CONTROL_RESOURCE_DELAY])
         return {"enabled": useful and bool(paths), "routes": sorted(route_key(path) for path in paths)}
 
     @callback
@@ -629,6 +674,8 @@ class LoonaRuntime:
             controls.add(CONTROL_REGISTRIES)
         if self.resource_adapter is not None:
             controls.add(CONTROL_RESOURCES)
+            if self.panel_compatibility_problem is None and self.bootstrap_installed is not False:
+                controls.add(CONTROL_RESOURCE_DELAY)
         if self.graph_adapter is not None:
             controls.update((CONTROL_GRAPHS, CONTROL_MOTION))
         return frozenset(controls)

@@ -36,18 +36,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: LoonaConfigEntry) -> boo
             else:
                 try:
                     bootstrap = await async_install_bootstrap(hass, runtime.bootstrap_policy)
+                    runtime.bootstrap_installed = True
                     runtime._unsubscribers.append(bootstrap.remove)
                     def refresh_bootstrap() -> None:
                         try:
                             bootstrap.refresh()
                         except CompatibilityError as err:
+                            runtime.bootstrap_installed = False
                             runtime.bootstrap_compatibility_problem = str(err)
                             runtime._update_issues()
+                            runtime.panel_context.publish()
                     runtime._unsubscribers.append(runtime.async_add_listener(refresh_bootstrap))
                     if not bootstrap.root_supported:
                         runtime.bootstrap_compatibility_problem = "Native root routing is unfamiliar; named dashboard URLs still support initial filtering"
                         runtime._update_issues()
                 except CompatibilityError as err:
+                    runtime.bootstrap_installed = False
                     runtime.bootstrap_compatibility_problem = str(err)
                     runtime._update_issues()
         # The bundled route must exist before Core freezes its HTTP router.

@@ -1,6 +1,8 @@
 """Verify dependency previews and filtering through genuine native collections."""
 
 import asyncio
+from pathlib import Path
+import subprocess
 from dataclasses import replace
 from unittest.mock import patch
 
@@ -19,6 +21,51 @@ from custom_components.loona.resources import (
 )
 from custom_components.loona.runtime import LoonaRuntime
 from custom_components.loona.websocket import ScopePolicy
+
+
+def test_browser_resource_loader_lifecycle():
+    result = subprocess.run(["node", str(Path(__file__).with_name("resource_loading.mjs"))], capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+async def test_resource_delay_is_opt_in_preserves_native_lists_and_flushes_on_policy_change(resources_runtime, make_user, make_connection):
+    runtime, collection = resources_runtime
+    connection, output = make_connection(make_user(admin=True))
+    connection.async_handle({"id": 1, "type": "loona/subscribe_panel", "dashboard": "wall-panel"})
+    assert not runtime.resource_loading_plan(connection, "wall-panel")["enabled"]
+    await runtime.async_set_control("delay_card_resources", True)
+    plan = output[-1]["event"]["resources"]
+    assert plan["enabled"] and plan["defer"] == ["/local/button-card.js"]
+    assert (await request(runtime.hass, connection, output))["result"] == collection.async_items()
+    for url, kind in [("/local/apexcharts-card.js", "js"), ("/local/kiosk-mode.js", "module"),
+                      ("/uix/uix.js?v=1", "module"), ("/local/extra.js", "module")]:
+        await collection.async_create_item({"url": url, "res_type": kind})
+    await runtime.async_scan()
+    assert runtime.resource_loading_plan(connection, "wall-panel")["defer"] == ["/local/button-card.js"]
+    await runtime.async_set_control("enabled", False)
+    assert not output[-1]["event"]["resources"]["enabled"]
+    assert runtime.bootstrap_policy()["enabled"] is False
+
+
+async def test_resource_delay_targets_exceptions_missing_context_and_dynamic_fallback(resources_runtime, make_user, make_connection):
+    runtime, collection = resources_runtime
+    selected = make_user()
+    runtime.hass.config_entries.async_update_entry(runtime.entry, options={"target_mode":"selected", "user_ids":[selected.id], "always_forward_resources":["/local/button-card.js"]})
+    # Actual native auth is the authority for selected accounts.
+    runtime.hass.auth._store._users[selected.id] = selected
+    await runtime.async_scan()
+    await runtime.async_set_control("delay_card_resources", True)
+    chosen, output = make_connection(selected)
+    other, other_output = make_connection(make_user(admin=True))
+    chosen.async_handle({"id":1,"type":"loona/subscribe_panel","dashboard":"wall-panel"})
+    other.async_handle({"id":1,"type":"loona/subscribe_panel","dashboard":"wall-panel"})
+    assert runtime.resource_loading_plan(chosen,"wall-panel")["enabled"]
+    assert runtime.resource_loading_plan(chosen,"wall-panel")["defer"] == []
+    assert not runtime.resource_loading_plan(other,"wall-panel")["enabled"]
+    chosen.async_handle({"id":2,"type":"loona/panel","dashboard":"config"})
+    assert not output[-2]["event"]["resources"]["enabled"]
+    runtime.resource_complete = False
+    assert not runtime.resource_loading_plan(chosen,"wall-panel")["enabled"]
 
 
 async def request(hass, connection, output, name="lovelace/resources/list", **fields):

@@ -90,6 +90,11 @@ async def async_install(hass: HomeAssistant, policy: Callable[[], dict] | None =
             root_supported = routing is not None
             script = (Path(__file__).parent / "frontend" / "pre-bootstrap.js").read_text(encoding="utf8")
             reporter = (Path(__file__).parent / "frontend" / "panel-context.js").read_text(encoding="utf8")
+            loader = (Path(__file__).parent / "frontend" / "resource-loading.js").read_text(encoding="utf8")
+            import_line = f'import "./resource-loading.js?v={VERSION}";'
+            if reporter.count(import_line) != 1:
+                raise CompatibilityError("Resource loader bootstrap import changed")
+            reporter = reporter.replace(import_line, loader)
             script = script.replace("/* LOONA_REPORTER */", reporter.replace("import.meta.url", json.dumps("http://loona.invalid" + url)))
             return source, script, url, routing
 

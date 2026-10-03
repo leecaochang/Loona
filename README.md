@@ -48,6 +48,7 @@ Use the **Loona settings** card or the integration's **Configure** menu. The Loo
 | Registry filtering | Off by default. Narrows native entity, device, area, floor and label lists. |
 | Resource filtering | Off by default. Skips recognized card bundles unused by all configured dashboards. A browser reload is required to change loaded files. |
 | Delay graph loading | Off by default. Defers eligible off-screen graphs until visible work settles. Scrolling to one loads it immediately. |
+| Delay card files | Off by default. Loads the current dashboard's modules first, then other known modules after rendering. Navigation and editing release pending files immediately. |
 | Pause animations during loading | Off by default. Temporarily pauses repeating animations during dashboard startup, then resumes them. |
 | Rescan dashboards | Runs discovery now. Dashboard edits normally trigger a scan; periodic checks cover YAML changes. |
 | Reset live statistics | Clears live counters and page-load records without changing settings or recorded Home Assistant history. |
@@ -77,6 +78,10 @@ Under **Cards**, automatically retained files have no checkbox. Select additiona
 This feature filters native registered Lovelace resource-list responses, including Core's first request on `/` and `/lovelace/` when the startup hook establishes selected context. It does not change stored registrations, core frontend bundles, extra module registrations or direct file requests. Startup fallback or an incomplete resource dependency scan retains the full list.
 
 For a selected non-default dashboard, the startup hook requests its native configuration and registered resources early. The panel consumes the prefetched configuration once on the same socket and route; forced refreshes remain native. Core's own root-route resource preload is preserved. This overlaps requests without waiting for a context acknowledgement, and its benefit depends on network latency.
+
+**Delay card files** is a separate experimental control. It prioritizes the saved configuration of the initial selected dashboard, including all its views. CSS, classic JavaScript, global helpers, unknown files, extra modules and files selected under Cards load immediately. Other recognized optional modules load one at a time when the browser is idle, starting after a dashboard-ready event and 750 ms of quiet. A ten-second deadline releases remaining modules if rendering never reports readiness. The files retain their original URLs and load later in the same page session; this does not reduce their eventual memory or total evaluation cost.
+
+Changing the view, dashboard or panel, entering editing, forcing a configuration refresh, or disabling the feature releases pending files immediately. A module error also releases the remaining queue and makes one bounded retry with the same URL. A timed-out request stays in flight without a duplicate insertion. Missing or incompatible startup hooks, uncertain dependency scans and late context reporting keep normal loading. This control works with or without Resource filtering; when filtering is enabled, globally omitted files remain omitted. Refresh after enabling it. Validate on your device before relying on it; background evaluation can still cause brief pauses on slow hardware.
 
 ## Graphs and animations
 

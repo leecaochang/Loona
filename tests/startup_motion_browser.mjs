@@ -10,7 +10,7 @@ async function until(predicate) {
   }
   throw new Error(`Timeout: ${JSON.stringify(window.loonaStartupMotionReport())}`);
 }
-const policy = { version: "0.9.3", enabled: false, dashboards: ["wall-panel"],
+const policy = { version: "0.9.4", enabled: false, dashboards: ["wall-panel"],
   quiet_ms: 30, poll_ms: 10, trace_limit: 200, profiles: { sensor: { height: 120, size: 3, columns: 6, rows: 2 } },
   motion: { enabled: true, quiet_ms: 30, poll_ms: 10, max_ms: 250,
     view_tags: ["HUI-SECTIONS-VIEW", "HUI-MASONRY-VIEW"], progress_tags: ["HA-SPINNER"] } };

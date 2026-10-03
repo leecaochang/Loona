@@ -39,10 +39,12 @@ async def _async_register_frontend(hass: HomeAssistant) -> Callable[[], None]:
             await hass.http.async_register_static_paths([
                 StaticPathConfig(PANEL_ASSET, path, cache_headers=True),
                 StaticPathConfig("/loona/performance.js", str(Path(__file__).parent / "frontend" / "performance.js"), cache_headers=True),
+                StaticPathConfig("/loona/resource-loading.js", str(Path(__file__).parent / "frontend" / "resource-loading.js"), cache_headers=True),
             ])
         elif callable(register := getattr(hass.http, "register_static_path", None)):
             register(PANEL_ASSET, path, cache_headers=True)
             register("/loona/performance.js", str(Path(__file__).parent / "frontend" / "performance.js"), cache_headers=True)
+            register("/loona/resource-loading.js", str(Path(__file__).parent / "frontend" / "resource-loading.js"), cache_headers=True)
         else:
             raise CompatibilityError("Frontend panel context registration is unavailable")
         hass.data[key] = True
@@ -65,6 +67,7 @@ class _Panel:
     dashboard: str | None
     unsubscribe: Callable[[], None]
     msg_id: int
+    loading: dict[str, Any] | None = None
 
 
 class PanelContext:
@@ -76,6 +79,17 @@ class PanelContext:
         self.dashboards: frozenset[str] = frozenset()
         self._connections: dict[websocket_api.ActiveConnection, _Panel] = {}
         self._owned: dict[str, HandlerEntry] = {}
+        self.resource_plan: Callable[[websocket_api.ActiveConnection, str | None], dict[str, Any]] | None = None
+
+    @callback
+    def publish(self) -> None:
+        """Publish changed loading plans through the existing context subscription."""
+        if self.resource_plan is not None:
+            for connection, panel in self._connections.items():
+                plan = self.resource_plan(connection, panel.dashboard)
+                if plan != panel.loading:
+                    panel.loading = plan
+                    connection.send_event(panel.msg_id, {"resources": plan})
 
     def active(self, connection: websocket_api.ActiveConnection) -> bool:
         """Panel reports narrow performance filtering without granting access."""
@@ -116,6 +130,7 @@ class PanelContext:
             connection.send_result(msg["id"])
             if before != self.active(connection):
                 self.changed(connection)
+            self.publish()
 
         @callback
         @websocket_api.websocket_command({
@@ -131,6 +146,7 @@ class PanelContext:
             panel.dashboard = msg["dashboard"]
             if before != self.active(connection):
                 self.changed(connection)
+            self.publish()
             connection.send_result(msg["id"])
 
         for handler in (subscribe, update):

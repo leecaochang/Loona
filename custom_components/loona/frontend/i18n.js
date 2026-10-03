@@ -30,6 +30,10 @@ const chinese = {
   "Registry filtering": "注册表筛选",
   "Pause animations during loading": "加载期间暂停动画",
   "Resource filtering": "资源筛选",
+  "Delay card files": "延迟加载卡片文件",
+  "Some card files did not load": "部分卡片文件未能加载",
+  "Reload the browser to retry. If this continues, turn off Delay card files and check the files under Cards.": "请刷新浏览器重试。如果仍然失败，请关闭“延迟加载卡片文件”，并在“卡片”中检查文件。",
+  "Load this dashboard's card files first, then the remaining modules. Navigation and editing load pending files immediately. Reload after enabling.": "优先加载当前仪表盘的卡片文件，再加载其余模块。导航或编辑时立即加载等待中的文件。启用后请刷新页面。",
   "Additional files to load": "额外加载的文件",
   "Enabled": "启用",
   "Rescan dashboards": "重新扫描仪表盘",
@@ -216,6 +220,10 @@ const notices = {
     "Resource scan is incomplete",
     "Home Assistant is loading all registered files. Check the Home Assistant log for the failed dashboard or resource load, then rescan. Loona retries automatically."
   ],
+  "resource_loading_failure": [
+    "Some card files did not load",
+    "Reload the browser to retry. If this continues, turn off Delay card files and check the files under Cards."
+  ],
   "missing_entities": [
     "Referenced entities were not found",
     "Check these IDs for typos or deleted entities. Temporary entities may return later. Missing references alone do not pause filtering."
@@ -247,6 +255,7 @@ const notices = {
 };
 
 export function renderNotices(root, hass, items) {
+  if (window.__loonaResourceLoading?.failed) items = [...items, {code:"resource_loading_failure", severity:"warning"}];
   if (window.__loonaGraphCapability?.status === "unavailable" && window.__loonaGraphCapability.enabled) {
     items = [...items, { code: "graph_frontend_compatibility", severity: "warning" }];
   }
