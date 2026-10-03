@@ -4,6 +4,7 @@ import asyncio
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+import os
 import shutil
 import subprocess
 from threading import Thread
@@ -17,14 +18,33 @@ class _QuietHandler(SimpleHTTPRequestHandler):
         """Keep local fixture access logging out of test output."""
 
 
+def _browser_executable():
+    """Use CI's validated Chrome rather than a different Chromium snapshot."""
+    if configured := os.environ.get("CHROME_BIN"):
+        assert Path(configured).is_file() and os.access(configured, os.X_OK), f"CHROME_BIN is not executable: {configured}"
+        return configured
+    return next((path for path in (
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        shutil.which("google-chrome"), shutil.which("chromium"),
+    ) if path and Path(path).is_file() and os.access(path, os.X_OK)), None)
+
+
+def test_browser_uses_validated_ci_executable(monkeypatch, tmp_path):
+    """Respect the workflow's explicit executable even with another browser found."""
+    browser = tmp_path / "validated-chrome"
+    browser.write_text("#!/bin/sh\nexit 0\n")
+    browser.chmod(0o755)
+    monkeypatch.setenv("CHROME_BIN", str(browser))
+    monkeypatch.setattr(shutil, "which", lambda _name: "/unexpected/chromium")
+    assert _browser_executable() == str(browser)
+    browser.unlink()
+    with pytest.raises(AssertionError, match="CHROME_BIN is not executable"):
+        _browser_executable()
+
+
 async def test_native_browser_startup_motion(tmp_path):
     """Keep actual Animation ownership, restoration, and HA propagation observable."""
-    browser = next(
-        (path for path in (
-            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-            shutil.which("chromium"), shutil.which("google-chrome"),
-        ) if path and Path(path).is_file()), None
-    )
+    browser = _browser_executable()
     if browser is None:
         pytest.skip("A Chromium browser is required for native animation acceptance")
     built = subprocess.run(
@@ -52,13 +72,18 @@ async def test_native_browser_startup_motion(tmp_path):
         try:
             port_file = profile / "DevToolsActivePort"
             port_lines = []
-            for _ in range(100):
+            for _ in range(300):
                 if port_file.exists():
                     port_lines = port_file.read_text().splitlines()
                     if len(port_lines) >= 2 and port_lines[0].isdigit():
                         break
+                if process.poll() is not None:
+                    break
                 await asyncio.sleep(0.1)
-            assert len(port_lines) >= 2 and port_lines[0].isdigit(), (tmp_path / "browser.log").read_text()
+            assert len(port_lines) >= 2 and port_lines[0].isdigit(), (
+                f"Browser {browser} did not publish a DevTools port; exit code: {process.poll()}\n"
+                + (tmp_path / "browser.log").read_text()
+            )
             port = int(port_lines[0])
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
                 async with session.get(f"http://127.0.0.1:{port}/json/list") as response:

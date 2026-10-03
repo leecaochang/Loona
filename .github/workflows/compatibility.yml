@@ -70,8 +70,11 @@ jobs:
       - run: uv venv venv
       - run: uv pip install --python venv/bin/python -r pyproject.toml --extra test
       - run: npm ci
-      - name: Install Chromium for the browser acceptance tests
-        run: test -x /usr/bin/google-chrome || (sudo apt-get update && sudo apt-get install -y chromium)
+      - name: Select stable Chrome for browser acceptance tests
+        run: |
+          test -x /usr/bin/google-chrome
+          /usr/bin/google-chrome --version
+          echo "CHROME_BIN=/usr/bin/google-chrome" >> "$GITHUB_ENV"
       - run: venv/bin/python -m pytest tests/ -q
       - run: venv/bin/python -m pyflakes custom_components/loona/ tests/
       - run: venv/bin/python -m mypy custom_components/loona/
