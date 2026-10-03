@@ -211,3 +211,48 @@ def test_translations_cover_native_ui_schema():
         assert fields == localized_fields, key
     assert not (root / "translations/zh-Hant.json").exists()
     assert not (root / "translations/zh.json").exists()
+
+
+async def test_word_search_entity_priority_and_display_names(settings_runtime):
+    """Words need not be adjacent; actual entities precede wildcard choices."""
+    from homeassistant.helpers import entity_registry as er
+    from custom_components.loona.settings import entity_choices
+    runtime = settings_runtime
+    runtime.hass.states.async_set("fan.bathroom_ceiling", "on", {"friendly_name": "Bathroom ceiling fan"})
+    registry = er.async_get(runtime.hass)
+    entity = registry.async_get_or_create("fan", "test", "registered", original_name="Old name")
+    registry.async_update_entity(entity.entity_id, name="Bathroom wall fan")
+    rows = entity_choices(runtime, "include_globs", "bathroom fan")["choices"]
+    assert {item["label"] for item in rows} == {"Bathroom ceiling fan", "Bathroom wall fan"}
+    rows = entity_choices(runtime, "exclude_globs", "fan")["choices"]
+    first_pattern = next(index for index, item in enumerate(rows) if "*" in item["value"])
+    assert first_pattern > 0
+    assert all("*" not in item["value"] for item in rows[:first_pattern])
+    report = await settings_report(runtime)
+    assert report["choices"]["dashboard_cards"] == [
+        {"value": "statistics", "label": "Loona statistics"}, {"value": "settings", "label": "Loona settings"}]
+
+
+async def test_optional_hacs_labels_are_read_only_and_exact(settings_runtime):
+    """Metadata names never alter URLs or label foreign resources."""
+    from types import SimpleNamespace
+    from custom_components.loona.presentation import resource_labels, notice_labels
+    from custom_components.loona.preview import statistics_report
+    runtime = settings_runtime
+    local = "/hacsfiles/example/card.js?v=2"
+    foreign = "https://foreign.test/hacsfiles/example/card.js"
+    urls = [local, foreign, "/local/unknown.js", "http://[invalid"]
+    assert resource_labels(runtime.hass, urls) == dict(zip(urls, urls, strict=True))
+    repository = SimpleNamespace(data=SimpleNamespace(category="plugin"), display_name="Example Card",
+        generate_dashboard_resource_url=lambda: "/hacsfiles/example/card.js?hacstag=123")
+    runtime.hass.data["hacs"] = SimpleNamespace(repositories=SimpleNamespace(list_downloaded=[repository, SimpleNamespace(data=SimpleNamespace(category="integration",domain="example"),display_name="Example Helper"), object()]))
+    try:
+        assert resource_labels(runtime.hass, urls) == {local: "Example Card", foreign: foreign, urls[2]: urls[2], urls[3]: urls[3]}
+        assert resource_labels(runtime.hass, ["/example/example.js?v=1"])["/example/example.js?v=1"] == "Example Helper"
+        runtime.hass.states.async_set("sensor.wall", "1", {"friendly_name": "Wall sensor"})
+        assert notice_labels(runtime.hass, [{"code":"excluded_dependencies", "items":["sensor.wall"]}]) == {"sensor.wall":"Wall sensor"}
+        runtime.live_statistics.record(True, "sensor.wall")
+        assert statistics_report(runtime)["noisy_entities"]["entities"][0]["label"] == "Wall sensor"
+        assert "label" not in runtime.live_statistics.noisy_report()["entities"][0]
+    finally:
+        runtime.hass.data.pop("hacs")

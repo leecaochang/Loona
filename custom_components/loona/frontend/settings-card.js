@@ -1,10 +1,11 @@
 /* Prefilled administrator settings using native Loona validation and storage. */
-import { language, text, translate, renderNotices, setText, confirmAction, cancelConfirmation } from "./i18n.js?v=0.9.6";
+import { language, text, translate, renderVersion, saveCardPreferences, setText, confirmAction, cancelConfirmation } from "./i18n.js?v=0.9.7";
 
 const groups = {
   controls: "Filters and performance", dashboards: "Dashboards", targets: "Accounts",
   rules: "Entity rules", resources: "Cards", cards: "Loona dashboard",
 };
+const cardVersion = "0.9.7";
 const labels = {
   enabled: "Enabled", entity_filtering: "Entity filtering", registry_filtering: "Registry filtering",
   current_dashboard_updates: "Current tab updates",
@@ -50,8 +51,8 @@ function install() {
       this._sequence = 0;
       this.shadowRoot.innerHTML = `
         <style>
-          :host { display:block; color:var(--primary-text-color); }
-          ha-card { padding:24px; overflow:hidden; }
+          :host { user-select:text; -webkit-user-select:text; display:block; color:var(--primary-text-color); }
+          ha-card { user-select:text; -webkit-user-select:text; padding:24px; overflow:hidden; }
           header { display:flex; align-items:start; justify-content:space-between; gap:16px; }
           header>div { flex:1; min-width:0; }
           header>button { flex-shrink:0; white-space:nowrap; }
@@ -69,6 +70,7 @@ function install() {
           input[type=checkbox] { width:18px; height:18px; flex-shrink:0; }
           button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible {
             outline:2px solid var(--primary-color); outline-offset:2px; }
+          .required small { display:block; color:var(--secondary-text-color); }
           ::selection { background:var(--primary-color); color:var(--text-primary-color,#fff); }
           details { border-top:1px solid var(--divider-color); margin-top:20px; padding-top:16px; }
           summary { min-height:36px; cursor:pointer; font-size:15px; line-height:1.5; }
@@ -91,12 +93,6 @@ function install() {
           .rule-field input[type=search] { font-size:14px; }
           .selected-choices { background:var(--secondary-background-color); border-radius:8px; padding:0 10px; }
           .choice-list:empty { display:none; }
-          .loona-notices { margin-top:20px; }
-          .loona-notices ul { list-style:none; padding:0; margin:0; }
-          .loona-notices li { padding:16px 0; border-top:1px solid var(--divider-color); }
-          .loona-notices li:first-child { border-top:0; }
-          .loona-notices h3 { font-size:14px; margin:0; line-height:1.5; }
-          .loona-notices .notice-items { max-height:160px; overflow:auto; overflow-wrap:anywhere; font-size:12px; }
           #version { font-size:12px; }
 
           .field>label { display:block; font-size:14px; margin-bottom:8px; }
@@ -116,7 +112,7 @@ function install() {
         <ha-card><header><div><h2 data-i18n="Loona settings">Loona settings</h2>
           <p id="state" role="status" data-i18n="Loading settings...">Loading settings...</p></div>
           <button id="refresh" data-i18n="Refresh">Refresh</button></header>
-          <p id="version"></p><p id="error" role="alert" hidden></p><div id="notices"></div><div id="sections"></div>
+          <p id="version"></p><p id="error" role="alert" hidden></p><div id="sections"></div>
           <div id="maintenance" hidden><div class="actions">
             <button data-action="rescan" data-i18n="Rescan dashboards">Rescan dashboards</button>
             <button data-action="reset_live_statistics" data-i18n="Reset live statistics">Reset live statistics</button>
@@ -147,12 +143,12 @@ function install() {
       const changedUser = this._hass?.user?.id !== value?.user?.id;
       const changedLanguage = language(this._hass) !== language(value);
       this._hass = value;
+      this._watchConnection();
       if (changedUser || !value?.user?.is_admin) {
         cancelConfirmation(this);
         this._sequence++; this._data = undefined; this._drafts = {}; this._conflicts.clear();
         this._searches = {}; this._limits = {}; this._loading = false; this._saving = undefined; this._error = undefined; this._saved = undefined; this._rendered = false; this._acting = undefined; this._actionStatus = undefined;
         this.shadowRoot.getElementById("sections").replaceChildren();
-        this.shadowRoot.getElementById("notices").replaceChildren();
         this.shadowRoot.getElementById("version").textContent = "";
         this.shadowRoot.getElementById("error").hidden = true;
       }
@@ -161,14 +157,33 @@ function install() {
       if (value?.user?.is_admin && !this._data && !this._loading) this._fetch();
     }
     connectedCallback() {
-      this._capabilityListener = () => { if (this._data) renderNotices(this.shadowRoot.getElementById("notices"), this._hass, this._data.notices || []); };
-      window.addEventListener("loona-capabilities", this._capabilityListener);
+      this._watchConnection();
       if (this._hass) this._fetch();
     }
     disconnectedCallback() {
       cancelConfirmation(this);
-      window.removeEventListener("loona-capabilities", this._capabilityListener);
+      this._versionConnection?.removeEventListener?.("ready", this._versionListener);
+      this._versionConnection = undefined;
       this._sequence++; this._loading = false; this._acting = undefined;
+    }
+    _watchConnection() {
+      const connection = this.isConnected ? this._hass?.connection : undefined;
+      if (connection === this._versionConnection) return;
+      this._versionConnection?.removeEventListener?.("ready", this._versionListener);
+      this._versionConnection = connection;
+      this._versionListener = () => this._checkVersion();
+      connection?.addEventListener?.("ready", this._versionListener);
+    }
+    async _checkVersion() {
+      const data=this._data, hass=this._hass, account=hass?.user?.id;
+      if (!data || !hass?.user?.is_admin || !hass.connection?.connected) return;
+      try {
+        const report=await hass.callWS({type:"loona/statistics"});
+        if (!this.isConnected || this._data!==data || this._hass?.user?.id!==account || !this._hass.user.is_admin || this._hass.connection!==hass.connection) return;
+        data.version=report.version;
+        renderVersion(this.shadowRoot.getElementById("version"),this._hass,report.version,cardVersion);
+        this._sync();
+      } catch { /* Refresh can retry after a transient reconnect failure. */ }
     }
     _replace(data, savedGroup) {
       this._searches = {}; this._offsets = {}; this._choiceSequences = {};
@@ -211,8 +226,7 @@ function install() {
           const report = await this._hass.callWS({type:"loona/statistics"});
           if (sequence !== this._sequence || !this._hass?.user?.is_admin) return;
           this._data.notices = report.notices;
-          renderNotices(this.shadowRoot.getElementById("notices"), this._hass, report.notices || []);
-          if (key === "reset_live_statistics") window.dispatchEvent(new Event("loona-statistics-reset"));
+          window.dispatchEvent(new Event("loona-statistics-reset"));
         }
       } catch {
         if (sequence === this._sequence) { this._actionStatus = undefined; this._error = "Action failed. Check that Loona is running, then try again."; }
@@ -254,6 +268,7 @@ function install() {
         const data = await this._hass.callWS({type:"loona/restore_defaults", revision, confirmed:true});
         if (sequence !== this._sequence || !this._hass?.user?.is_admin) return;
         this._drafts = {}; this._conflicts.clear(); this._saved = undefined; this._replace(data);
+        saveCardPreferences(this._hass, {}, true);
         this._actionStatus = "Defaults restored. Select dashboards and accounts, then reload the browser.";
         window.dispatchEvent(new Event("loona-statistics-reset"));
       } catch (error) {
@@ -268,14 +283,21 @@ function install() {
       refresh.disabled = !admin || this._loading || Boolean(this._saving) || Boolean(this._acting) || Object.keys(this._drafts).length > 0;
       refresh.title = Object.keys(this._drafts).length ? this._t("Refresh is unavailable while you have unsaved changes.") : "";
       setText(this.shadowRoot.getElementById("state"), !admin ? this._t("Sign in as an administrator to change Loona settings.")
-        : this._data ? this._t("Entity and registry feeds follow the selected dashboard scope, including its dialogs.") : this._t("Loading settings..."));
+        : this._data ? this._t((this._drafts.controls || this._data.values.controls).enabled
+          ? "Entity and registry feeds follow the selected dashboard scope, including its dialogs."
+          : "Enable Loona to change other settings.") : this._t("Loading settings..."));
       const error = this.shadowRoot.getElementById("error"); error.hidden = !this._error || !admin; error.textContent = this._error ? this._t(this._error) : "";
-      for (const element of this.shadowRoot.querySelectorAll("[data-save]")) element.disabled = !this._drafts[element.dataset.save] || Boolean(this._saving) || Boolean(this._acting) || this._conflicts.has(element.dataset.save);
+      const controls = this._drafts.controls || this._data?.values.controls;
+      for (const element of this.shadowRoot.querySelectorAll("[data-save]")) element.disabled = !admin || element.dataset.save !== "controls" && !controls?.enabled || !this._drafts[element.dataset.save] || Boolean(this._saving) || Boolean(this._acting) || this._conflicts.has(element.dataset.save);
       for (const element of this.shadowRoot.querySelectorAll("[data-cancel]")) element.disabled = !this._drafts[element.dataset.cancel] || Boolean(this._saving) || Boolean(this._acting);
       for (const element of this.shadowRoot.querySelectorAll("[data-status]")) setText(element, this._conflicts.has(element.dataset.status)
         ? this._t("Settings changed elsewhere. Cancel your edits and refresh before saving.")
         : this._drafts[element.dataset.status] ? this._t("Unsaved changes") : this._saved === element.dataset.status ? this._t("Saved") : "");
-      for (const element of this.shadowRoot.querySelectorAll("input,select")) element.disabled = Boolean(this._saving) || Boolean(this._acting);
+      for (const element of this.shadowRoot.querySelectorAll("input,select")) element.disabled = !admin || Boolean(this._saving) || Boolean(this._acting)
+        || element.dataset.control !== "enabled" && !controls?.enabled
+        || element.dataset.control === "current_dashboard_updates" && !controls?.entity_filtering;
+      const reload = this.shadowRoot.getElementById("version").querySelector("button");
+      if (reload) reload.disabled = Object.keys(this._drafts).length > 0 || Boolean(this._saving) || Boolean(this._acting);
       this.shadowRoot.getElementById("maintenance").hidden = !admin || !this._data;
       setText(this.shadowRoot.getElementById("action-status"), this._actionStatus ? this._t(this._actionStatus) : "");
       for (const element of this.shadowRoot.querySelectorAll("[data-action]")) element.disabled = !admin || !this._data
@@ -283,8 +305,7 @@ function install() {
         || this._loading || Boolean(this._saving) || Boolean(this._acting);
     }
     _render() {
-      this.shadowRoot.getElementById("version").textContent = this._t("Version: {version}", {version:this._data.version});
-      renderNotices(this.shadowRoot.getElementById("notices"), this._hass, this._data.notices || []);
+      renderVersion(this.shadowRoot.getElementById("version"), this._hass, this._data.version, cardVersion);
       const container = this.shadowRoot.getElementById("sections");
       const open = new Set([...container.querySelectorAll("details[data-group][open]")].map(e => e.dataset.group));
       const openFields = new Set([...container.querySelectorAll("details[data-rule-field][open]")].map(e => e.dataset.ruleField));
@@ -312,7 +333,10 @@ function install() {
           }
           if (group === "resources") {
             const required=make("details"); required.append(make("summary",this._t("Files kept automatically ({count})",{count:this._data.required_resources.length})),make("p",this._t("These files are needed by your dashboards or shared styling.")));
-            const list=make("ul",undefined,"required"); this._data.required_resources.forEach(url=>list.append(make("li",url))); required.append(list); section.append(required);
+            const list=make("ul",undefined,"required"); this._data.required_resources.forEach(url=>{
+              const item=make("li"); const label=this._data.resource_labels?.[url] || url;
+              item.append(make("span",label)); if (label!==url) item.append(make("small",url)); list.append(item);
+            }); required.append(list); section.append(required);
             section.append(make("p",this._t(this._data.resources_editable ? "Known unused bundles can be skipped for the whole page session. Unknown modules always load. Save, then reload." : "File choices are unavailable on this installation.")));
           }
           if (group === "rules") {
@@ -392,7 +416,8 @@ function install() {
       const choices=this._data.choices[key] || [];
       const byValue=new Map(choices.map(row=>[row.value,row]));
       const query=(this._searches[key] || "").toLocaleLowerCase(language(this._hass));
-      const available=choices.filter(row=>!selected.has(row.value) && (row.label+" "+row.value).toLocaleLowerCase(language(this._hass)).includes(query));
+      const words=query.split(/\s+/).filter(Boolean);
+      const available=choices.filter(row=>!selected.has(row.value) && words.every(word=>(row.label+" "+row.value).toLocaleLowerCase(language(this._hass)).includes(word)));
       const limit=this._limits[key] || this._data.choice_page;
       const focused=this.shadowRoot.activeElement?.dataset.choice;
       root.replaceChildren();
@@ -405,8 +430,9 @@ function install() {
           this._choices(root,group,key);
           [...root.querySelectorAll("input")].find(e=>e.dataset.choice===row.value)?.focus();
         });
-        const content=make("span",row.label);
-        if (row.label!==row.value) content.append(make("small",row.value));
+        const labelText=key==="dashboard_cards" ? this._t("Loona "+row.value) : row.label;
+        const content=make("span",labelText);
+        if (key!=="dashboard_cards" && row.label!==row.value) content.append(make("small",row.value));
         if (row.unavailable) content.append(make("small",this._t("Unavailable")));
         else if (row.status) content.append(make("small",this._t(statusLabels[row.status] || "optional")));
         label.append(checkbox,content); return label;
@@ -423,6 +449,7 @@ function install() {
           else { this._limits[key]=limit+this._data.choice_page; this._choices(root,group,key); }
         }); root.append(more);
       }
+      this._sync();
       if (focused) [...root.querySelectorAll("input")].find(e=>e.dataset.choice===focused)?.focus();
     }
   }

@@ -22,6 +22,7 @@ from .const import (
 )
 from .dashboard import dashboard_titles
 from .runtime import LoonaRuntime
+from .presentation import entity_label, resource_labels
 
 _LOGGER = logging.getLogger(__name__)
 _PAGED_CHOICES = frozenset({"extra_entities", "include_globs", "exclude_globs"})
@@ -30,17 +31,17 @@ _PAGED_CHOICES = frozenset({"extra_entities", "include_globs", "exclude_globs"})
 def entity_choices(runtime: LoonaRuntime, key: str, query: str = "", offset: int = 0) -> dict[str, Any]:
     """Search authoritative entity/rule choices with bounded response size."""
     rules = entity_rule_choices(runtime.hass, runtime.settings)
-    registry = er.async_get(runtime.hass)
     saved = set(runtime.settings.get(key, ()))
     available = known_entities(runtime)
     def row(value: str) -> dict[str, Any]:
-        entry = registry.entities.get(value)
-        return {"value": value, "label": (entry.name or entry.original_name or value) if entry else value,
+        return {"value": value, "label": entity_label(runtime.hass, value),
                 "unavailable": value not in available if key == CONF_EXTRA_ENTITIES else False}
-    query = query.casefold()
-    matching = [value for value in rules[key] if value not in saved
-                and query in (value + " " + row(value)["label"]).casefold()]
-    return {"choices": [row(value) for value in matching[offset:offset + SETTINGS_CHOICE_PAGE]],
+    words = query.casefold().split()
+    rows = [row(value) for value in rules[key] if value not in saved]
+    matching = [item for item in rows if all(word in (item["value"] + " " + item["label"]).casefold()
+                                           for word in words)]
+    matching.sort(key=lambda item: ("*" in item["value"], item["label"].casefold(), item["value"]))
+    return {"choices": matching[offset:offset + SETTINGS_CHOICE_PAGE],
             "selected": [row(value) for value in sorted(saved)],
             "more": offset + SETTINGS_CHOICE_PAGE < len(matching)}
 
@@ -72,6 +73,7 @@ async def settings_report(runtime: LoonaRuntime) -> dict[str, Any]:
         resource_available = False
         resources = {"resources": [], "stale_exceptions": list(settings.get(CONF_ALWAYS_FORWARD, []))}
     registry = er.async_get(runtime.hass)
+    labels = resource_labels(runtime.hass, [row["url"] for row in resources["resources"]] + resources["stale_exceptions"])
     result: dict[str, Any] = {
         "version": VERSION,
         "notices": runtime.notice_report(),
@@ -92,12 +94,13 @@ async def settings_report(runtime: LoonaRuntime) -> dict[str, Any]:
                            for key in sorted(accounts.keys() | set(settings.get(CONF_USER_IDS, [])))],
             **{key: [{"value": value, "label": value} for value in values]
                for key, values in rules.items() if key not in _PAGED_CHOICES},
-            CONF_ALWAYS_FORWARD: [{"value": row["url"], "label": row["url"], "status": row["status"]}
+            CONF_ALWAYS_FORWARD: [{"value": row["url"], "label": labels.get(row["url"], row["url"]), "status": row["status"]}
                                   for row in resources["resources"] if row["status"] == "unused" or row["url"] in settings.get(CONF_ALWAYS_FORWARD, []) and row["status"] != "required"]
-                + [{"value": url, "label": url, "unavailable": True} for url in resources["stale_exceptions"]],
-            CONF_DASHBOARD_CARDS: [{"value": key, "label": key} for key in DASHBOARD_CARDS],
+                + [{"value": url, "label": labels.get(url, url), "unavailable": True} for url in resources["stale_exceptions"]],
+            CONF_DASHBOARD_CARDS: [{"value": key, "label": "Loona " + key} for key in DASHBOARD_CARDS],
         },
         "required_resources": [row["url"] for row in resources["resources"] if row["status"] != "unused"],
+        "resource_labels": labels,
         "resources_editable": resource_available and CONTROL_RESOURCES in runtime.available_controls,
         "entry_id": runtime.entry.entry_id,
         "action_entities": {key: next((item.entity_id for item in registry.entities.values()

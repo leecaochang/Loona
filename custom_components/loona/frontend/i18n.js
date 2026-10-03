@@ -177,7 +177,23 @@ const chinese = {
   "Unchecked files have unknown usage": "未勾选文件的用途不确定",
   "These files are skipped by Resource filtering. If a card, icon or helper is missing, select the needed files under Cards and refresh the browser.": "资源筛选会跳过这些文件。如果卡片、图标或辅助功能缺失，请在“卡片”中勾选所需文件并刷新浏览器。",
   "Saved card files are no longer registered": "已保存的卡片文件不再注册",
-  "Remove unavailable saved files under Cards, or restore their Home Assistant resource registrations if you still need them.": "请在“卡片”中移除不可用的已保存文件；如果仍需使用，请恢复它们在 Home Assistant 中的资源注册。"
+  "Remove unavailable saved files under Cards, or restore their Home Assistant resource registrations if you still need them.": "请在“卡片”中移除不可用的已保存文件；如果仍需使用，请恢复它们在 Home Assistant 中的资源注册。",
+  "Enable Loona to change other settings.": "请启用 Loona 后修改其他设置。",
+  "Show statistics charts": "显示统计图表",
+  "Charts refresh with statistics. This choice is saved for this account in this browser.": "图表随统计数据一起刷新。此选项按账户保存在当前浏览器中。",
+  "Filtered update feeds": "已筛选的更新订阅",
+  "{filtered} of {total} update feeds filtered": "{total} 个更新订阅中已筛选 {filtered} 个",
+  "Accent color shows the filtered share.": "主题强调色表示已筛选的比例。",
+  "No visible warnings": "没有未隐藏的警告",
+  "No updates counted in this interval": "本时段未记录更新",
+  "Dismiss": "隐藏",
+  "Show dismissed warnings ({count})": "显示已隐藏的警告（{count}）",
+  "Dismissals apply to this account in this browser. Changed warnings appear again.": "隐藏记录仅适用于当前浏览器中的此账户。警告内容变化后会重新显示。",
+  "Loaded card: {card}; integration: {integration}. Reload this dashboard to finish the upgrade.": "已加载卡片：{card}；集成：{integration}。请重新加载仪表盘以完成升级。",
+  "Reload dashboard": "重新加载仪表盘",
+  "Sent: {sent} updates/s; filtered: {filtered} updates/s": "已发送：{sent} 次更新/秒；已筛选：{filtered} 次更新/秒",
+  "{percent}% of counted updates filtered": "已筛选记录更新的 {percent}%",
+  "{count} sent updates": "已发送 {count} 次更新"
 };
 
 export function cancelConfirmation(host) {
@@ -311,34 +327,104 @@ const notices = {
   ]
 };
 
-export function renderNotices(root, hass, items) {
+const localPreferences = new Map();
+function preferenceKey(hass) { return "loona-card-preferences:" + hass?.user?.id; }
+export function cardPreferences(hass) {
+  const key = preferenceKey(hass);
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(key) || "null");
+    if (stored && typeof stored === "object" && !Array.isArray(stored)) {
+      localPreferences.set(key, stored); return stored;
+    }
+  } catch { /* Private browsing may block persistent storage. */ }
+  return localPreferences.get(key) || {};
+}
+export function saveCardPreferences(hass, changes, reset = false) {
+  if (!hass?.user?.is_admin) return;
+  const key = preferenceKey(hass);
+  const values = reset ? {} : {...cardPreferences(hass), ...changes};
+  localPreferences.set(key, values);
+  try { window.localStorage.setItem(key, JSON.stringify(values)); } catch { /* Keep session preferences. */ }
+  window.dispatchEvent(new Event("loona-card-preferences"));
+}
+function noticeFingerprint(item) {
+  // Two independent hashes avoid storing affected entity IDs in browser preferences.
+  const value = JSON.stringify([item.code, item.severity, [...(item.items || [])].sort()]);
+  let first = 2166136261, second = 5381;
+  for (let index = 0; index < value.length; index++) {
+    first = Math.imul(first ^ value.charCodeAt(index), 16777619);
+    second = Math.imul(second, 33) ^ value.charCodeAt(index);
+  }
+  return (first >>> 0).toString(16) + ":" + (second >>> 0).toString(16);
+}
+export function renderVersion(root, hass, version, cardVersion, blocked = false) {
+  root.replaceChildren();
+  if (version === cardVersion) { root.textContent = text(hass, "Version: {version}", {version}); return; }
+  const message = document.createElement("span");
+  message.textContent = text(hass, "Loaded card: {card}; integration: {integration}. Reload this dashboard to finish the upgrade.", {card:cardVersion, integration:version});
+  const reload = document.createElement("button"); reload.textContent = text(hass, "Reload dashboard"); reload.disabled = blocked;
+  reload.addEventListener("click", () => window.location.reload()); root.append(message, reload);
+}
+export function renderNotices(root, hass, items, labels = {}) {
+  const source = items;
   if (window.__loonaResourceLoading?.failed) items = [...items, {code:"resource_loading_failure", severity:"warning"}];
   if (window.__loonaGraphCapability?.status === "unavailable" && window.__loonaGraphCapability.enabled) {
-    items = [...items, { code: "graph_frontend_compatibility", severity: "warning" }];
+    items = [...items, {code:"graph_frontend_compatibility", severity:"warning"}];
   }
+  items = items.filter(item => notices[item.code]);
+  const preferences = cardPreferences(hass);
+  const dismissed = new Set(Array.isArray(preferences.dismissed) ? preferences.dismissed : []);
+  const visible = items.filter(item => !dismissed.has(noticeFingerprint(item)));
+  const hiddenCount = items.length - visible.length;
   const open = root.querySelector("details")?.open;
   root.replaceChildren();
-  if (!items.length) {
-    const healthy=document.createElement("p"); healthy.textContent=text(hass,"No warnings"); root.append(healthy); return;
-  }
-  const section=document.createElement("details"); section.className="loona-notices"; section.open=Boolean(open);
-  const summary=document.createElement("summary"); summary.textContent=text(hass,"Warnings and checks ({count})",{count:items.length}); section.append(summary);
-  const list=document.createElement("ul");
-  for (const item of items) {
-    const message=notices[item.code]; if (!message) continue;
-    const row=document.createElement("li"); row.dataset.notice=item.code;
-    const title=document.createElement("h3"); title.textContent=text(hass,item.severity === "warning" ? "Warning" : "Check")+": "+text(hass,message[0]);
-    const body=document.createElement("p"); body.textContent=text(hass,message[1]); row.append(title,body);
-    if (item.items?.length) {
-      const details=document.createElement("details"); const heading=document.createElement("summary");
-      heading.textContent=text(hass,"Affected items ({count})",{count:item.items.length});
-      const values=document.createElement("div"); values.className="notice-items";
-      for (const value of item.items) { const line=document.createElement("p"); line.textContent=value; values.append(line); }
-      details.append(heading,values); row.append(details);
+  if (!visible.length) {
+    const healthy=document.createElement("p"); healthy.textContent=text(hass,hiddenCount ? "No visible warnings" : "No warnings"); root.append(healthy);
+  } else {
+    const section=document.createElement("details"); section.className="loona-notices"; section.open=Boolean(open);
+    const summary=document.createElement("summary"); summary.textContent=text(hass,"Warnings and checks ({count})",{count:visible.length}); section.append(summary);
+    const explanation=document.createElement("p"); explanation.textContent=text(hass,"Dismissals apply to this account in this browser. Changed warnings appear again."); section.append(explanation);
+    const list=document.createElement("ul");
+    for (const item of visible) {
+      const message=notices[item.code];
+      const row=document.createElement("li"); row.dataset.notice=item.code;
+      const title=document.createElement("h3"); title.textContent=text(hass,item.severity === "warning" ? "Warning" : "Check")+": "+text(hass,message[0]);
+      const body=document.createElement("p"); body.textContent=text(hass,message[1]); row.append(title,body);
+      if (item.items?.length) {
+        const details=document.createElement("details"); const heading=document.createElement("summary");
+        heading.textContent=text(hass,"Affected items ({count})",{count:item.items.length});
+        const values=document.createElement("div"); values.className="notice-items";
+        for (const value of item.items) {
+          const line=document.createElement("p"); const label=labels[value] || hass?.states?.[value]?.attributes?.friendly_name;
+          if (label && label !== value) {
+            const name=document.createElement("span"); name.textContent=label;
+            const id=document.createElement("small"); id.textContent=value; line.append(name,id);
+          } else line.textContent=value;
+          values.append(line);
+        }
+        details.append(heading,values); row.append(details);
+      }
+      const dismiss=document.createElement("button"); dismiss.textContent=text(hass,"Dismiss"); dismiss.dataset.dismiss=item.code;
+      dismiss.setAttribute("aria-label",text(hass,"Dismiss")+": "+text(hass,message[0]));
+      dismiss.addEventListener("click", () => {
+        const latest=cardPreferences(hass);
+        const previous=Array.isArray(latest.dismissed) ? latest.dismissed : [];
+        saveCardPreferences(hass,{dismissed:[...new Set([...previous,noticeFingerprint(item)])].slice(-100)});
+        renderNotices(root,hass,source,labels);
+        root.querySelector("summary,button")?.focus();
+      });
+      row.append(dismiss); list.append(row);
     }
-    list.append(row);
+    section.append(list); root.append(section);
   }
-  section.append(list); root.append(section);
+  if (hiddenCount) {
+    const restore=document.createElement("button"); restore.dataset.restoreWarnings="";
+    restore.textContent=text(hass,"Show dismissed warnings ({count})",{count:hiddenCount});
+    restore.addEventListener("click", () => {
+      saveCardPreferences(hass,{dismissed:[]}); renderNotices(root,hass,source,labels);
+      root.querySelector("summary")?.focus();
+    }); root.append(restore);
+  }
 }
 
 export function setText(element, value) {

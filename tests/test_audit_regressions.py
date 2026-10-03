@@ -194,7 +194,7 @@ def test_release_versions_and_manifest_are_consistent():
     assert list(manifest) == ["domain", "name"] + sorted(set(manifest) - {"domain", "name"})
     assert "http" in manifest["dependencies"]
     for path in (package / "frontend").glob("*.js"):
-        for version in re.findall(r'(?:v=|moduleVersion = ")(\d+\.\d+\.\d+)', path.read_text()):
+        for version in re.findall(r'(?:v=|(?:moduleVersion|cardVersion) = ")(\d+\.\d+\.\d+)', path.read_text()):
             assert version == VERSION, path
 
 

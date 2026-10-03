@@ -1,6 +1,7 @@
 /* Native-themed live filtering statistics. */
-import { language, text, translate, renderNotices, setText, formatNumber, formatDateTime, confirmAction, cancelConfirmation } from "./i18n.js?v=0.9.6";
+import { language, text, translate, renderNotices, renderVersion, cardPreferences, saveCardPreferences, setText, formatNumber, formatDateTime, confirmAction, cancelConfirmation } from "./i18n.js?v=0.9.7";
 
+const cardVersion = "0.9.7";
 const command = "loona/statistics";
 const elementName = "loona-statistics-card";
 
@@ -30,8 +31,8 @@ function install() {
       this._lastRequest = 0;
       this.shadowRoot.innerHTML = `
         <style>
-          :host { display:block; color:var(--primary-text-color); }
-          ha-card { padding:24px; overflow:hidden; }
+          :host { user-select:text; -webkit-user-select:text; display:block; color:var(--primary-text-color); }
+          ha-card { user-select:text; -webkit-user-select:text; padding:24px; overflow:hidden; }
           header { display:flex; justify-content:space-between; align-items:start; gap:16px; }
           header>div { flex:1; min-width:0; }
           header>button { flex-shrink:0; white-space:nowrap; }
@@ -62,6 +63,14 @@ function install() {
           summary { cursor:pointer; min-height:36px; font-size:15px; line-height:1.5; }
           .rows { margin:0; padding:0; list-style:none; overflow-wrap:anywhere; }
           .rows>li { border-top:1px solid var(--divider-color); padding:12px 0; }
+          .chart-choice { display:flex; align-items:center; gap:12px; min-height:44px; font-size:14px; margin-top:16px; cursor:pointer; }
+          .chart-choice input { width:18px; height:18px; accent-color:var(--primary-color); }
+          .chart-choice input:focus-visible { outline:2px solid var(--primary-color); outline-offset:2px; }
+          #charts { display:flex; align-items:center; gap:24px; margin-top:16px; }
+          #charts svg { display:block; max-width:100%; }
+          #charts .distribution { flex:1; min-width:0; }
+          #charts .pie { width:88px; height:88px; flex-shrink:0; }
+          .rows small,.notice-items small { display:block; font-size:12px; color:var(--secondary-text-color); overflow-wrap:anywhere; }
           #version { font-size:12px; }
           .loona-notices ul { list-style:none; padding:0; margin:0; }
           .loona-notices li { padding:16px 0; border-top:1px solid var(--divider-color); }
@@ -86,6 +95,9 @@ function install() {
               <div><dt data-i18n="Updates filtered">Updates filtered</dt><dd><span id="reduction">0</span>%<small data-i18n="of counted updates">of counted updates</small></dd></div>
             </dl>
             <p id="interval"></p>
+            <label class="chart-choice"><input id="show-charts" type="checkbox"><span data-i18n="Show statistics charts">Show statistics charts</span></label>
+            <p id="chart-help" hidden data-i18n="Charts refresh with statistics. This choice is saved for this account in this browser.">Charts refresh with statistics. This choice is saved for this account in this browser.</p>
+            <div id="charts" hidden></div>
             <dl class="facts">
               <dt data-i18n="Updates sent since reset">Updates sent since reset</dt><dd id="forwarded-total"></dd>
               <dt data-i18n="Updates filtered since reset">Updates filtered since reset</dt><dd id="avoided-total"></dd>
@@ -111,12 +123,17 @@ function install() {
         </ha-card>`;
       this._get("refresh").addEventListener("click", () => this._fetch());
       this._get("reset").addEventListener("click", () => this._reset());
+      this._get("show-charts").addEventListener("change", () => {
+        if (this._hass?.user?.is_admin) saveCardPreferences(this._hass, {charts:this._get("show-charts").checked});
+      });
       this._get("measure").addEventListener("click", () => this._measure());
     }
 
     static getStubConfig() { return { type: "custom:loona-statistics-card" }; }
     setConfig(config) {
       if (config.title !== undefined && typeof config.title !== "string") throw new Error(text(this._hass, "Loona card title must be text"));
+      if (config.show_charts !== undefined && typeof config.show_charts !== "boolean") throw new Error("show_charts must be a boolean");
+      this._defaultCharts = config.show_charts === true;
       this._customTitle = config.title;
       this._localize();
     }
@@ -154,6 +171,8 @@ function install() {
         this._get("performance-rows").replaceChildren();
         this._get("measure-status").textContent = "";
         this._get("version").textContent = "";
+        this._get("charts").replaceChildren(); this._get("charts").hidden = true;
+        this._get("show-charts").checked = false;
       }
       if (!value?.user?.is_admin) {
         this._get("content").hidden = true;
@@ -171,14 +190,17 @@ function install() {
         const interval = (this._data?.interval_seconds || 30) * 1000;
         if (!document.hidden && this._visible && Date.now() - this._lastRequest >= interval && !this._loading) this._fetch();
       }, 1000);
-      this._capabilityListener = () => { if (this._data) renderNotices(this._get("notices"), this._hass, this._data.notices || []); };
+      this._capabilityListener = () => { if (this._data) renderNotices(this._get("notices"), this._hass, this._data.notices || [], this._data.notice_labels); };
       window.addEventListener("loona-capabilities", this._capabilityListener);
+      this._preferenceListener = () => { if (this._data && this._hass?.user?.is_admin) { this._renderCharts(this._data.metrics); this._capabilityListener(); } };
+      window.addEventListener("loona-card-preferences", this._preferenceListener);
       this._resetListener = () => this._fetch(); window.addEventListener("loona-statistics-reset", this._resetListener);
       if (this._hass) this._fetch();
     }
     disconnectedCallback() {
       cancelConfirmation(this);
       window.removeEventListener("loona-capabilities", this._capabilityListener);
+      window.removeEventListener("loona-card-preferences", this._preferenceListener);
       window.removeEventListener("loona-statistics-reset", this._resetListener);
       window.clearInterval(this._timer);
       this._observer?.disconnect();
@@ -251,10 +273,50 @@ function install() {
         this._get("measure").disabled = false;
       }
     }
+    _renderCharts(metrics) {
+      const preference = cardPreferences(this._hass).charts;
+      const enabled = typeof preference === "boolean" ? preference : this._defaultCharts === true;
+      this._get("show-charts").checked = Boolean(enabled);
+      const root=this._get("charts"); root.hidden=!enabled; this._get("chart-help").hidden=!enabled;
+      if (!enabled) { root.replaceChildren(); return; }
+      const sent=Math.max(0,Number(metrics.forwarded_rate)||0), filtered=Math.max(0,Number(metrics.avoided_rate)||0);
+      const total=sent+filtered;
+      if (!total) { root.replaceChildren(node("p",text(this._hass,"No updates counted in this interval"))); return; }
+      const percentage=Math.min(100,Math.max(0,Number(metrics.update_reduction)||0));
+      const feeds=Math.max(0,Number(metrics.managed_subscriptions)||0);
+      const filteredFeeds=Math.min(feeds,Math.max(0,Number(metrics.filtered_subscriptions)||0));
+      const format=value=>formatNumber(this._hass,value,{maximumFractionDigits:1});
+      const svg=(tag,attributes={})=>{
+        const element=document.createElementNS("http://www.w3.org/2000/svg",tag);
+        for (const [key,value] of Object.entries(attributes)) element.setAttribute(key,String(value));
+        return element;
+      };
+      if (!root.querySelector("svg")) {
+        const pie=svg("svg",{viewBox:"0 0 40 40",role:"img",class:"pie"});
+        pie.append(svg("circle",{cx:20,cy:20,r:15,fill:"none",stroke:"var(--secondary-text-color)","stroke-width":8}));
+        pie.append(svg("circle",{cx:20,cy:20,r:15,fill:"none",stroke:"var(--primary-color)","stroke-width":8,pathLength:100,transform:"rotate(-90 20 20)","data-chart":"pie"}));
+        pie.append(svg("text",{x:20,y:20,"text-anchor":"middle","dominant-baseline":"central",fill:"var(--primary-text-color)","font-size":6,"data-chart":"percentage","aria-hidden":"true"}));
+        const content=node("div",undefined,"distribution"); content.append(node("p",text(this._hass,"Filtered update feeds")));
+        const bar=svg("svg",{viewBox:"0 0 200 16",role:"img"});
+        bar.append(svg("rect",{x:0,y:0,width:200,height:16,fill:"var(--secondary-text-color)"}));
+        bar.append(svg("rect",{x:0,y:0,height:16,fill:"var(--primary-color)","data-chart":"bar"}));
+        content.append(bar,node("p","","chart-legend")); root.replaceChildren(pie,content);
+      }
+      root.querySelector(".pie").setAttribute("aria-label",text(this._hass,"{percent}% of counted updates filtered",{percent:format(percentage)}));
+      root.querySelector('[data-chart="pie"]').setAttribute("stroke-dasharray",`${percentage} ${100-percentage}`);
+      root.querySelector('[data-chart="bar"]').setAttribute("width",String(feeds ? 200*filteredFeeds/feeds : 0));
+      const legend=text(this._hass,"{filtered} of {total} update feeds filtered",{filtered:format(filteredFeeds),total:format(feeds)});
+      root.querySelector(".distribution svg").setAttribute("aria-label",legend);
+      root.querySelector(".chart-legend").textContent=legend;
+      root.querySelector('[data-chart="percentage"]').textContent=format(percentage)+"%";
+      root.querySelector(".distribution>p").textContent=text(this._hass,"Filtered update feeds");
+      this._get("chart-help").textContent=text(this._hass,"Charts refresh with statistics. This choice is saved for this account in this browser.")+" "+text(this._hass,"Accent color shows the filtered share.");
+    }
     _render(data) {
       const metrics = data.metrics;
-      this._get("version").textContent = text(this._hass, "Version: {version}", {version:data.version});
-      renderNotices(this._get("notices"), this._hass, data.notices || []);
+      renderVersion(this._get("version"), this._hass, data.version, cardVersion);
+      renderNotices(this._get("notices"), this._hass, data.notices || [], data.notice_labels);
+      this._renderCharts(metrics);
       const format = (value) => formatNumber(this._hass, value, { maximumFractionDigits: 1 });
       this._get("content").hidden = false;
       setText(this._get("state"), data.compatibility_problem ? text(this._hass, "A feature is unavailable. Check Loona diagnostics.")
@@ -280,8 +342,11 @@ function install() {
         item.append(node("p", row.resources ? text(this._hass, "Card files sent: {sent} / {available}", row.resources) : text(this._hass, "No card file count was recorded for this load.")));
         return item;
       }) : [node("li", text(this._hass, "No page loads recorded yet. Reload one of your dashboards."))]));
-      this._get("noisy-rows").replaceChildren(...(data.noisy_entities?.entities || []).map(row =>
-        node("li", `${row.entity_id}: ${format(row.updates)}`)));
+      this._get("noisy-rows").replaceChildren(...(data.noisy_entities?.entities || []).map(row => {
+        const item=node("li"); const label=row.label || this._hass?.states?.[row.entity_id]?.attributes?.friendly_name || row.entity_id;
+        item.append(node("span",label)); if (label!==row.entity_id) item.append(node("small",row.entity_id));
+        item.append(node("p",text(this._hass,"{count} sent updates",{count:format(row.updates)}))); return item;
+      }));
       if (data.noisy_entities?.untracked_updates) this._get("noisy-rows").append(node("li",
         text(this._hass, "Tracking limit reached: {count} sent updates were not attributed.", {count:format(data.noisy_entities.untracked_updates)})));
       this._get("performance-rows").replaceChildren(...(data.browser_reports || []).map(row => {
@@ -290,10 +355,14 @@ function install() {
         item.append(node("p", formatDateTime(this._hass, row.at)));
         item.append(node("p", row.loaf_supported ? text(this._hass, "Long frames: {count}; blocking: {ms} ms", {count:format(row.frames), ms:format(row.blocking_ms)})
           : text(this._hass, "Long Animation Frames are unavailable in this browser.")));
-        for (const script of row.scripts) item.append(node("p", text(this._hass,
+        for (const script of row.scripts) {
+          const label=data.resource_labels?.[script.source];
+          if (label && label!==script.source) item.append(node("p",label));
+          item.append(node("p", text(this._hass,
           "{source} ({phase}): {ms} ms; forced layout: {layout} ms", {source:script.source,
             phase:text(this._hass, script.phase === "buffered" ? "earlier buffered" : "measurement window"),
             ms:format(script.duration_ms), layout:format(script.forced_layout_ms)})));
+        }
         for (const subscription of row.subscriptions) item.append(node("p", `${subscription.type}: ${format(subscription.count)}`));
         if (row.subscriptions.some(value => value.type === "subscribe_events/state_changed" || value.type === "subscribe_events/*")) {
           item.append(node("p", text(this._hass, "A raw event subscription can bypass entity filtering.")));

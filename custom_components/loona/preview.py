@@ -15,13 +15,21 @@ from .const import (VERSION, DOMAIN, METRIC_SECONDS, PAGE_LOAD_COMMAND, PAGE_LOA
 from .dashboard import dashboard_objects, dashboard_titles
 from homeassistant.util import dt as dt_util
 from .runtime import LoonaRuntime
+from .presentation import entity_label, notice_labels, resource_labels
 
 
 def statistics_report(runtime: LoonaRuntime) -> dict[str, Any]:
     """Keep statistics, notices and operating status compact."""
+    notices = runtime.notice_report()
+    noisy = runtime.live_statistics.noisy_report()
+    for row in noisy["entities"]:
+        row["label"] = entity_label(runtime.hass, row["entity_id"])
+    reports = list(reversed(runtime.live_statistics.browser_reports.values()))
     return {
         "version": VERSION,
-        "notices": runtime.notice_report(),
+        "notices": notices,
+        "notice_labels": notice_labels(runtime.hass, notices),
+        "resource_labels": resource_labels(runtime.hass, [script["source"] for report in reports for script in report["scripts"]]),
         "metrics": runtime.metrics(),
         "controls": runtime.controls,
         "available_controls": sorted(runtime.available_controls),
@@ -33,8 +41,8 @@ def statistics_report(runtime: LoonaRuntime) -> dict[str, Any]:
         "interval_seconds": METRIC_SECONDS,
         "sample_seconds": runtime.live_statistics.sample_seconds,
         "page_loads": list(reversed(runtime.live_statistics.page_loads.values())),
-        "noisy_entities": runtime.live_statistics.noisy_report(),
-        "browser_reports": list(reversed(runtime.live_statistics.browser_reports.values())),
+        "noisy_entities": noisy,
+        "browser_reports": reports,
         "reset_entity": next((item.entity_id for item in er.async_get(runtime.hass).entities.values()
                               if item.config_entry_id == runtime.entry.entry_id
                               and item.unique_id.endswith(":reset_live_statistics")), None),
