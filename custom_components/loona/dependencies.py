@@ -204,3 +204,39 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
         {key: frozenset(values) for key, values in targets.items()},
         unknown_cards,
     )
+
+
+def discover_views(config: dict[str, Any], context: DiscoveryContext) -> dict[str, frozenset[str]]:
+    """Scan each saved view with shared config and preserve native route precedence."""
+    views = config.get("views")
+    if not isinstance(views, list) or not views or any(not isinstance(view, dict) for view in views):
+        return {}
+    results = [discover({**config, "views": [view]}, context) for view in views]
+    indices = {str(index) for index in range(len(views))}
+    routes = set(indices)
+    routes.update(view["path"] for view in views if isinstance(view.get("path"), str) and view["path"])
+    plans = {}
+    for route in routes:
+        # Noncanonical numeric spellings can collide via Core's Number(path).
+        # Keep dashboard delivery rather than partially emulating JS coercion.
+        if route not in indices:
+            numeric_route = route.replace("\ufeff", "").strip()
+            if not numeric_route:
+                continue
+            try:
+                float(numeric_route)
+            except ValueError:
+                try:
+                    int(numeric_route, 0)
+                except ValueError:
+                    pass
+                else:
+                    continue
+            else:
+                continue
+        # Core takes the first matching path or numeric index, even on collisions.
+        index = next(index for index, view in enumerate(views)
+                     if view.get("path") == route or str(index) == route)
+        if results[index].complete and route != "hass-unused-entities":
+            plans[route] = results[index].entity_ids
+    return plans

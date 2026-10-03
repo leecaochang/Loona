@@ -10,6 +10,7 @@ import pytest
 from homeassistant.const import EVENT_STATE_CHANGED
 
 from custom_components.loona.runtime import LoonaRuntime
+from custom_components.loona.dependencies import DiscoveryContext, discover_views
 from custom_components.loona.websocket import ScopePolicy, SubscriptionAdapter
 from tests.test_panels import command
 from tests.test_websocket import snapshot, subscribe
@@ -150,3 +151,67 @@ async def test_runtime_restricted_users_missing_scope_and_explicit_feeds(dashboa
     assert runtime.adapter._records[(connection, 2)].scope == runtime.entity_ids
     connection.async_handle_close()
     assert not runtime.adapter.managed_count and not runtime.panel_context._connections
+
+
+def test_view_discovery_shared_dependencies_groups_and_native_route_collisions():
+    context = DiscoveryContext(groups={"group.shared": frozenset({"sensor.shared"})})
+    config = {"badges": [{"entity": "group.shared"}], "views": [
+        {"path": "1", "cards": [{"type": "entity", "entity": "sensor.one"}]},
+        {"path": "other", "subview": True, "cards": [{"type": "entity", "entity": "sensor.two"}]},
+        {"path": "other", "cards": [{"type": "entity", "entity": "sensor.three"}]},
+    ]}
+    shared = {"group.shared", "sensor.shared"}
+    plans = discover_views(config, context)
+    assert plans["0"] == plans["1"] == frozenset(shared | {"sensor.one"}), "Native first match wins over numeric index"
+    assert plans["other"] == frozenset(shared | {"sensor.two"}), "Native first duplicate path wins"
+    assert plans["2"] == frozenset(shared | {"sensor.three"})
+    assert "" not in plans and "missing" not in plans
+    for numeric_path in ("01", "1.0", "0x1", "1e0", " ", "\ufeff1"):
+        config["views"][2]["path"] = numeric_path
+        assert numeric_path not in discover_views(config, context), "Ambiguous JS numeric coercion must retain dashboard delivery"
+    assert discover_views({"strategy": {"type": "custom:dynamic"}, **config}, context) == {}
+    assert discover_views({"views": [None]}, context) == {}
+
+
+async def test_runtime_tabs_retained_values_navigation_fallback_and_rescan(dashboard_runtime, dashboards, make_user, make_connection):
+    runtime = dashboard_runtime
+    for entity in ("sensor.hidden", "sensor.shared"):
+        runtime.hass.states.async_set(entity, "0")
+    config = {"header": {"entity": "sensor.shared"}, "views": [
+        {"path": "main", "cards": [{"type": "entity", "entity": "sensor.wall"}]},
+        {"path": "hidden", "visible": False, "subview": True,
+         "cards": [{"type": "entity", "entity": "sensor.hidden"}]},
+    ]}
+    await dashboards["wall-panel"].async_save(config)
+    await runtime.async_scan(force=True)
+    await runtime.async_set_control("current_dashboard_updates", True)
+    connection, output = make_connection(make_user(admin=True))
+    command(connection, output, "loona/subscribe_panel", dashboard="wall-panel", view="main", live_dashboard=True)
+    command(connection, output, "subscribe_entities")
+    record = lambda: runtime.adapter._records[(connection, 2)]
+    pinned = {"sensor.shared", "sensor.rule", "person.interface"}
+    retained = pinned | {"sensor.wall", "sensor.hidden", "sensor.overview"}
+    assert set(snapshot(output)) == retained
+    assert record().scope == frozenset(pinned | {"sensor.wall"})
+    output.clear()
+    runtime.hass.states.async_set("sensor.hidden", "background")
+    runtime.hass.states.async_set("sensor.wall", "visible")
+    await runtime.hass.async_block_till_done()
+    assert "sensor.hidden" not in str(output) and "sensor.wall" in str(output)
+    for route in ("hidden", "1"):
+        command(connection, output, "loona/panel", dashboard="wall-panel", view=route, live_dashboard=True)
+        assert record().scope == frozenset(pinned | {"sensor.hidden"})
+    assert snapshot(output)["sensor.hidden"]["s"] == "background"
+    assert not any("r" in row.get("event", {}) for row in output)
+    for route in (None, "missing", "01"):
+        command(connection, output, "loona/panel", dashboard="wall-panel", view=route, live_dashboard=True)
+        assert record().scope == frozenset(pinned | {"sensor.wall", "sensor.hidden"})
+    for expanded in (True, False):
+        command(connection, output, "loona/panel", dashboard="wall-panel", view="0", live_dashboard=True, expanded=expanded)
+        assert record().scope == (frozenset(retained) if expanded else frozenset(pinned | {"sensor.wall"}))
+    # Saving a changed configuration replaces view plans with the same atomic union.
+    config["views"][0]["cards"][0]["entity"] = "sensor.hidden"
+    await dashboards["wall-panel"].async_save(config)
+    await runtime.async_scan(force=True)
+    assert record().scope == frozenset(pinned | {"sensor.hidden"})
+    assert "sensor.wall" not in record().retained_scope

@@ -1,5 +1,5 @@
 /* Native-themed live filtering statistics. */
-import { language, text, translate, renderNotices, setText, formatNumber, formatDateTime } from "./i18n.js?v=0.9.5";
+import { language, text, translate, renderNotices, setText, formatNumber, formatDateTime, confirmAction, cancelConfirmation } from "./i18n.js?v=0.9.6";
 
 const command = "loona/statistics";
 const elementName = "loona-statistics-card";
@@ -141,6 +141,7 @@ function install() {
       this._hass = value;
       if (changedLanguage) this._localize();
       if (changedUser || !value?.user?.is_admin) {
+        cancelConfirmation(this);
         this._sequence++;
         this._measureSequence++;
         this._data = undefined;
@@ -176,6 +177,7 @@ function install() {
       if (this._hass) this._fetch();
     }
     disconnectedCallback() {
+      cancelConfirmation(this);
       window.removeEventListener("loona-capabilities", this._capabilityListener);
       window.removeEventListener("loona-statistics-reset", this._resetListener);
       window.clearInterval(this._timer);
@@ -211,7 +213,11 @@ function install() {
       }
     }
     async _reset() {
-      if (!this._data?.reset_entity || this._resetting) return;
+      if (!this._data?.reset_entity || this._resetting || !this._hass?.user?.is_admin) return;
+      const account = this._hass.user.id;
+      if (!await confirmAction(this, "Reset live statistics?",
+          "Clear live counters, page-load records and browser measurements? Filtering settings and recorded history are preserved.", "Reset live statistics")) return;
+      if (this._hass?.user?.id !== account || !this._hass.user.is_admin || !this.isConnected || this._resetting) return;
       this._resetting = true;
       this._get("reset").disabled = true;
       try {

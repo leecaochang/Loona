@@ -76,7 +76,7 @@
           "pause_animations_during_loading": "Pause animations during loading",
           "resource_filtering": "Resource filtering",
           "delay_card_resources": "Delay card files",
-          "current_dashboard_updates": "Current dashboard updates"
+          "current_dashboard_updates": "Current tab updates"
         }
       },
       "rules": {
@@ -103,13 +103,21 @@
         "data": {
           "dashboard_cards": "Dashboard cards"
         }
+      },
+      "confirm_remove_dashboard": {
+        "title": "Remove the Loona dashboard",
+        "description": "Remove the generated Loona dashboard and its cards? Edited dashboards are preserved. Cancel this flow to keep the current selection.",
+        "data": {
+          "confirm": "Confirm removal"
+        }
       }
     },
     "error": {
       "no_dashboards": "Select at least one dashboard.",
       "no_accounts": "Select at least one active account.",
       "invalid_selection": "Some choices are no longer available or were selected twice. Choose from the current list.",
-      "not_loaded": "Loona is not running. Reload the integration, then try again."
+      "not_loaded": "Loona is not running. Reload the integration, then try again.",
+      "confirmation_required": "Confirm removal or cancel this flow."
     },
     "abort": {
       "not_loaded": "Loona is not running. Reload the integration, then reopen this page.",
@@ -140,7 +148,7 @@
         "name": "Delay card files"
       },
       "current_dashboard_updates": {
-        "name": "Current dashboard updates"
+        "name": "Current tab updates"
       }
     },
     "button": {

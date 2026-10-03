@@ -42,7 +42,7 @@ const context = vm.createContext({
   customElements: { get: () => App },
 });
 const source = readFileSync(new URL("../custom_components/loona/frontend/panel-context.js", import.meta.url), "utf8")
-  .replace('import "./resource-loading.js?v=0.9.5";', readFileSync(new URL("../custom_components/loona/frontend/resource-loading.js", import.meta.url), "utf8"))
+  .replace('import "./resource-loading.js?v=0.9.6";', readFileSync(new URL("../custom_components/loona/frontend/resource-loading.js", import.meta.url), "utf8"))
   .replaceAll("import.meta.url", JSON.stringify("http://test/loona/panel-context.js?poll=100"));
 vm.runInContext(source, context);
 const socket = new Socket();
@@ -55,6 +55,7 @@ assert.deepEqual(socket.sent.map((row) => row.type), [
   "loona/subscribe_panel", "subscribe_entities", "config/entity_registry/list_for_display",
 ]);
 assert.equal(socket.sent[0].dashboard, "wall-panel");
+assert.equal(socket.sent[0].view, "main");
 
 await window.loonaAttachBootstrapPanel(connection, null);
 await new Promise(setImmediate);
@@ -87,6 +88,29 @@ location.pathname = "/wall-panel/other-view";
 await connection.sendMessagePromise({ type: "config/entity_registry/list" });
 assert.equal(socket.sent.at(-2).type, "loona/panel");
 assert.equal(socket.sent.at(-2).dashboard, "wall-panel");
+assert.equal(socket.sent.at(-2).view, "other-view");
+
+location.pathname = "/wall-panel/1";
+listeners.get("location-changed")();
+await new Promise(setImmediate);
+assert.equal(socket.sent.at(-1).view, "1", "Same-dashboard tab changes must report");
+location.pathname = "/wall-panel/%E6%88%BF%E9%97%B4";
+listeners.get("location-changed")();
+await new Promise(setImmediate);
+assert.equal(socket.sent.at(-1).view, "房间");
+for (const path of ["/wall-panel", "/wall-panel/%E0%A4%A", "/wall-panel/a/extra"]) {
+  location.pathname = path;
+  listeners.get("location-changed")();
+  await new Promise(setImmediate);
+  assert.equal(socket.sent.at(-1).view, null, "Missing or unresolved view retains dashboard delivery");
+}
+location.pathname = "/wall-panel/hass-unused-entities";
+listeners.get("location-changed")();
+await new Promise(setImmediate);
+assert.equal(socket.sent.at(-1).expanded, true, "Native unused-entities editor retains the union");
+location.pathname = "/wall-panel/other-view";
+listeners.get("location-changed")();
+await new Promise(setImmediate);
 
 // Native dialogs and editor queries temporarily restore fresh union delivery.
 assert.equal(socket.sent[0].live_dashboard, true);

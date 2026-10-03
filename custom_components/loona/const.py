@@ -11,7 +11,7 @@ PANEL_POLL_MS: Final = 2000
 BOOTSTRAP_TIMEOUT_MS: Final = 2000
 RECORDER_CLEANUP_SECONDS: Final = 15
 MIN_CORE_VERSION: Final = "2024.6.0"
-VERSION: Final = "0.9.5"
+VERSION: Final = "0.9.6"
 CONF_DASHBOARD_CARDS: Final = "dashboard_cards"
 DASHBOARD_CARDS: Final = ("statistics", "settings")
 CONF_DASHBOARDS: Final = "dashboards"
@@ -141,6 +141,7 @@ I18N_ASSET: Final = "/loona/i18n.js"
 SETTINGS_COMMAND: Final = "loona/settings"
 SETTINGS_SAVE_COMMAND: Final = "loona/save_settings"
 SETTINGS_CHOICES_COMMAND: Final = "loona/settings_choices"
+SETTINGS_RESTORE_COMMAND: Final = "loona/restore_defaults"
 SETTINGS_GROUPS: Final = {
     "controls": frozenset(),
     "dashboards": frozenset({CONF_DASHBOARDS}),
@@ -150,6 +151,11 @@ SETTINGS_GROUPS: Final = {
     "cards": frozenset({CONF_DASHBOARD_CARDS}),
 }
 SETTINGS_EMPTY_DEFAULTS: Final = frozenset({CONF_EXTRA_ENTITIES, CONF_INCLUDE_DOMAINS, CONF_INCLUDE_GLOBS, CONF_EXCLUDE_GLOBS, CONF_ALWAYS_FORWARD})
+SETTINGS_DEFAULTS: Final = {
+    CONF_DASHBOARDS: [], CONF_TARGET_MODE: TARGET_SELECTED, CONF_USER_IDS: [],
+    CONF_EXTRA_ENTITIES: [], CONF_INCLUDE_DOMAINS: [], CONF_INCLUDE_GLOBS: [],
+    CONF_EXCLUDE_GLOBS: [], CONF_ALWAYS_FORWARD: [], CONF_DASHBOARD_CARDS: [],
+}
 SETTINGS_CHOICE_PAGE: Final = 50
 STATISTICS_COMMAND: Final = "loona/statistics"
 PAGE_LOAD_COMMAND: Final = "loona/page_load"

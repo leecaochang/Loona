@@ -27,8 +27,8 @@ const chinese = {
   "Loona settings": "Loona 设置",
   "Filters and performance": "筛选与性能",
   "Entity filtering": "实体筛选",
-  "Current dashboard updates": "当前仪表盘更新",
-  "Keep this dashboard and Entity rules live. Other dashboard values stay cached until navigation, dialogs or editing. Requires Entity filtering.": "实时更新当前仪表盘和实体规则中的实体。其他仪表盘的数据保留缓存，并在导航、打开对话框或编辑时刷新。需要启用实体筛选。",
+  "Current tab updates": "当前标签页更新",
+  "Keep this tab and Entity rules live. Hidden tabs stay cached until opened. Dialogs and editing refresh all selected dashboards. Requires Entity filtering.": "实时更新当前标签页和实体规则中的实体。隐藏标签页保留缓存，打开时刷新。对话框和编辑会刷新所有选定仪表盘。需要启用实体筛选。",
   "Registry filtering": "注册表筛选",
   "Pause animations during loading": "加载期间暂停动画",
   "Resource filtering": "资源筛选",
@@ -40,6 +40,17 @@ const chinese = {
   "Enabled": "启用",
   "Rescan dashboards": "重新扫描仪表盘",
   "Reset live statistics": "重置实时统计",
+  "Restore defaults": "恢复默认设置",
+  "Restore defaults?": "恢复默认设置？",
+  "Reset live statistics?": "重置实时统计？",
+  "Remove the Loona dashboard?": "删除 Loona 仪表盘？",
+  "Reset all Loona settings and live statistics, clear dashboard and account selections, and remove the generated Loona dashboard. Filtering stays inactive until you select dashboards and accounts again. Edited dashboards and recorded history are preserved.": "重置 Loona 的全部设置和实时统计，清空仪表盘与账户选择，并删除自动生成的 Loona 仪表盘。重新选择仪表盘与账户前，筛选不会生效。已编辑的仪表盘和历史记录会保留。",
+  "Clear live counters, page-load records and browser measurements? Filtering settings and recorded history are preserved.": "清空实时计数、页面加载记录和浏览器测量？筛选设置和历史记录会保留。",
+  "Remove the generated Loona dashboard and its cards? Manually edited dashboards are preserved. You can create it again by selecting Loona dashboard cards.": "删除自动生成的 Loona 仪表盘及其卡片？手动编辑的仪表盘会保留。重新选择 Loona 仪表盘卡片即可再次创建。",
+  "Remove dashboard": "删除仪表盘",
+  "Defaults restored. Select dashboards and accounts, then reload the browser.": "已恢复默认设置。请选择仪表盘与账户，再刷新浏览器。",
+  "Could not restore defaults. Refresh and check the current settings.": "无法恢复默认设置。请刷新并检查当前设置。",
+  "Restore defaults clears all Loona settings and live statistics. Confirmation is required.": "恢复默认设置会清空 Loona 的全部设置和实时统计，需要确认。",
   "A feature is unavailable. Check Loona diagnostics.": "部分功能无法使用。请查看 Loona 诊断信息。",
   "Loona card title must be text": "Loona 卡片标题必须为文本",
   "Loona statistics": "Loona 统计",
@@ -168,6 +179,50 @@ const chinese = {
   "Saved card files are no longer registered": "已保存的卡片文件不再注册",
   "Remove unavailable saved files under Cards, or restore their Home Assistant resource registrations if you still need them.": "请在“卡片”中移除不可用的已保存文件；如果仍需使用，请恢复它们在 Home Assistant 中的资源注册。"
 };
+
+export function cancelConfirmation(host) {
+  host._cancelConfirmation?.();
+}
+
+export function confirmAction(host, title, message, confirmLabel) {
+  if (host._cancelConfirmation) return Promise.resolve(false);
+  const dialog = document.createElement("dialog");
+  if (typeof dialog.showModal !== "function") return Promise.resolve(window.confirm(text(host._hass, title) + "\n\n" + text(host._hass, message)));
+  dialog.setAttribute("aria-labelledby", "loona-confirm-title");
+  dialog.setAttribute("aria-describedby", "loona-confirm-message");
+  const style = document.createElement("style");
+  style.textContent = `dialog { box-sizing:border-box; width:calc(100% - 32px); max-width:480px;
+    max-height:calc(100% - 32px); overflow:auto; padding:24px; border:1px solid var(--divider-color);
+    border-radius:var(--ha-border-radius,12px); background:var(--card-background-color); color:var(--primary-text-color); }
+    dialog::backdrop { background:rgba(0,0,0,.45); }
+    dialog h2 { margin:0 0 16px; font-size:1.25rem; } dialog p { margin:0; line-height:1.5; }
+    dialog .actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; margin-top:24px; }
+    dialog button { font:inherit; min-height:44px; padding:8px 16px; border:0; border-radius:var(--ha-border-radius,8px);
+      background:transparent; color:var(--primary-color); cursor:pointer; }
+    dialog button:hover { background:var(--secondary-background-color); }
+    dialog button:focus-visible { outline:2px solid var(--primary-color); outline-offset:2px; }`;
+  const heading = document.createElement("h2"); heading.id = "loona-confirm-title"; heading.textContent = text(host._hass, title); heading.dataset.i18n = title;
+  const body = document.createElement("p"); body.id = "loona-confirm-message"; body.textContent = text(host._hass, message); body.dataset.i18n = message;
+  const actions = document.createElement("div"); actions.className = "actions";
+  const cancel = document.createElement("button"); cancel.textContent = text(host._hass, "Cancel"); cancel.dataset.confirmCancel = ""; cancel.dataset.i18n = "Cancel";
+  const confirm = document.createElement("button"); confirm.textContent = text(host._hass, confirmLabel); confirm.dataset.confirmAccept = ""; confirm.dataset.i18n = confirmLabel;
+  actions.append(cancel, confirm); dialog.append(style, heading, body, actions); host.shadowRoot.append(dialog);
+  const focused = host.shadowRoot.activeElement;
+  return new Promise(resolve => {
+    const finish = accepted => {
+      if (host._cancelConfirmation !== dismiss) return;
+      host._cancelConfirmation = undefined;
+      dialog.close(); dialog.remove(); focused?.focus(); resolve(accepted);
+    };
+    const dismiss = () => finish(false);
+    host._cancelConfirmation = dismiss;
+    cancel.addEventListener("click", dismiss);
+    confirm.addEventListener("click", () => finish(true));
+    dialog.addEventListener("cancel", event => { event.preventDefault(); dismiss(); });
+    dialog.addEventListener("close", dismiss);
+    dialog.showModal(); cancel.focus();
+  });
+}
 export function language(hass) {
   return String(hass?.language || hass?.locale?.language || hass?.config?.language || "en");
 }

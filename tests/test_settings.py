@@ -10,7 +10,7 @@ import pytest
 from custom_components.loona import async_setup_entry, async_unload_entry
 from custom_components.loona.compatibility import CompatibilityError
 from custom_components.loona.settings import revision, settings_report
-from custom_components.loona.const import CONTROL_DEFAULTS
+from custom_components.loona.const import CONTROL_DEFAULTS, SETTINGS_DEFAULTS
 
 
 @pytest.fixture
@@ -54,6 +54,52 @@ async def test_control_order_and_native_action_entities(settings_runtime):
             assert runtime.live_statistics.forwarded == 1
         else:
             assert runtime.live_statistics.forwarded == 0
+
+
+async def test_restore_defaults_confirmation_permissions_revision_persistence_and_failure(settings_runtime, make_user, make_connection, monkeypatch):
+    runtime = settings_runtime
+    await runtime.async_set_controls({key: not value for key, value in CONTROL_DEFAULTS.items() if key in runtime.available_controls})
+    runtime.live_statistics.record(True)
+    runtime.live_statistics.page_loads["fixture"] = {}
+    runtime.live_statistics.browser_reports["fixture"] = {}
+    client, output = make_connection(make_user(admin=True))
+    reader, errors = make_connection(make_user())
+    before = dict(runtime.entry.options), dict(runtime.controls)
+    fields = {"revision": revision(runtime), "confirmed": True}
+    denied = await request(runtime, reader, errors, "loona/restore_defaults", **fields)
+    assert denied["error"]["code"] == "unauthorized"
+    for confirmation in (False, 1):
+        rejected = await request(runtime, client, output, "loona/restore_defaults", **{**fields, "confirmed": confirmation})
+        assert not rejected["success"]
+    stale = await request(runtime, client, output, "loona/restore_defaults", revision="0" * 64, confirmed=True)
+    assert stale["error"]["code"] == "conflict"
+    with monkeypatch.context() as patch:
+        patch.setattr(runtime._store, "async_save", AsyncMock(side_effect=OSError("Persist failed")))
+        failed = await request(runtime, client, output, "loona/restore_defaults", **fields)
+        assert failed["error"]["code"] == "save_failed"
+    assert before == (dict(runtime.entry.options), dict(runtime.controls))
+    assert runtime.live_statistics.forwarded == 1
+    restored = await request(runtime, client, output, "loona/restore_defaults", **fields)
+    assert restored["success"]
+    assert runtime.entry.options == SETTINGS_DEFAULTS
+    assert runtime.controls == await runtime._store.async_load() == CONTROL_DEFAULTS
+    assert not runtime.selected_dashboards and runtime.settings["target_mode"] == "selected"
+    assert not runtime.live_statistics.forwarded and not runtime.live_statistics.page_loads and not runtime.live_statistics.browser_reports
+    assert runtime.hass.states.get("sensor.other").state == "0"
+    assert runtime.entry.data["dashboards"] == ["wall-panel"], "Empty options must override original selections"
+
+
+async def test_card_removal_requires_explicit_confirmation(settings_runtime, make_user, make_connection):
+    runtime = settings_runtime
+    runtime.hass.config_entries.async_update_entry(runtime.entry, options={**runtime.entry.options, "dashboard_cards": ["settings"]})
+    await runtime.hass.async_block_till_done()
+    client, output = make_connection(make_user(admin=True))
+    fields = {"group": "cards", "revision": revision(runtime), "values": {"dashboard_cards": []}}
+    response = await request(runtime, client, output, "loona/save_settings", **fields)
+    assert response["error"]["code"] == "confirmation_required"
+    assert runtime.settings["dashboard_cards"] == ["settings"]
+    response = await request(runtime, client, output, "loona/save_settings", **fields, confirmed=True)
+    assert response["success"] and runtime.settings["dashboard_cards"] == []
 
 
 async def test_prefilled_choices_and_private_dispatch(settings_runtime, make_user, make_connection):

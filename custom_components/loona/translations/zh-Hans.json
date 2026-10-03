@@ -76,7 +76,7 @@
           "pause_animations_during_loading": "加载期间暂停动画",
           "resource_filtering": "资源筛选",
           "delay_card_resources": "延迟加载卡片文件",
-          "current_dashboard_updates": "当前仪表盘更新"
+          "current_dashboard_updates": "当前标签页更新"
         }
       },
       "rules": {
@@ -103,13 +103,21 @@
         "data": {
           "dashboard_cards": "仪表盘卡片"
         }
+      },
+      "confirm_remove_dashboard": {
+        "title": "删除 Loona 仪表盘",
+        "description": "删除自动生成的 Loona 仪表盘及其卡片？已编辑的仪表盘会保留。取消此流程可保留当前选择。",
+        "data": {
+          "confirm": "确认删除"
+        }
       }
     },
     "error": {
       "no_dashboards": "请至少选择一个仪表盘。",
       "no_accounts": "请至少选择一个有效账户。",
       "invalid_selection": "部分选项已失效或被重复选择。请从当前列表中重新选择。",
-      "not_loaded": "Loona 尚未运行。请重新加载集成，然后重试。"
+      "not_loaded": "Loona 尚未运行。请重新加载集成，然后重试。",
+      "confirmation_required": "请确认删除或取消此流程。"
     },
     "abort": {
       "not_loaded": "Loona 尚未运行。请重新加载集成，再打开此页面。",
@@ -140,7 +148,7 @@
         "name": "延迟加载卡片文件"
       },
       "current_dashboard_updates": {
-        "name": "当前仪表盘更新"
+        "name": "当前标签页更新"
       }
     },
     "button": {

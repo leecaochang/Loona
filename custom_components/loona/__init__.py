@@ -6,13 +6,13 @@ from homeassistant.components import websocket_api
 
 from .compatibility import CompatibilityError
 from .bootstrap import async_install as async_install_bootstrap
-from .const import DOMAIN, STATISTICS_COMMAND, PAGE_LOAD_COMMAND, SETTINGS_COMMAND, SETTINGS_SAVE_COMMAND, SETTINGS_CHOICES_COMMAND, BROWSER_REPORT_COMMAND
+from .const import DOMAIN, STATISTICS_COMMAND, PAGE_LOAD_COMMAND, SETTINGS_COMMAND, SETTINGS_SAVE_COMMAND, SETTINGS_CHOICES_COMMAND, SETTINGS_RESTORE_COMMAND, BROWSER_REPORT_COMMAND
 from .graph_loading import async_register_frontend
 from .panels import async_register_frontend as async_register_panel_frontend
 from .runtime import LoonaConfigEntry, LoonaRuntime
 from .preview import websocket_statistics, websocket_page_load, websocket_browser_report
 from .recorder import async_clear_owned_statistics
-from .settings import websocket_settings, websocket_save_settings, websocket_settings_choices
+from .settings import websocket_settings, websocket_save_settings, websocket_settings_choices, websocket_restore_defaults
 from .statistics_card import StatisticsCard, StatisticsCardError
 
 _PLATFORMS = (Platform.SWITCH, Platform.SENSOR, Platform.BINARY_SENSOR, Platform.BUTTON)
@@ -23,7 +23,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: LoonaConfigEntry) -> boo
     runtime = LoonaRuntime(hass, entry)
     entry.runtime_data = runtime
     table = hass.data[websocket_api.DOMAIN]
-    if any(name in table for name in (STATISTICS_COMMAND, PAGE_LOAD_COMMAND, SETTINGS_COMMAND, SETTINGS_SAVE_COMMAND, SETTINGS_CHOICES_COMMAND, BROWSER_REPORT_COMMAND)):
+    if any(name in table for name in (STATISTICS_COMMAND, PAGE_LOAD_COMMAND, SETTINGS_COMMAND, SETTINGS_SAVE_COMMAND, SETTINGS_CHOICES_COMMAND, SETTINGS_RESTORE_COMMAND, BROWSER_REPORT_COMMAND)):
         raise CompatibilityError("Another handler owns Loona statistics")
     try:
         await runtime.async_start()
@@ -83,7 +83,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: LoonaConfigEntry) -> boo
     websocket_api.async_register_command(hass, websocket_settings)
     websocket_api.async_register_command(hass, websocket_save_settings)
     websocket_api.async_register_command(hass, websocket_settings_choices)
-    owned = {name: table[name] for name in (STATISTICS_COMMAND, PAGE_LOAD_COMMAND, SETTINGS_COMMAND, SETTINGS_SAVE_COMMAND, SETTINGS_CHOICES_COMMAND, BROWSER_REPORT_COMMAND)}
+    websocket_api.async_register_command(hass, websocket_restore_defaults)
+    owned = {name: table[name] for name in (STATISTICS_COMMAND, PAGE_LOAD_COMMAND, SETTINGS_COMMAND, SETTINGS_SAVE_COMMAND, SETTINGS_CHOICES_COMMAND, SETTINGS_RESTORE_COMMAND, BROWSER_REPORT_COMMAND)}
     def remove_command() -> None:
         for name, command in owned.items():
             if table.get(name) is command:

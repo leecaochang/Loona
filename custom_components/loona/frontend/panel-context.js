@@ -1,5 +1,5 @@
 /* Report dashboard context and recover when Core reconnects before Loona. */
-import "./resource-loading.js?v=0.9.5";
+import "./resource-loading.js?v=0.9.6";
 
 if (!window.__loonaPanelContext) {
   window.__loonaPanelContext = true;
@@ -22,8 +22,15 @@ if (!window.__loonaPanelContext) {
   }
 
   function panelReport() {
-    return {dashboard:dashboard(), live_dashboard:true,
+    let view = null;
+    try {
+      const parts = location.pathname.split("/");
+      if (parts.length === 3 && parts[2]) view = decodeURI(parts[2]);
+      if (view?.length > 255) view = null;
+    } catch { /* Unresolved routes retain dashboard delivery. */ }
+    return {dashboard:dashboard(), view, live_dashboard:true,
       expanded:Boolean(dialogs.size || window.history?.state?.dialog
+        || view === "hass-unused-entities"
         || /[?&]edit(?:=|&|$)/.test(location.search || ""))};
   }
 

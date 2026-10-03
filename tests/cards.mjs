@@ -17,7 +17,7 @@ globalThis.window=window;
 globalThis.IntersectionObserver=class { observe() {} disconnect() {} };
 const app=document.createElement("home-assistant"); document.body.append(app);
 let current={
-  version:"0.9.5",revision:"a".repeat(64),choice_page:50,
+  version:"0.9.6",revision:"a".repeat(64),choice_page:50,
   values:{controls:{enabled:true,entity_filtering:true},dashboards:{dashboards:["wall-panel"]},targets:{target_mode:"all",user_ids:[]},
     rules:{extra_entities:[],include_domains:[],include_globs:[],exclude_globs:[]},resources:{always_forward_resources:[]},cards:{dashboard_cards:[]}},
   choices:{dashboards:[{value:"wall-panel",label:"Wall"}],user_ids:[],extra_entities:[{value:"sensor.wall",label:"Wall"}],include_domains:[],include_globs:[],exclude_globs:[],always_forward_resources:[],dashboard_cards:[{value:"statistics",label:"statistics"}]},
@@ -26,7 +26,8 @@ let current={
 const copy=value=>JSON.parse(JSON.stringify(value));
 let conflict=false;
 const requests=[];
-const statistics={version:"0.9.5",controls:{enabled:true,entity_filtering:true},complete:true,metrics:{current_scope:1,filtered_subscriptions:1,managed_subscriptions:1,forwarded_rate:1,avoided_rate:2,update_reduction:3,forwarded_updates:4,avoided_updates:5,reduction_estimate:6},reset_at:"2026-10-02T01:00:00Z",page_loads:[],notices:[],interval_seconds:30};
+const services=[];
+const statistics={version:"0.9.6",controls:{enabled:true,entity_filtering:true},complete:true,metrics:{current_scope:1,filtered_subscriptions:1,managed_subscriptions:1,forwarded_rate:1,avoided_rate:2,update_reduction:3,forwarded_updates:4,avoided_updates:5,reduction_estimate:6},reset_at:"2026-10-02T01:00:00Z",page_loads:[],notices:[],interval_seconds:30};
 const hass={user:{id:"admin",is_admin:true},language:"en",connection:{connected:true},locale:{language:"en",number_format:"decimal_comma",time_format:"24",time_zone:"server"},config:{time_zone:"UTC"},
   async callWS(request) {
     requests.push(request);
@@ -37,7 +38,7 @@ const hass={user:{id:"admin",is_admin:true},language:"en",connection:{connected:
       current.values[request.group]=copy(request.values); return copy(current);
     }
     return copy(current);
-  },async callService() {},
+  },async callService(...args) { services.push(args); },
 };
 app.hass=hass;
 for (const file of ["settings-card.js","statistics-card.js"]) {
@@ -102,6 +103,57 @@ assert.ok(stats.shadowRoot.getElementById("notices").textContent.includes("Loadi
 window.__loonaGraphCapability.status = "available";
 window.dispatchEvent(new Event("loona-capabilities"));
 assert.ok(!settings.shadowRoot.getElementById("notices").textContent.includes("Loading optimizations are unavailable in this browser"));
+// Confirmation gates do not mutate until accepted and retain drafts on cancel.
+current.action_entities = {reset_live_statistics:"button.reset"};
+settings._replace(copy(current));
+statistics.reset_entity = "button.reset";
+await stats._fetch();
+for (const card of [settings, stats]) {
+  const operation = card === settings ? card._press("reset_live_statistics") : card._reset();
+  assert.equal(services.length, 0);
+  assert.ok(card.shadowRoot.querySelector("dialog").open);
+  card.shadowRoot.querySelector("[data-confirm-cancel]").click();
+  await operation;
+  assert.equal(services.length, 0);
+  assert.equal(card.shadowRoot.querySelector("dialog"), null);
+}
+const reset = stats._reset();
+stats.shadowRoot.querySelector("[data-confirm-accept]").click();
+await reset;
+assert.equal(services.length, 1);
+settings._data.values.cards.dashboard_cards = ["statistics"];
+settings._edit("cards", "dashboard_cards", []);
+const beforeRemoval = requests.length;
+let removal = settings._save("cards");
+settings.shadowRoot.querySelector("[data-confirm-cancel]").click();
+await removal;
+assert.equal(requests.length, beforeRemoval);
+assert.deepEqual(settings._drafts.cards.dashboard_cards, []);
+removal = settings._save("cards");
+settings.shadowRoot.querySelector("[data-confirm-accept]").click();
+await removal;
+assert.equal(requests.findLast(row=>row.type==="loona/save_settings").confirmed, true);
+settings._edit("rules", "extra_entities", ["sensor.wall"]);
+const beforeRestore = requests.length;
+let restore = settings._restore();
+settings.shadowRoot.querySelector("[data-confirm-cancel]").click();
+await restore;
+assert.equal(requests.length, beforeRestore);
+assert.ok(settings._drafts.rules);
+restore = settings._restore();
+settings.shadowRoot.querySelector("[data-confirm-accept]").click();
+await restore;
+assert.equal(requests.findLast(row=>row.type==="loona/restore_defaults").confirmed, true);
+assert.equal(Object.keys(settings._drafts).length, 0);
+// Account changes cancel an outstanding approval before any request is sent.
+const beforeAccount = requests.length;
+restore = settings._restore();
+settings.hass={...hass,user:{id:"reader",is_admin:false}};
+await restore;
+assert.equal(requests.length, beforeAccount);
+assert.equal(settings.shadowRoot.querySelector("dialog"), null);
+settings.hass=hass;
+await new Promise(setImmediate);
 stats.hass={...hass,user:{id:"reader",is_admin:false},language:"zh-Hans"};
 settings.hass={...hass,user:{id:"reader",is_admin:false}};
 assert.equal(stats.shadowRoot.getElementById("state").textContent,"请使用管理员账户登录以查看 Loona 统计。");

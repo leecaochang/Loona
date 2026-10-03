@@ -69,6 +69,7 @@ class _Panel:
     msg_id: int
     live_dashboard: bool = False
     expanded: bool = False
+    view: str | None = None
     loading: dict[str, Any] | None = None
 
 
@@ -103,6 +104,11 @@ class PanelContext:
         panel = self._connections.get(connection)
         return panel.dashboard if panel and panel.live_dashboard and not panel.expanded and self.active(connection) else None
 
+    def delivery_view(self, connection: websocket_api.ActiveConnection) -> str | None:
+        """Absent view context keeps dashboard delivery for older reporters."""
+        panel = self._connections.get(connection)
+        return panel.view if panel and self.delivery_dashboard(connection) is not None else None
+
     def install(self) -> None:
         """Register public context commands without changing any native schema."""
         table = self.hass.data[websocket_api.DOMAIN]
@@ -115,6 +121,7 @@ class PanelContext:
             vol.Required("dashboard"): vol.Any(None, str),
             vol.Optional("live_dashboard", default=False): bool,
             vol.Optional("expanded", default=False): bool,
+            vol.Optional("view", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         })
         def subscribe(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
             before = self.active(connection)
@@ -134,7 +141,7 @@ class PanelContext:
             if previous is not None:
                 connection.send_error(msg["id"], "already_subscribed", "Panel context is already subscribed")
                 return
-            self._connections[connection] = _Panel(msg["dashboard"], unsubscribe, msg["id"], msg["live_dashboard"], msg["expanded"])
+            self._connections[connection] = _Panel(msg["dashboard"], unsubscribe, msg["id"], msg["live_dashboard"], msg["expanded"], msg["view"])
             connection.subscriptions[msg["id"]] = unsubscribe
             connection.send_result(msg["id"])
             if before != self.active(connection):
@@ -147,17 +154,19 @@ class PanelContext:
             vol.Required("dashboard"): vol.Any(None, str),
             vol.Optional("live_dashboard", default=False): bool,
             vol.Optional("expanded", default=False): bool,
+            vol.Optional("view", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         })
         def update(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
             panel = self._connections.get(connection)
             if panel is None:
                 connection.send_error(msg["id"], "not_subscribed", "Subscribe to panel context first")
                 return
-            before = (panel.dashboard, panel.live_dashboard, panel.expanded)
+            before = (panel.dashboard, panel.live_dashboard, panel.expanded, panel.view)
             panel.dashboard = msg["dashboard"]
             panel.live_dashboard = msg["live_dashboard"]
             panel.expanded = msg["expanded"]
-            if before != (panel.dashboard, panel.live_dashboard, panel.expanded):
+            panel.view = msg["view"]
+            if before != (panel.dashboard, panel.live_dashboard, panel.expanded, panel.view):
                 self.changed(connection)
             self.publish()
             connection.send_result(msg["id"])

@@ -227,3 +227,17 @@ async def test_invalid_card_selections(loona_hass, cards):
     flow.hass, flow.handler, flow.context = loona_hass, "loona", {"source": "user"}
     result = await flow.async_step_cards({"dashboard_cards": cards})
     assert result["errors"]["base"] == "invalid_selection"
+
+
+async def test_native_options_dashboard_removal_confirmation(loona_hass, make_entry):
+    entry = make_entry({"dashboards": ["wall-panel"], "target_mode": "all", "dashboard_cards": ["settings"]})
+    flow = LoonaOptionsFlow(entry.entry_id)
+    flow.hass, flow.handler = loona_hass, entry.entry_id
+    result = await flow.async_step_cards({"dashboard_cards": []})
+    assert result["step_id"] == "confirm_remove_dashboard"
+    assert entry.data["dashboard_cards"] == ["settings"]
+    result = await flow.async_step_confirm_remove_dashboard({"confirm": False})
+    assert result["errors"] == {"base": "confirmation_required"}
+    assert entry.data["dashboard_cards"] == ["settings"]
+    result = await flow.async_step_confirm_remove_dashboard({"confirm": True})
+    assert result["type"] == "create_entry" and result["data"]["dashboard_cards"] == []

@@ -5,7 +5,7 @@ import vm from "node:vm";
 import { Connection, subscribeEntities } from "home-assistant-js-websocket";
 
 const reporter = readFileSync(new URL("../custom_components/loona/frontend/panel-context.js", import.meta.url), "utf8")
-  .replace('import "./resource-loading.js?v=0.9.5";', readFileSync(new URL("../custom_components/loona/frontend/resource-loading.js", import.meta.url), "utf8"))
+  .replace('import "./resource-loading.js?v=0.9.6";', readFileSync(new URL("../custom_components/loona/frontend/resource-loading.js", import.meta.url), "utf8"))
   .replaceAll("import.meta.url", JSON.stringify("http://test/loona/panel-context.js?poll=100"));
 const hook = readFileSync(new URL("../custom_components/loona/frontend/pre-bootstrap.js", import.meta.url), "utf8");
 const routeKey = path => { let value=2166136261; for(const byte of new TextEncoder().encode(path)) value=Math.imul(value^byte,16777619)>>>0; return value.toString(16).padStart(8,"0"); };

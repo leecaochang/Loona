@@ -18,6 +18,7 @@ from .const import (
     VERSION,
     SETTINGS_COMMAND, SETTINGS_SAVE_COMMAND, SETTINGS_GROUPS, SETTINGS_CHOICE_PAGE, SETTINGS_EMPTY_DEFAULTS,
     SETTINGS_CHOICES_COMMAND, CONF_DASHBOARD_CARDS, DASHBOARD_CARDS,
+    SETTINGS_RESTORE_COMMAND,
 )
 from .dashboard import dashboard_titles
 from .runtime import LoonaRuntime
@@ -155,6 +156,7 @@ async def websocket_settings(hass: HomeAssistant, connection: websocket_api.Acti
     vol.Required("group"): vol.In(SETTINGS_GROUPS),
     vol.Required("revision"): vol.All(str, vol.Length(min=64, max=64)),
     vol.Required("values"): dict,
+    vol.Optional("confirmed", default=False): bool,
 })
 @websocket_api.async_response
 async def websocket_save_settings(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
@@ -167,6 +169,10 @@ async def websocket_save_settings(hass: HomeAssistant, connection: websocket_api
         group, values = msg["group"], msg["values"]
         if revision(runtime) != msg["revision"]:
             connection.send_error(msg["id"], "conflict", "Settings changed; refresh before saving")
+            return
+        if (group == "cards" and runtime.settings.get(CONF_DASHBOARD_CARDS)
+            and values.get(CONF_DASHBOARD_CARDS) == [] and not msg["confirmed"]):
+            connection.send_error(msg["id"], "confirmation_required", "Confirm removal of the Loona dashboard")
             return
         if group == "controls":
             if set(values) != runtime.available_controls or any(not isinstance(v, bool) for v in values.values()):
@@ -217,3 +223,28 @@ async def websocket_save_settings(hass: HomeAssistant, connection: websocket_api
     except Exception:
         _LOGGER.exception("Loona settings save failed")
         connection.send_error(msg["id"], "save_failed", "Settings could not be saved; refresh and check current values")
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({
+    vol.Required("type"): SETTINGS_RESTORE_COMMAND,
+    vol.Required("revision"): vol.All(str, vol.Length(min=64, max=64)),
+    vol.Required("confirmed"): vol.All(bool, vol.In([True])),
+})
+@websocket_api.async_response
+async def websocket_restore_defaults(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Require explicit confirmation and a current administrator revision."""
+    runtime = hass.data.get(DOMAIN)
+    if runtime is None:
+        connection.send_error(msg["id"], "not_loaded", "Loona is not loaded")
+        return
+    try:
+        if revision(runtime) != msg["revision"]:
+            raise ValueError("conflict")
+        await runtime.async_restore_defaults(expected=dict(runtime.controls), expected_settings=dict(runtime.settings))
+        connection.send_result(msg["id"], await settings_report(runtime))
+    except ValueError:
+        connection.send_error(msg["id"], "conflict", "Settings changed; refresh before restoring defaults")
+    except Exception:
+        _LOGGER.exception("Loona defaults restore failed")
+        connection.send_error(msg["id"], "save_failed", "Defaults could not be restored; refresh and check current values")

@@ -74,7 +74,8 @@ from .dashboard import (
     load_dashboard,
     protected_entities,
 )
-from .dependencies import DiscoveryResult, discover
+from .dependencies import DiscoveryResult, discover, discover_views
+from .const import SETTINGS_DEFAULTS
 from .resources import (ResourceAdapter, ResourceDependencies, async_resource_rows,
                         resource_dependencies, resource_report)
 from .registry import RegistryAdapter, RegistryScope, registry_scope
@@ -95,6 +96,7 @@ class LoonaRuntime:
         self.controls = dict(CONTROL_DEFAULTS)
         self.entity_ids: frozenset[str] = frozenset()
         self.dashboard_live_entities: dict[str, frozenset[str]] = {}
+        self.view_live_entities: dict[str, dict[str, frozenset[str]]] = {}
         self.reasons: dict[str, tuple[str, ...]] = {}
         self.excluded_reasons: dict[str, tuple[str, ...]] = {}
         self.dashboards: dict[str, DiscoveryResult] = {}
@@ -431,6 +433,7 @@ class LoonaRuntime:
             results: dict[str, DiscoveryResult] = {}
             configs: list[dict[str, Any]] = []
             dashboard_resources: dict[str, ResourceDependencies] = {}
+            view_entities: dict[str, dict[str, frozenset[str]]] = {}
             problems: list[str] = []
             warnings: list[str] = []
             reasons: dict[str, set[str]] = {}
@@ -441,6 +444,8 @@ class LoonaRuntime:
                     configs.append(config)
                     dashboard_resources[key] = resource_dependencies([config])
                     result = discover(config, context)
+                    if result.complete:
+                        view_entities[key] = discover_views(config, context)
                     self._failed_dashboards.discard(key)
                 except Exception as err:
                     # Failed boards are retained as incomplete, never silently dropped.
@@ -540,6 +545,9 @@ class LoonaRuntime:
                       if locations & {"extra entity", "include rule", "Home Assistant app context"}}
             self.dashboard_live_entities = {key: frozenset((result.entity_ids | pinned) & self.entity_ids)
                                            for key, result in results.items() if result.complete}
+            self.view_live_entities = {key: {route: frozenset((entities | pinned) & self.entity_ids)
+                                             for route, entities in views.items()}
+                                       for key, views in view_entities.items()}
             self.registry_scope = registry_scope(self.hass, self.entity_ids, results.values())
             self.resource_dependencies = resource_dependencies(resource_configs)
             self.dashboard_resources = dashboard_resources
@@ -601,11 +609,13 @@ class LoonaRuntime:
         )
 
     def _delivery_scope(self, connection: websocket_api.ActiveConnection, retained: frozenset[str]) -> frozenset[str]:
-        """Keep all views and explicit rules live; dialogs refresh the union."""
+        """Keep the active view and shared rules live; dialogs refresh the union."""
         if not self.controls[CONTROL_DASHBOARD_LIVE]:
             return retained
         dashboard = self.panel_context.delivery_dashboard(connection)
-        return self.dashboard_live_entities.get(dashboard or "", retained)
+        fallback = self.dashboard_live_entities.get(dashboard or "", retained)
+        view = self.panel_context.delivery_view(connection)
+        return self.view_live_entities.get(dashboard or "", {}).get(view or "", fallback)
 
     def bootstrap_policy(self) -> dict[str, Any]:
         """Delay startup only where an available filter can reduce initial data."""
@@ -700,6 +710,19 @@ class LoonaRuntime:
         if key not in self.available_controls or not isinstance(enabled, bool):
             raise ValueError("Invalid Loona control")
         await self.async_set_controls({key: enabled})
+
+    async def async_restore_defaults(self, *, expected: dict[str, bool], expected_settings: dict[str, Any]) -> None:
+        """Restore unconfigured selections and persisted controls without reinstalling."""
+        async with self._control_lock:
+            if expected != self.controls or expected_settings != self.settings:
+                raise ValueError("conflict")
+            await self._store.async_save(dict(CONTROL_DEFAULTS))
+            self.controls = dict(CONTROL_DEFAULTS)
+            options = {key: list(value) if isinstance(value, list) else value for key, value in SETTINGS_DEFAULTS.items()}
+            self.hass.config_entries.async_update_entry(self.entry, options=options)
+            await self.async_scan(force=True)
+            await self.async_update_statistics_card()
+            self.async_reset_live_statistics()
 
     async def async_set_controls(self, changes: dict[str, bool], *, expected: dict[str, bool] | None = None, expected_settings: dict[str, Any] | None = None) -> None:
         """Persist a validated card section once, preserving native switches."""

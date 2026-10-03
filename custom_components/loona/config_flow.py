@@ -245,6 +245,7 @@ class LoonaOptionsFlow(OptionsFlow):
     def __init__(self, entry_id: str | None = None) -> None:
         super().__init__()
         self._entry_id = entry_id
+        self._pending_cards: dict[str, Any] | None = None
 
     @property
     def config_entry(self) -> ConfigEntry:
@@ -478,5 +479,21 @@ class LoonaOptionsFlow(OptionsFlow):
             except vol.Invalid:
                 errors["base"] = "invalid_selection"
             else:
+                if self.settings.get(CONF_DASHBOARD_CARDS) and not values[CONF_DASHBOARD_CARDS]:
+                    self._pending_cards = values
+                    return await self.async_step_confirm_remove_dashboard()
                 return self.finish(values)
         return self.async_show_form(step_id="cards", data_schema=schema, errors=errors)
+
+    async def async_step_confirm_remove_dashboard(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Require explicit native-form confirmation before removing the owned board."""
+        if self._pending_cards is None:
+            return await self.async_step_cards()
+        if user_input and user_input.get("confirm") is True:
+            values, self._pending_cards = self._pending_cards, None
+            return self.finish(values)
+        return self.async_show_form(
+            step_id="confirm_remove_dashboard",
+            data_schema=vol.Schema({vol.Required("confirm", default=False): selector.BooleanSelector()}),
+            errors={"base": "confirmation_required"} if user_input is not None else {},
+        )

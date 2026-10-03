@@ -28,7 +28,7 @@ class ReadyCard extends HTMLElement {
   _setElementVisibility() {}
 }
 if (process.argv[2] === "missing-container") {
-  const policy = { version: "0.9.5", enabled: true, dashboards: ["wall-panel"], quiet_ms: 10,
+  const policy = { version: "0.9.6", enabled: true, dashboards: ["wall-panel"], quiet_ms: 10,
     poll_ms: 10, probe_ms: 20, trace_limit: 10, profiles: {}, motion: { enabled: false } };
   window.loonaProbeFrontend({ connection: {}, config: { loona_graph_loading: policy } });
   await new Promise(resolve => setTimeout(resolve, 30));

@@ -1,5 +1,5 @@
 /* Prefilled administrator settings using native Loona validation and storage. */
-import { language, text, translate, renderNotices, setText } from "./i18n.js?v=0.9.5";
+import { language, text, translate, renderNotices, setText, confirmAction, cancelConfirmation } from "./i18n.js?v=0.9.6";
 
 const groups = {
   controls: "Filters and performance", dashboards: "Dashboards", targets: "Accounts",
@@ -7,7 +7,7 @@ const groups = {
 };
 const labels = {
   enabled: "Enabled", entity_filtering: "Entity filtering", registry_filtering: "Registry filtering",
-  current_dashboard_updates: "Current dashboard updates",
+  current_dashboard_updates: "Current tab updates",
   resource_filtering: "Resource filtering", visible_first_graphs: "Delay graph loading",
   delay_card_resources: "Delay card files",
   pause_animations_during_loading: "Pause animations during loading", dashboards: "Dashboards",
@@ -19,7 +19,7 @@ const labels = {
 const help = {
   enabled: "Turn off to restore full entity and registry feeds. Reload to restore skipped card files.",
   entity_filtering: "Automatically find the entities used by your selected dashboards.",
-  current_dashboard_updates: "Keep this dashboard and Entity rules live. Other dashboard values stay cached until navigation, dialogs or editing. Requires Entity filtering.",
+  current_dashboard_updates: "Keep this tab and Entity rules live. Hidden tabs stay cached until opened. Dialogs and editing refresh all selected dashboards. Requires Entity filtering.",
   registry_filtering: "Keep registry rows related to the included entities and dashboard targets.",
   resource_filtering: "Skip known unused card bundles. Keep unknown and shared modules. Reload after changes.",
   delay_card_resources: "Load this dashboard's card files first, then the remaining modules. Navigation and editing load pending files immediately. Reload after enabling.",
@@ -120,7 +120,9 @@ function install() {
           <div id="maintenance" hidden><div class="actions">
             <button data-action="rescan" data-i18n="Rescan dashboards">Rescan dashboards</button>
             <button data-action="reset_live_statistics" data-i18n="Reset live statistics">Reset live statistics</button>
+            <button data-action="restore_defaults" data-i18n="Restore defaults">Restore defaults</button>
           </div><p data-i18n="Rescan checks dashboard changes now. Reset clears live counters and page-load records; entity counts and recorded history stay unchanged.">Rescan checks dashboard changes now. Reset clears live counters and page-load records; entity counts and recorded history stay unchanged.</p>
+          <p data-i18n="Restore defaults clears all Loona settings and live statistics. Confirmation is required.">Restore defaults clears all Loona settings and live statistics. Confirmation is required.</p>
           <p id="action-status" role="status"></p></div></ha-card>`;
       this.shadowRoot.getElementById("refresh").addEventListener("click", () => this._fetch());
       this.shadowRoot.querySelectorAll("[data-action]").forEach(button => button.addEventListener("click", () => this._press(button.dataset.action)));
@@ -146,6 +148,7 @@ function install() {
       const changedLanguage = language(this._hass) !== language(value);
       this._hass = value;
       if (changedUser || !value?.user?.is_admin) {
+        cancelConfirmation(this);
         this._sequence++; this._data = undefined; this._drafts = {}; this._conflicts.clear();
         this._searches = {}; this._limits = {}; this._loading = false; this._saving = undefined; this._error = undefined; this._saved = undefined; this._rendered = false; this._acting = undefined; this._actionStatus = undefined;
         this.shadowRoot.getElementById("sections").replaceChildren();
@@ -163,6 +166,7 @@ function install() {
       if (this._hass) this._fetch();
     }
     disconnectedCallback() {
+      cancelConfirmation(this);
       window.removeEventListener("loona-capabilities", this._capabilityListener);
       this._sequence++; this._loading = false; this._acting = undefined;
     }
@@ -192,8 +196,13 @@ function install() {
       this._sync();
     }
     async _press(key) {
+      if (key === "restore_defaults") { await this._restore(); return; }
       const entity = this._data?.action_entities?.[key];
       if (!entity || !this._hass?.user?.is_admin || this._acting || this._saving || this._loading) return;
+      const account = this._hass.user.id;
+      if (key === "reset_live_statistics" && !await confirmAction(this, "Reset live statistics?",
+          "Clear live counters, page-load records and browser measurements? Filtering settings and recorded history are preserved.", "Reset live statistics")) return;
+      if (this._hass?.user?.id !== account || !this._hass.user.is_admin || this._acting || this._saving || !this.isConnected) return;
       const sequence = ++this._sequence; this._acting = key; this._actionStatus = "Working..."; this._error = undefined; this._sync();
       try {
         await this._hass.callService("button", "press", { entity_id: entity });
@@ -211,9 +220,18 @@ function install() {
     }
     async _save(group) {
       if (!this._drafts[group] || this._saving || this._acting || this._conflicts.has(group) || !this._hass?.user?.is_admin) return;
+      const revision = this._data.revision;
+      const values = JSON.parse(JSON.stringify(this._drafts[group]));
+      let confirmed = false;
+      if (group === "cards" && this._data.values.cards.dashboard_cards.length && !values.dashboard_cards.length) {
+        confirmed = await confirmAction(this, "Remove the Loona dashboard?",
+          "Remove the generated Loona dashboard and its cards? Manually edited dashboards are preserved. You can create it again by selecting Loona dashboard cards.", "Remove dashboard");
+        if (!confirmed || !this._hass?.user?.is_admin || !this.isConnected || revision !== this._data?.revision
+            || JSON.stringify(values) !== JSON.stringify(this._drafts[group])) return;
+      }
       const sequence = ++this._sequence; this._saving = group; this._error = undefined; this._sync();
       try {
-        const data = await this._hass.callWS({type:"loona/save_settings", group, revision:this._data.revision, values:JSON.parse(JSON.stringify(this._drafts[group]))});
+        const data = await this._hass.callWS({type:"loona/save_settings", group, revision, values, confirmed});
         if (sequence !== this._sequence || !this._hass?.user?.is_admin) return;
         this._replace(data, group); this._saved = group;
       } catch (error) {
@@ -223,6 +241,26 @@ function install() {
           : "Could not save. Your edits are still here. Cancel them and refresh to check the saved settings.";
         if (error.code === "conflict") this._conflicts.add(group);
       } finally { if (sequence === this._sequence) { this._saving = undefined; this._sync(); } }
+    }
+    async _restore() {
+      if (!this._data || !this._hass?.user?.is_admin || this._acting || this._saving || this._loading) return;
+      const revision = this._data.revision;
+      const account = this._hass.user.id;
+      if (!await confirmAction(this, "Restore defaults?",
+          "Reset all Loona settings and live statistics, clear dashboard and account selections, and remove the generated Loona dashboard. Filtering stays inactive until you select dashboards and accounts again. Edited dashboards and recorded history are preserved.", "Restore defaults")) return;
+      if (this._hass?.user?.id !== account || !this._hass.user.is_admin || !this.isConnected || revision !== this._data?.revision) return;
+      const sequence = ++this._sequence; this._acting = "restore_defaults"; this._error = undefined; this._sync();
+      try {
+        const data = await this._hass.callWS({type:"loona/restore_defaults", revision, confirmed:true});
+        if (sequence !== this._sequence || !this._hass?.user?.is_admin) return;
+        this._drafts = {}; this._conflicts.clear(); this._saved = undefined; this._replace(data);
+        this._actionStatus = "Defaults restored. Select dashboards and accounts, then reload the browser.";
+        window.dispatchEvent(new Event("loona-statistics-reset"));
+      } catch (error) {
+        if (sequence === this._sequence) this._error = error.code === "conflict"
+          ? "Settings changed elsewhere. Cancel your edits and refresh before saving."
+          : "Could not restore defaults. Refresh and check the current settings.";
+      } finally { if (sequence === this._sequence) { this._acting = undefined; this._sync(); } }
     }
     _sync() {
       const admin = this._hass?.user?.is_admin;
@@ -240,7 +278,9 @@ function install() {
       for (const element of this.shadowRoot.querySelectorAll("input,select")) element.disabled = Boolean(this._saving) || Boolean(this._acting);
       this.shadowRoot.getElementById("maintenance").hidden = !admin || !this._data;
       setText(this.shadowRoot.getElementById("action-status"), this._actionStatus ? this._t(this._actionStatus) : "");
-      for (const element of this.shadowRoot.querySelectorAll("[data-action]")) element.disabled = !admin || !this._data?.action_entities?.[element.dataset.action] || this._loading || Boolean(this._saving) || Boolean(this._acting);
+      for (const element of this.shadowRoot.querySelectorAll("[data-action]")) element.disabled = !admin || !this._data
+        || element.dataset.action !== "restore_defaults" && !this._data.action_entities?.[element.dataset.action]
+        || this._loading || Boolean(this._saving) || Boolean(this._acting);
     }
     _render() {
       this.shadowRoot.getElementById("version").textContent = this._t("Version: {version}", {version:this._data.version});
