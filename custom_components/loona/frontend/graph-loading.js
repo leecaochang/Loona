@@ -1,12 +1,14 @@
-import { StartupMotion } from "./startup-motion.js?v=0.9.8";
-import { text } from "./i18n.js?v=0.9.8";
+import { StartupMotion } from "./startup-motion.js?v=0.9.9";
+import { OffscreenMotion } from "./offscreen-motion.js?v=0.9.9";
+import { text } from "./i18n.js?v=0.9.9";
 
 // Probe the native card container before enabling optional graph scheduling.
 // Dashboard configuration and loaded card elements remain native.
 if (!window[Symbol.for("loona.graph-loading")]) {
   window[Symbol.for("loona.graph-loading")] = true;
-  const moduleVersion = "0.9.8";
+  const moduleVersion = "0.9.9";
   const motion = new StartupMotion(moduleVersion);
+  const offscreen = new OffscreenMotion(moduleVersion,motion);
   const capability = window.__loonaGraphCapability = { status: "pending", enabled: false };
   let probeTimer;
   function probeStatus(status) {
@@ -15,7 +17,7 @@ if (!window[Symbol.for("loona.graph-loading")]) {
     window.dispatchEvent(new window.Event("loona-capabilities"));
   }
   function probePolicy(policy) {
-    const enabled = Boolean(policy?.enabled || policy?.motion?.enabled);
+    const enabled = Boolean(policy?.enabled || policy?.motion?.enabled || policy?.offscreen);
     const changed = capability.enabled !== enabled;
     capability.enabled = enabled;
     if (changed) window.dispatchEvent(new window.Event("loona-capabilities"));
@@ -76,6 +78,7 @@ if (!window[Symbol.for("loona.graph-loading")]) {
       policies.set(connection, policy);
       lastPolicy = policy;
       motion.update(policy, hass);
+      offscreen.update(policy,hass);
       probePolicy(policy);
     }
     if (!subscriptions.has(connection) && typeof connection.subscribeMessage === "function") {
@@ -84,6 +87,7 @@ if (!window[Symbol.for("loona.graph-loading")]) {
       const update = (value) => {
         policies.set(connection, valid(value) ? value : { enabled: false });
         motion.update(valid(value) ? value : undefined, hass);
+        offscreen.update(valid(value) ? value : undefined,hass);
         probePolicy(valid(value) ? value : undefined);
         if (valid(value)) lastPolicy = value;
         for (const card of connectedCards) {
@@ -526,6 +530,13 @@ if (!window[Symbol.for("loona.graph-loading")]) {
 
     customElements.define("loona-graph-placeholder", GraphPlaceholder);
     nativeLoad = prototype._loadElement;
+    const nativeVisibility=prototype._setElementVisibility;
+    prototype._setElementVisibility=function (...args) {
+      const result=nativeVisibility.apply(this,args);
+      // Check lifecycle flags without rescanning animations on entity changes.
+      offscreen.track(this,this.hass,policyFor(this.hass));
+      return result;
+    };
     prototype._loadElement = function (config) {
       // Existing graphs and native rebuilds keep Home Assistant's ordinary path.
       const pending = records.get(this);
@@ -558,6 +569,7 @@ if (!window[Symbol.for("loona.graph-loading")]) {
         const hass = construction.hass;
         queueMicrotask(() => {
           motion.track(this, hass, policyFor(hass));
+          offscreen.track(this,hass,policyFor(hass));
         });
         construction = previous;
       }

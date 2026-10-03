@@ -9,6 +9,7 @@ import voluptuous as vol
 
 from homeassistant.components import frontend, websocket_api
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.event import async_call_later
 
 from .compatibility import CompatibilityError, probe_error, HandlerEntry
 from .const import PANEL_ASSET, PANEL_COMMAND, PANEL_SUBSCRIBE, PANEL_POLL_MS, VERSION, BROWSER_MEASURE_MS
@@ -71,6 +72,10 @@ class _Panel:
     expanded: bool = False
     view: str | None = None
     loading: dict[str, Any] | None = None
+    idle: bool = False
+    idle_settings: dict[str, Any] | None = None
+    timer: Callable[[], None] | None = None
+    refresh_seconds: int = 0
 
 
 class PanelContext:
@@ -83,16 +88,48 @@ class PanelContext:
         self._connections: dict[websocket_api.ActiveConnection, _Panel] = {}
         self._owned: dict[str, HandlerEntry] = {}
         self.resource_plan: Callable[[websocket_api.ActiveConnection, str | None], dict[str, Any]] | None = None
+        self.idle_policy: Callable[[websocket_api.ActiveConnection], dict[str, Any]] | None = None
+        self.idle_refresh: Callable[[websocket_api.ActiveConnection], None] | None = None
 
     @callback
     def publish(self) -> None:
         """Publish changed loading plans through the existing context subscription."""
-        if self.resource_plan is not None:
-            for connection, panel in self._connections.items():
+        for connection, panel in self._connections.items():
+            event = {}
+            if self.resource_plan is not None:
                 plan = self.resource_plan(connection, panel.dashboard)
                 if plan != panel.loading:
                     panel.loading = plan
-                    connection.send_event(panel.msg_id, {"resources": plan})
+                    event["resources"] = plan
+            if self.idle_policy is not None:
+                policy = self.idle_policy(connection)
+                if policy != panel.idle_settings:
+                    panel.idle_settings = policy
+                    event["idle"] = policy
+                seconds = policy["refresh_seconds"] if policy["enabled"] and panel.idle else 0
+                if seconds != panel.refresh_seconds:
+                    if panel.timer:
+                        panel.timer()
+                        panel.timer = None
+                    panel.refresh_seconds = seconds
+                    if seconds:
+                        self._schedule_idle(connection, panel)
+            if event:
+                connection.send_event(panel.msg_id, event)
+
+    def _schedule_idle(self, connection: websocket_api.ActiveConnection, panel: _Panel) -> None:
+        """Allocate a timer only while this socket is periodically idle."""
+        @callback
+        def refresh(_now: Any) -> None:
+            panel.timer = None
+            if self._connections.get(connection) is not panel or not panel.refresh_seconds:
+                return
+            if self.idle_refresh is not None:
+                self.idle_refresh(connection)
+            self.publish()
+            if self._connections.get(connection) is panel and panel.refresh_seconds and panel.timer is None:
+                self._schedule_idle(connection, panel)
+        panel.timer = async_call_later(self.hass, panel.refresh_seconds, refresh)
 
     def active(self, connection: websocket_api.ActiveConnection) -> bool:
         """Panel reports narrow performance filtering without granting access."""
@@ -109,6 +146,16 @@ class PanelContext:
         panel = self._connections.get(connection)
         return panel.view if panel and self.delivery_dashboard(connection) is not None else None
 
+    def expanded(self, connection: websocket_api.ActiveConnection) -> bool:
+        """Native dialogs and editors release pending card files immediately."""
+        panel = self._connections.get(connection)
+        return bool(panel and panel.expanded)
+
+    def idle(self, connection: websocket_api.ActiveConnection) -> bool:
+        """Idle reports can only narrow a selected ordinary dashboard feed."""
+        panel = self._connections.get(connection)
+        return bool(panel and panel.idle and self.delivery_dashboard(connection) is not None)
+
     def install(self) -> None:
         """Register public context commands without changing any native schema."""
         table = self.hass.data[websocket_api.DOMAIN]
@@ -122,6 +169,7 @@ class PanelContext:
             vol.Optional("live_dashboard", default=False): bool,
             vol.Optional("expanded", default=False): bool,
             vol.Optional("view", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
+            vol.Optional("idle", default=False): bool,
         })
         def subscribe(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
             before = self.active(connection)
@@ -131,6 +179,8 @@ class PanelContext:
                 panel = self._connections.get(connection)
                 if panel is not None and panel.unsubscribe is unsubscribe:
                     active = self.active(connection)
+                    if panel.timer:
+                        panel.timer()
                     self._connections.pop(connection)
                     # Native close iterates its dictionary without popping entries.
                     # Explicit unsubscribe pops this ID before invoking us.
@@ -142,6 +192,7 @@ class PanelContext:
                 connection.send_error(msg["id"], "already_subscribed", "Panel context is already subscribed")
                 return
             self._connections[connection] = _Panel(msg["dashboard"], unsubscribe, msg["id"], msg["live_dashboard"], msg["expanded"], msg["view"])
+            self._connections[connection].idle = msg["idle"]
             connection.subscriptions[msg["id"]] = unsubscribe
             connection.send_result(msg["id"])
             if before != self.active(connection):
@@ -155,18 +206,20 @@ class PanelContext:
             vol.Optional("live_dashboard", default=False): bool,
             vol.Optional("expanded", default=False): bool,
             vol.Optional("view", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
+            vol.Optional("idle", default=False): bool,
         })
         def update(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
             panel = self._connections.get(connection)
             if panel is None:
                 connection.send_error(msg["id"], "not_subscribed", "Subscribe to panel context first")
                 return
-            before = (panel.dashboard, panel.live_dashboard, panel.expanded, panel.view)
+            before = (panel.dashboard, panel.live_dashboard, panel.expanded, panel.view, panel.idle)
             panel.dashboard = msg["dashboard"]
             panel.live_dashboard = msg["live_dashboard"]
             panel.expanded = msg["expanded"]
             panel.view = msg["view"]
-            if before != (panel.dashboard, panel.live_dashboard, panel.expanded, panel.view):
+            panel.idle = msg["idle"]
+            if before != (panel.dashboard, panel.live_dashboard, panel.expanded, panel.view, panel.idle):
                 self.changed(connection)
             self.publish()
             connection.send_result(msg["id"])
@@ -191,6 +244,8 @@ class PanelContext:
     def uninstall(self) -> None:
         """Clear socket references and release only commands still owned."""
         for connection, panel in self._connections.items():
+            if panel.timer:
+                panel.timer()
             if connection.subscriptions.get(panel.msg_id) is panel.unsubscribe:
                 connection.subscriptions[panel.msg_id] = _released_context
         self._connections.clear()

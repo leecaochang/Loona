@@ -65,6 +65,8 @@ from .const import (
     TARGET_ALL,
     VERSION,
     RESOURCE_SHARED_TYPES,
+    CONTROL_RESOURCE_PRELOAD, CONTROL_OFFSCREEN, CONTROL_IDLE,
+    CONF_IDLE_AFTER, CONF_IDLE_REFRESH, IDLE_AFTER_MINUTES, IDLE_REFRESH_SECONDS,
 )
 from .graph_loading import GraphLoadingAdapter
 from .panels import PanelContext
@@ -77,7 +79,7 @@ from .dashboard import (
 from .dependencies import DiscoveryResult, discover, discover_views
 from .const import SETTINGS_DEFAULTS
 from .resources import (ResourceAdapter, ResourceDependencies, async_resource_rows,
-                        resource_dependencies, resource_report)
+                        resource_dependencies, resource_view_dependencies, resource_report)
 from .registry import RegistryAdapter, RegistryScope, registry_scope
 from .websocket import ScopePolicy, SubscriptionAdapter
 from .statistics import LiveStatistics
@@ -117,12 +119,15 @@ class LoonaRuntime:
         self.adapter: SubscriptionAdapter | None = None
         self.panel_context = PanelContext(hass, self._panel_changed)
         self.panel_context.resource_plan = self.resource_loading_plan
+        self.panel_context.idle_policy = self.idle_policy
+        self.panel_context.idle_refresh = self._refresh_idle
         self.registry_adapter: RegistryAdapter | None = None
         self.graph_adapter: GraphLoadingAdapter | None = None
         self.graph_compatibility_problem: str | None = None
         self.registry_scope = RegistryScope()
         self.resource_dependencies = ResourceDependencies()
         self.dashboard_resources: dict[str, ResourceDependencies] = {}
+        self.view_resources: dict[str, dict[str, ResourceDependencies]] = {}
         self.resource_complete = False
         self.resource_adapter: ResourceAdapter | None = None
         self.resource_compatibility_problem: str | None = None
@@ -232,7 +237,7 @@ class LoonaRuntime:
             )
         )
         await self.async_scan()
-        adapter = SubscriptionAdapter(self.hass, self._policy(), self.live_statistics, self.panel_context.active, self._delivery_scope)
+        adapter = SubscriptionAdapter(self.hass, self._policy(), self.live_statistics, self.panel_context.active, self._delivery_scope, self._idle)
         try:
             adapter.install()
         except CompatibilityError as err:
@@ -326,7 +331,9 @@ class LoonaRuntime:
                        and self.panel_compatibility_problem is None and self.bootstrap_installed is not False
                        and not self.resource_preview.get("unresolved_custom_types")
                        and self.panel_context.active(connection) and connection.user.is_active
-                       and self.controls[CONTROL_MASTER] and self.controls[CONTROL_RESOURCE_DELAY]
+                       and not self.panel_context.expanded(connection)
+                       and self.controls[CONTROL_MASTER]
+                       and (self.controls[CONTROL_RESOURCE_DELAY] or self.controls[CONTROL_RESOURCE_PRELOAD])
                        and (self._policy_settings.get(CONF_TARGET_MODE) == TARGET_ALL
                             or connection.user.id in self._policy_settings.get(CONF_USER_IDS, ())))
         if enabled and self.resource_adapter is not None:
@@ -335,16 +342,54 @@ class LoonaRuntime:
             except CompatibilityError:
                 enabled = False
         dependencies = self.dashboard_resources.get(dashboard or "")
+        if self.panel_context.delivery_dashboard(connection) == dashboard:
+            view = self.panel_context.delivery_view(connection)
+            dependencies = self.view_resources.get(dashboard or "", {}).get(view or "", dependencies)
         delayed: list[str] = []
+        preload: list[str] = []
         if enabled and dependencies is not None:
             rows = self.resource_preview.get("resources", [])
             immediate, provided = self._resource_modules()
             report = resource_report(rows, dependencies, self._policy_settings.get(CONF_ALWAYS_FORWARD, ()), provided)
             delayed = [row["url"] for row in report["resources"] if row["type"] == "module"
                        and not row["forwarded"] and row["url"] not in immediate]
-        return {"enabled": enabled and dependencies is not None, "defer": delayed,
+            preload = [row["url"] for row in report["resources"] if row["type"] == "module"
+                       and row["status"] == "required" and row["url"].startswith(("/local/", "/hacsfiles/", "/uix/"))]
+        return {"enabled": enabled and dependencies is not None and self.controls[CONTROL_RESOURCE_DELAY], "defer": delayed,
+                "preload": preload if enabled and self.controls[CONTROL_RESOURCE_PRELOAD] else [],
                 "quiet_ms": RESOURCE_DELAY_QUIET_MS, "max_ms": RESOURCE_DELAY_MAX_MS,
                 "load_ms": RESOURCE_DELAY_LOAD_MS, "idle_ms": RESOURCE_DELAY_IDLE_MS}
+
+    def idle_policy(self, connection: websocket_api.ActiveConnection) -> dict[str, Any]:
+        """Only eligible selected-account entity feeds may enter idle mode."""
+        allowed = bool(self.adapter is not None and self.panel_compatibility_problem is None
+                       and self.controls[CONTROL_IDLE] and self.panel_context.delivery_dashboard(connection) is not None
+                       and connection.user.is_active and self._policy().scope_for(connection.user.id) is not None)
+        from .config_flow import validate_idle_settings
+        values = {CONF_IDLE_AFTER: self._policy_settings.get(CONF_IDLE_AFTER, IDLE_AFTER_MINUTES),
+                  CONF_IDLE_REFRESH: self._policy_settings.get(CONF_IDLE_REFRESH, IDLE_REFRESH_SECONDS)}
+        try:
+            values = validate_idle_settings(values)
+        except ValueError:
+            allowed = False
+            values = {CONF_IDLE_AFTER: IDLE_AFTER_MINUTES, CONF_IDLE_REFRESH: IDLE_REFRESH_SECONDS}
+        return {"enabled": allowed, "version": VERSION,
+                "after_ms": values[CONF_IDLE_AFTER] * 60000, "refresh_seconds": values[CONF_IDLE_REFRESH]}
+
+    def _idle(self, connection: websocket_api.ActiveConnection) -> bool:
+        """The client idle flag grants no new access or scope."""
+        return self.panel_context.idle(connection) and self.idle_policy(connection)["enabled"]
+
+    @callback
+    def _refresh_idle(self, connection: websocket_api.ActiveConnection) -> None:
+        if self.adapter is not None and self._idle(connection):
+            try:
+                self.adapter.refresh_idle(connection)
+            except CompatibilityError as err:
+                self.entity_compatibility_problem = str(err)
+                self.adapter.uninstall()
+                self.adapter = None
+                self.notify()
 
     def _observe_resource_load(self, connection: Any, available: int, sent: int) -> None:
         if self.adapter is not None:
@@ -433,6 +478,7 @@ class LoonaRuntime:
             results: dict[str, DiscoveryResult] = {}
             configs: list[dict[str, Any]] = []
             dashboard_resources: dict[str, ResourceDependencies] = {}
+            view_resources: dict[str, dict[str, ResourceDependencies]] = {}
             view_entities: dict[str, dict[str, frozenset[str]]] = {}
             problems: list[str] = []
             warnings: list[str] = []
@@ -443,6 +489,7 @@ class LoonaRuntime:
                     config = await load_dashboard(self.hass, key, force=force)
                     configs.append(config)
                     dashboard_resources[key] = resource_dependencies([config])
+                    view_resources[key] = resource_view_dependencies(config)
                     result = discover(config, context)
                     if result.complete:
                         view_entities[key] = discover_views(config, context)
@@ -551,6 +598,7 @@ class LoonaRuntime:
             self.registry_scope = registry_scope(self.hass, self.entity_ids, results.values())
             self.resource_dependencies = resource_dependencies(resource_configs)
             self.dashboard_resources = dashboard_resources
+            self.view_resources = view_resources
             self.resource_scan_problem = resource_scan_problem
             self.resource_complete = resources_complete and valid_targets and not self.resource_dependencies.dynamic
             self.unknown_cards = any(result.unknown_cards for result in results.values())
@@ -628,7 +676,8 @@ class LoonaRuntime:
                                               (CONTROL_RESOURCES, self.resource_adapter)))
         paths = self._policy_settings.get(CONF_DASHBOARDS, ())
         useful |= bool(self.resource_adapter is not None and self.resource_complete
-                       and self.controls[CONTROL_MASTER] and self.controls[CONTROL_RESOURCE_DELAY])
+                       and self.controls[CONTROL_MASTER]
+                       and (self.controls[CONTROL_RESOURCE_DELAY] or self.controls[CONTROL_RESOURCE_PRELOAD]))
         return {"enabled": useful and bool(paths), "routes": sorted(route_key(path) for path in paths)}
 
     @callback
@@ -695,14 +744,16 @@ class LoonaRuntime:
             controls.add(CONTROL_ENTITIES)
             if self.panel_compatibility_problem is None:
                 controls.add(CONTROL_DASHBOARD_LIVE)
+                controls.add(CONTROL_IDLE)
         if self.registry_adapter is not None:
             controls.add(CONTROL_REGISTRIES)
         if self.resource_adapter is not None:
             controls.add(CONTROL_RESOURCES)
             if self.panel_compatibility_problem is None and self.bootstrap_installed is not False:
                 controls.add(CONTROL_RESOURCE_DELAY)
+                controls.add(CONTROL_RESOURCE_PRELOAD)
         if self.graph_adapter is not None:
-            controls.update((CONTROL_GRAPHS, CONTROL_MOTION))
+            controls.update((CONTROL_GRAPHS, CONTROL_MOTION, CONTROL_OFFSCREEN))
         return frozenset(controls)
 
     async def async_set_control(self, key: str, enabled: bool) -> None:

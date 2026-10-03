@@ -98,6 +98,7 @@ async def test_options_preserve_unrelated_fields_and_stale_labels(
         "dashboards",
         "targets",
         "filters",
+        "idle",
         "rules",
         "resource_preview",
         "cards",

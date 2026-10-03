@@ -23,6 +23,7 @@ from .const import (
     MAX_TEMPLATE_LENGTH,
 )
 from .templates import template_dependencies
+from .dependencies import saved_view_routes
 from .websocket import ScopePolicy
 
 
@@ -104,6 +105,15 @@ def matches(card_type: str, declarations: tuple[str, ...]) -> bool:
         card_type.startswith(value) if value.endswith("-") else card_type == value
         for value in declarations
     )
+
+
+def resource_view_dependencies(config: dict[str, Any]) -> dict[str, ResourceDependencies]:
+    """Keep dashboard-wide declarations and every branch of the initial view."""
+    routes = saved_view_routes(config)
+    if not routes:
+        return {}
+    plans = [resource_dependencies([{**config, "views": [view]}]) for view in config["views"]]
+    return {route: plans[index] for route, index in routes.items()}
 
 
 def resource_report(

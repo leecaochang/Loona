@@ -89,3 +89,15 @@ for (const action of [f=>f.loader.policy({...plan,enabled:false}),f=>f.loader.st
   f.scripts[1].onload();await settle();assert.equal(f.window.__loonaResourceLoading.status,"fallback");
 }
 console.log("Resource deferral preserves native lists and passes idle, navigation, editing, unload and failure checks");
+
+// Prefetch only authenticated same-origin asset URLs without module execution.
+{
+  const f=fixture(),rows=[heavy,second];
+  const preload=[heavy.url,heavy.url,"https://elsewhere/local/x.js","/local/../../api/x","/hacsfiles/card/x.js?42","/uix/uix.js","/api/x"];
+  f.loader.policy({...plan,enabled:false,preload});
+  assert.equal(f.loader.select(rows),rows);
+  assert.deepEqual(f.scripts.map(n=>n.rel),["modulepreload","modulepreload","modulepreload"]);
+  assert.equal(f.scripts[0].href,"http://test"+heavy.url);
+  f.loader.policy({...plan,enabled:false,preload});assert.equal(f.scripts.length,3);
+  f.loader.stop();f.loader.policy({...plan,preload:[second.url]});assert.equal(f.scripts.length,3);
+}

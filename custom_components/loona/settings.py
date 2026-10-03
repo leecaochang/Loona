@@ -11,7 +11,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
 from .compatibility import CompatibilityError
-from .config_flow import entity_rule_choices, human_accounts, validate_dashboards, validate_targets
+from .config_flow import entity_rule_choices, human_accounts, validate_dashboards, validate_targets, validate_idle_settings
 from .const import (
     CONF_ALWAYS_FORWARD, CONF_DASHBOARDS, CONF_EXTRA_ENTITIES,
     CONF_TARGET_MODE, CONF_USER_IDS, DOMAIN, TARGET_SELECTED, CONTROL_RESOURCES, CONTROL_DEFAULTS,
@@ -19,6 +19,7 @@ from .const import (
     SETTINGS_COMMAND, SETTINGS_SAVE_COMMAND, SETTINGS_GROUPS, SETTINGS_CHOICE_PAGE, SETTINGS_EMPTY_DEFAULTS,
     SETTINGS_CHOICES_COMMAND, CONF_DASHBOARD_CARDS, DASHBOARD_CARDS,
     SETTINGS_RESTORE_COMMAND,
+    CONF_IDLE_AFTER, CONF_IDLE_REFRESH, IDLE_AFTER_MINUTES, IDLE_REFRESH_SECONDS,
 )
 from .dashboard import dashboard_titles
 from .runtime import LoonaRuntime
@@ -86,6 +87,7 @@ async def settings_report(runtime: LoonaRuntime) -> dict[str, Any]:
             "rules": {key: list(settings.get(key, [])) for key in rules},
             "resources": {CONF_ALWAYS_FORWARD: list(settings.get(CONF_ALWAYS_FORWARD, []))},
             "cards": {CONF_DASHBOARD_CARDS: list(settings.get(CONF_DASHBOARD_CARDS, []))},
+            "idle": {CONF_IDLE_AFTER: settings.get(CONF_IDLE_AFTER, IDLE_AFTER_MINUTES), CONF_IDLE_REFRESH: settings.get(CONF_IDLE_REFRESH, IDLE_REFRESH_SECONDS)},
         },
         "choices": {
             CONF_DASHBOARDS: [{"value": key, "label": titles.get(key, key), "unavailable": key not in titles}
@@ -189,6 +191,8 @@ async def websocket_save_settings(hass: HomeAssistant, connection: websocket_api
             elif group == "targets":
                 if error := await validate_targets(hass, values):
                     raise ValueError(error)
+            elif group == "idle":
+                values = validate_idle_settings(values)
             else:
                 choices = entity_rule_choices(hass, runtime.settings)
                 if group == "cards":

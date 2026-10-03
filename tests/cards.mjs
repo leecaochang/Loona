@@ -17,8 +17,8 @@ globalThis.window=window;
 globalThis.IntersectionObserver=class { observe() {} disconnect() {} };
 const app=document.createElement("home-assistant"); document.body.append(app);
 let current={
-  version:"0.9.8",revision:"a".repeat(64),choice_page:50,
-  values:{controls:{enabled:true,entity_filtering:true,current_dashboard_updates:true},dashboards:{dashboards:["wall-panel"]},targets:{target_mode:"all",user_ids:[]},
+  version:"0.9.9",revision:"a".repeat(64),choice_page:50,
+  values:{controls:{enabled:true,entity_filtering:true,current_dashboard_updates:true,idle_updates:true,preload_card_resources:false,pause_offscreen_animations:false},idle:{idle_after_minutes:5,idle_refresh_seconds:60},dashboards:{dashboards:["wall-panel"]},targets:{target_mode:"all",user_ids:[]},
     rules:{extra_entities:[],include_domains:[],include_globs:[],exclude_globs:[]},resources:{always_forward_resources:[]},cards:{dashboard_cards:[]}},
   choices:{dashboards:[{value:"wall-panel",label:"Wall"}],user_ids:[],extra_entities:[{value:"sensor.wall",label:"Wall"}],include_domains:[],include_globs:[],exclude_globs:[],always_forward_resources:[],dashboard_cards:[{value:"statistics",label:"statistics"}]},
   paged_choices:{extra_entities:true,include_globs:false,exclude_globs:false},required_resources:[],resources_editable:true,action_entities:{},notices:[],
@@ -27,7 +27,7 @@ const copy=value=>JSON.parse(JSON.stringify(value));
 let conflict=false;
 const requests=[];
 const services=[];
-const statistics={version:"0.9.8",controls:{enabled:true,entity_filtering:true},complete:true,metrics:{current_scope:1,filtered_subscriptions:1,managed_subscriptions:1,forwarded_rate:1,avoided_rate:2,update_reduction:3,forwarded_updates:4,avoided_updates:5,reduction_estimate:6},reset_at:"2026-10-02T01:00:00Z",rate_history:[{at:"2026-10-02T01:00:30Z",seconds:30,sent:0,filtered:0},{at:"2026-10-02T01:01:00Z",seconds:30,sent:.5,filtered:3},{at:"2026-10-02T01:01:30Z",seconds:30,sent:1,filtered:2}],page_loads:[],notices:[],interval_seconds:30};
+const statistics={version:"0.9.9",controls:{enabled:true,entity_filtering:true},complete:true,metrics:{current_scope:1,filtered_subscriptions:1,managed_subscriptions:1,forwarded_rate:1,avoided_rate:2,update_reduction:3,forwarded_updates:4,avoided_updates:5,reduction_estimate:6},reset_at:"2026-10-02T01:00:00Z",rate_history:[{at:"2026-10-02T01:00:30Z",seconds:30,sent:0,filtered:0},{at:"2026-10-02T01:01:00Z",seconds:30,sent:.5,filtered:3},{at:"2026-10-02T01:01:30Z",seconds:30,sent:1,filtered:2}],page_loads:[],notices:[],interval_seconds:30};
 const hass={user:{id:"admin",is_admin:true},language:"en",connection:Object.assign(new window.EventTarget(),{connected:true}),locale:{language:"en",number_format:"decimal_comma",time_format:"24",time_zone:"server"},config:{time_zone:"UTC"},
   async callWS(request) {
     requests.push(request);
@@ -109,6 +109,18 @@ assert.ok(settings.shadowRoot.querySelector('[data-control="current_dashboard_up
 assert.ok(settings._drafts.controls.current_dashboard_updates,"Preserve the opt-in while temporarily disabled");
 settings.shadowRoot.querySelector('[data-cancel="controls"]').click();
 assert.ok(!settings.shadowRoot.querySelector('[data-control="current_dashboard_updates"]').disabled);
+// Idle timing uses saved defaults, whole-value validation and dependency gates.
+assert.equal(settings.shadowRoot.querySelector('[data-field="idle_refresh_seconds"]').value,"60");
+const idleInput=settings.shadowRoot.querySelector('[data-field="idle_refresh_seconds"]');
+for(const [value,invalid] of [["61",true],["-1",true],["1.5",true],["",true],["0",false],["10",false]]) {
+  idleInput.value=value;idleInput.dispatchEvent(new window.Event("input"));
+  assert.equal(settings.shadowRoot.querySelector('[data-save="idle"]').disabled,invalid);
+}
+settings.shadowRoot.querySelector('[data-cancel="idle"]').click();
+settings.shadowRoot.querySelector('[data-control="entity_filtering"]').click();
+assert.ok(settings.shadowRoot.querySelector('[data-control="idle_updates"]').disabled);
+assert.ok(settings.shadowRoot.querySelector('[data-field="idle_refresh_seconds"]').disabled);
+settings.shadowRoot.querySelector('[data-cancel="controls"]').click();
 // Non-contiguous words survive the browser's filtering of server results.
 settings._data.choices.include_globs=[{value:"fan.bathroom_ceiling",label:"Bathroom ceiling fan"}];
 settings._searches.include_globs="bathroom fan";
@@ -117,20 +129,20 @@ assert.ok(matches.textContent.includes("Bathroom ceiling fan"));
 assert.equal(matches.querySelector("small").textContent,"fan.bathroom_ceiling");
 // Reconnect checks the backend version while preserving an unsaved draft.
 settings._edit("rules","extra_entities",["sensor.wall"]);
-statistics.version="0.9.9";
+statistics.version="0.9.10";
 hass.connection.dispatchEvent(new Event("ready")); await new Promise(setImmediate);
 assert.ok(settings._drafts.rules);
 assert.ok(settings.shadowRoot.getElementById("version").querySelector("button").disabled);
 settings.shadowRoot.querySelector('[data-cancel="rules"]').click();
-statistics.version="0.9.8";
+statistics.version="0.9.9";
 // Loaded-module mismatch offers reload; settings drafts prevent accidental loss.
-stats._render({...copy(statistics),version:"0.9.9"});
+stats._render({...copy(statistics),version:"0.9.10"});
 assert.ok(stats.shadowRoot.getElementById("version").textContent.includes("Reload dashboard"));
-settings._data.version="0.9.9"; settings._render(); settings._edit("controls","enabled",false);
+settings._data.version="0.9.10"; settings._render(); settings._edit("controls","enabled",false);
 assert.ok(settings.shadowRoot.getElementById("version").querySelector("button").disabled);
 settings.shadowRoot.querySelector('[data-cancel="controls"]').click();
 assert.ok(!settings.shadowRoot.getElementById("version").querySelector("button").disabled);
-settings._data.version="0.9.8"; settings._render(); stats._render(copy(statistics));
+settings._data.version="0.9.9"; settings._render(); stats._render(copy(statistics));
 // Dismissals survive card reconstruction, stay account-local and remain silent.
 statistics.notices=[{code:"missing_entities",severity:"warning",items:["sensor.lost"]}];
 statistics.notice_labels={"sensor.lost":"Missing sensor"};

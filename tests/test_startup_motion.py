@@ -84,6 +84,7 @@ async def test_native_browser_startup_motion(tmp_path):
                         if '"result"' in last.get("result", {}).get("value", ""):
                             break
                         await asyncio.sleep(0.05)
+                    (tmp_path / "result.txt").write_text(last["result"].get("value", ""))
                     assert '"result":"passed"' in last["result"].get("value", ""), last
         finally:
             process.terminate()

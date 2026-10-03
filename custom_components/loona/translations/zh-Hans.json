@@ -48,7 +48,8 @@
           "filters": "筛选与性能",
           "rules": "实体规则",
           "resource_preview": "卡片",
-          "cards": "Loona 仪表盘"
+          "cards": "Loona 仪表盘",
+          "idle": "空闲时间设置"
         }
       },
       "dashboards": {
@@ -68,7 +69,7 @@
       },
       "filters": {
         "title": "筛选与性能",
-        "description": "按需开启或关闭功能。实体筛选会自动查找所需实体。注册表筛选会减少实体和设备详情。延迟加载图表会让屏幕外的图表稍后加载，滚动到它们时立即加载。暂停的动画会自动恢复。资源筛选会加载必需的文件和在“卡片”中勾选的文件。修改资源设置后，请刷新浏览器。 延迟加载卡片文件会优先加载当前仪表盘所需的模块，再加载其余模块。启用后请刷新页面。",
+        "description": "按需开启或关闭功能。实体筛选会自动查找所需实体。注册表筛选会减少实体和设备详情。延迟加载图表会让屏幕外的图表稍后加载，滚动到它们时立即加载。暂停的动画会自动恢复。资源筛选会加载必需的文件和在“卡片”中勾选的文件。修改资源设置后，请刷新浏览器。 延迟加载卡片文件优先加载当前标签页和共享文件；无法确定标签页时使用整个仪表盘。启用后请刷新页面。 空闲模式暂停实体更新，交互时立即恢复；屏幕外动画暂停仅影响循环动画。预加载标签页文件会提前获取并编译模块。",
         "data": {
           "entity_filtering": "实体筛选",
           "registry_filtering": "注册表筛选",
@@ -76,7 +77,10 @@
           "pause_animations_during_loading": "加载期间暂停动画",
           "resource_filtering": "资源筛选",
           "delay_card_resources": "延迟加载卡片文件",
-          "current_dashboard_updates": "当前标签页更新"
+          "current_dashboard_updates": "当前标签页更新",
+          "preload_card_resources": "预加载标签页卡片文件",
+          "pause_offscreen_animations": "暂停屏幕外动画",
+          "idle_updates": "空闲模式"
         }
       },
       "rules": {
@@ -109,6 +113,14 @@
         "description": "删除自动生成的 Loona 仪表盘及其卡片？已编辑的仪表盘会保留。取消此流程可保留当前选择。",
         "data": {
           "confirm": "确认删除"
+        }
+      },
+      "idle": {
+        "title": "空闲时间设置",
+        "description": "无交互后进入空闲模式。刷新间隔 0 表示暂停到交互时；1 至 60 表示每隔指定秒数刷新，默认为 60 秒。独立时钟、相机及卡片计时器可能继续运行。",
+        "data": {
+          "idle_after_minutes": "进入空闲前的分钟数",
+          "idle_refresh_seconds": "空闲刷新间隔（秒）"
         }
       }
     },
@@ -149,6 +161,15 @@
       },
       "current_dashboard_updates": {
         "name": "当前标签页更新"
+      },
+      "preload_card_resources": {
+        "name": "预加载标签页卡片文件"
+      },
+      "pause_offscreen_animations": {
+        "name": "暂停屏幕外动画"
+      },
+      "idle_updates": {
+        "name": "空闲模式"
       }
     },
     "button": {

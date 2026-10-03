@@ -1,4 +1,14 @@
 // Temporarily yield continuous card motion to initial dashboard work.
+export function animationProtected(target, view, progressTags) {
+  let card=false;
+  for (let node=target; node && node!==view; node=node.parentElement ?? node.getRootNode?.().host) {
+    if (node.preview || node.editMode || node.hidden || node.getAttribute?.("aria-busy")==="true"
+      || node.getAttribute?.("role")==="progressbar" || progressTags.includes(node.tagName)) return true;
+    if (node.tagName==="HUI-CARD") card=true;
+  }
+  return !card || view.editMode || view.lovelace?.editMode;
+}
+
 export class StartupMotion {
   constructor(version) {
     this.version = version;
@@ -103,14 +113,7 @@ export class StartupMotion {
   touch() { if (this.active) this.lastActivity = performance.now(); }
 
   protected(target) {
-    let card = false;
-    for (let node = target; node && node !== this.view; node = this.parent(node)) {
-      if (node.preview || node.editMode || node.hidden || node.getAttribute?.("aria-busy") === "true"
-        || node.getAttribute?.("role") === "progressbar"
-        || this.policy.motion.progress_tags.includes(node.tagName)) return true;
-      if (node.tagName === "HUI-CARD") card = true;
-    }
-    return !card || this.view.editMode || this.view.lovelace?.editMode;
+    return animationProtected(target,this.view,this.policy.motion.progress_tags);
   }
 
   watch(node, animations) {
@@ -216,5 +219,6 @@ export class StartupMotion {
     } else if (reason === "disabled") this.phase = reason;
     this.active = false;
     this.generation++;
+    window.dispatchEvent(new window.Event("loona-startup-motion-finished"));
   }
 }

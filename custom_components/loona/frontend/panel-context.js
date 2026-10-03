@@ -1,5 +1,5 @@
 /* Report dashboard context and recover when Core reconnects before Loona. */
-import "./resource-loading.js?v=0.9.8";
+import "./resource-loading.js?v=0.9.9";
 
 if (!window.__loonaPanelContext) {
   window.__loonaPanelContext = true;
@@ -12,6 +12,55 @@ if (!window.__loonaPanelContext) {
   const dialogs = new Set();
   const pollMs = Number(new URL(import.meta.url).searchParams.get("poll"));
   let rootDashboard = null;
+
+  function idleController(notify) {
+    if (typeof window.setTimeout !== "function" || !document.addEventListener) return {policy() {},context:()=>false,stop() {}};
+    let policy, context, active=false, listening=false, timer, last=Date.now();
+    const types=["pointerdown","pointermove","keydown","scroll"];
+    const clear=()=>{ window.clearTimeout(timer); timer=undefined; };
+    const eligible=()=>policy?.enabled && context && !context.expanded && !document.hidden;
+    const check=()=>{
+      timer=undefined;
+      if (!eligible()) return;
+      const remaining=policy.after_ms-(Date.now()-last);
+      if (remaining>0) timer=window.setTimeout(check,remaining);
+      else { active=true; notify(); }
+    };
+    const wake=()=>{
+      last=Date.now();
+      const changed=active; active=false;
+      if (!timer && eligible()) timer=window.setTimeout(check,policy.after_ms);
+      if (changed) notify();
+    };
+    const visibility=()=>{ clear(); wake(); };
+    const listen=value=>{
+      if (value===listening) return;
+      listening=value;
+      for (const type of types) {
+        if (value) document.addEventListener(type,wake,{capture:true,passive:true});
+        else document.removeEventListener(type,wake,true);
+      }
+      if (value) document.addEventListener("visibilitychange",visibility);
+      else document.removeEventListener("visibilitychange",visibility);
+    };
+    return {
+      policy(value) {
+        const valid=value?.version==="0.9.9" && typeof value.enabled==="boolean"
+          && Number.isFinite(value.after_ms) && value.after_ms>0
+          && Number.isInteger(value.refresh_seconds) && value.refresh_seconds>=0 && value.refresh_seconds<=60;
+        const changed=JSON.stringify(policy)!==JSON.stringify(value);
+        policy=valid ? value : undefined;
+        if (changed) { clear(); listen(Boolean(policy?.enabled)); wake(); }
+      },
+      context(value) {
+        const key=JSON.stringify([value.dashboard,value.view,value.expanded]);
+        if (key!==context?.key) { context={...value,key};clear();last=Date.now();active=false; }
+        if (eligible() && !active && !timer) timer=window.setTimeout(check,policy.after_ms);
+        return active && eligible();
+      },
+      stop() { policy=undefined; clear(); listen(false); active=false; },
+    };
+  }
 
   function dashboard() {
     try {
@@ -55,6 +104,7 @@ if (!window.__loonaPanelContext) {
     const state = { dashboard: undefined, subscribed: false, pending: false, disabled: false, socket: connection.socket, generation: 0 };
     connections.set(connection, state);
     state.resources = window.loonaCreateResourceLoader(window.__loonaBootstrap?.status === "waiting");
+    state.idle = idleController(()=>report());
     const nativePromise = connection.sendMessagePromise;
     const nativeSubscribe = connection.subscribeMessage;
     let unsubscribe;
@@ -63,11 +113,13 @@ if (!window.__loonaPanelContext) {
       const generation = state.generation;
       state.pending = true;
       const current = panelReport();
+      if (state.idle.context(current)) current.idle=true;
       state.dashboard = current.dashboard;
       state.context = JSON.stringify(current);
       // Own reconnect recovery so a startup unknown_command can be retried.
       state.ready = Promise.resolve(nativeSubscribe.call(connection, (value) => {
         if (value?.resources) state.resources.policy(value.resources);
+        if (value?.idle) state.idle.policy(value.idle);
         if (value && value.enabled === false) disable();
         if (value && value.resubscribe && state.recoverySocket !== connection.socket
             && typeof connection.reconnect === "function") {
@@ -89,16 +141,19 @@ if (!window.__loonaPanelContext) {
     }
     function report() {
       state.resources.route();
-      if (!connection.connected || state.disabled) return;
+      if (!connection.connected || state.disabled) { state.idle.stop();return; }
       if (state.socket !== connection.socket) {
         state.resources.flush();
+        state.idle.stop();
         state.socket = connection.socket; state.generation++;
         state.subscribed = false; state.pending = false; unsubscribe = undefined;
         state.prefetch = undefined;
       }
       if (!state.subscribed) { subscribe(); return; }
       const current = panelReport();
+      if (state.idle.context(current)) current.idle=true;
       const context = JSON.stringify(current);
+      if (current.expanded) state.resources.flush();
       if (state.context === context) return;
       state.prefetch = undefined;
       state.dashboard = current.dashboard;
@@ -183,6 +238,7 @@ if (!window.__loonaPanelContext) {
     if (typeof connection.addEventListener === "function") connection.addEventListener("ready", ready);
     function disable() {
       state.resources.stop();
+      state.idle.stop();
       state.disabled = true;
       state.subscribed = false;
       if (connection.sendMessagePromise === wrappedPromise) connection.sendMessagePromise = nativePromise;

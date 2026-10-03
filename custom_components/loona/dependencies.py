@@ -206,12 +206,11 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
     )
 
 
-def discover_views(config: dict[str, Any], context: DiscoveryContext) -> dict[str, frozenset[str]]:
-    """Scan each saved view with shared config and preserve native route precedence."""
+def saved_view_routes(config: dict[str, Any]) -> dict[str, int]:
+    """Map unambiguous saved routes using native first-match precedence."""
     views = config.get("views")
     if not isinstance(views, list) or not views or any(not isinstance(view, dict) for view in views):
         return {}
-    results = [discover({**config, "views": [view]}, context) for view in views]
     indices = {str(index) for index in range(len(views))}
     routes = set(indices)
     routes.update(view["path"] for view in views if isinstance(view.get("path"), str) and view["path"])
@@ -237,6 +236,15 @@ def discover_views(config: dict[str, Any], context: DiscoveryContext) -> dict[st
         # Core takes the first matching path or numeric index, even on collisions.
         index = next(index for index, view in enumerate(views)
                      if view.get("path") == route or str(index) == route)
-        if results[index].complete and route != "hass-unused-entities":
-            plans[route] = results[index].entity_ids
+        if route != "hass-unused-entities":
+            plans[route] = index
     return plans
+
+
+def discover_views(config: dict[str, Any], context: DiscoveryContext) -> dict[str, frozenset[str]]:
+    """Scan each saved view with shared config and preserve native route precedence."""
+    routes = saved_view_routes(config)
+    if not routes:
+        return {}
+    results = [discover({**config, "views": [view]}, context) for view in config["views"]]
+    return {route: results[index].entity_ids for route, index in routes.items() if results[index].complete}

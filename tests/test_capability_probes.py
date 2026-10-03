@@ -25,6 +25,7 @@ async def test_unlisted_core_with_capabilities_enables_all_features(loona_hass, 
             "enabled", "entity_filtering", "registry_filtering", "resource_filtering",
             "delay_card_resources", "current_dashboard_updates",
             "visible_first_graphs", "pause_animations_during_loading",
+            "idle_updates", "preload_card_resources", "pause_offscreen_animations",
         }
     finally:
         await runtime.async_stop()

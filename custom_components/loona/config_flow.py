@@ -21,6 +21,9 @@ from .const import (
     CONF_ALWAYS_FORWARD,
     CONTROL_RESOURCES,
     CONTROL_RESOURCE_DELAY,
+    CONTROL_RESOURCE_PRELOAD, CONTROL_OFFSCREEN, CONTROL_IDLE,
+    CONF_IDLE_AFTER, CONF_IDLE_REFRESH, IDLE_AFTER_MINUTES, IDLE_REFRESH_SECONDS,
+    IDLE_AFTER_MAX, IDLE_REFRESH_MAX,
     CONF_TARGET_MODE,
     CONF_USER_IDS,
     CONF_EXTRA_ENTITIES,
@@ -39,6 +42,18 @@ from .const import (
 )
 from .compatibility import CompatibilityError
 from .dashboard import dashboard_titles
+
+
+def validate_idle_settings(values: dict[str, Any]) -> dict[str, int]:
+    """Accept whole-number timing only, including native numeric selector values."""
+    limits = {CONF_IDLE_AFTER: (1, IDLE_AFTER_MAX), CONF_IDLE_REFRESH: (0, IDLE_REFRESH_MAX)}
+    if set(values) != set(limits):
+        raise ValueError("invalid_selection")
+    for key, value in values.items():
+        low, high = limits[key]
+        if type(value) not in (int, float) or not low <= value <= high or int(value) != value:
+            raise ValueError("invalid_selection")
+    return {key: int(value) for key, value in values.items()}
 
 
 def entity_rule_choices(
@@ -280,6 +295,7 @@ class LoonaOptionsFlow(OptionsFlow):
                 "dashboards",
                 "targets",
                 "filters",
+                "idle",
                 "rules",
                 "resource_preview",
                 "cards",
@@ -340,12 +356,29 @@ class LoonaOptionsFlow(OptionsFlow):
                 {
                     vol.Required(key, default=runtime.controls[key]): selector.BooleanSelector()
                     for key in (
-                        CONTROL_ENTITIES, CONTROL_DASHBOARD_LIVE, CONTROL_REGISTRIES, CONTROL_RESOURCES, CONTROL_RESOURCE_DELAY, CONTROL_GRAPHS, CONTROL_MOTION
+                        CONTROL_ENTITIES, CONTROL_DASHBOARD_LIVE, CONTROL_REGISTRIES, CONTROL_RESOURCES, CONTROL_RESOURCE_DELAY, CONTROL_RESOURCE_PRELOAD, CONTROL_GRAPHS, CONTROL_MOTION, CONTROL_OFFSCREEN, CONTROL_IDLE
                     )
                     if runtime is not None and key in runtime.available_controls
                 }
             ),
         )
+
+    async def async_step_idle(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Expose the same idle timing in native Configure and the settings card."""
+        errors = {}
+        if user_input is not None:
+            try:
+                values = validate_idle_settings(user_input)
+            except ValueError:
+                errors["base"] = "invalid_selection"
+            else:
+                return self.finish(values)
+        return self.async_show_form(step_id="idle", errors=errors, data_schema=vol.Schema({
+            vol.Required(CONF_IDLE_AFTER, default=self.settings.get(CONF_IDLE_AFTER, IDLE_AFTER_MINUTES)):
+                selector.NumberSelector(selector.NumberSelectorConfig(min=1, max=IDLE_AFTER_MAX, step=1, mode=selector.NumberSelectorMode.BOX, unit_of_measurement="min")),
+            vol.Required(CONF_IDLE_REFRESH, default=self.settings.get(CONF_IDLE_REFRESH, IDLE_REFRESH_SECONDS)):
+                selector.NumberSelector(selector.NumberSelectorConfig(min=0, max=IDLE_REFRESH_MAX, step=1, mode=selector.NumberSelectorMode.BOX, unit_of_measurement="s")),
+        }))
 
     async def async_step_rules(
         self, user_input: dict[str, Any] | None = None

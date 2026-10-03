@@ -8,9 +8,9 @@ async function until(predicate) {
     if (predicate()) return;
     await sleep(10);
   }
-  throw new Error(`Timeout: ${JSON.stringify(window.loonaStartupMotionReport())}`);
+  throw new Error(`Timeout: ${JSON.stringify({startup:window.loonaStartupMotionReport(),offscreen:window.loonaOffscreenMotionReport(),states:[...document.querySelectorAll("hui-card")].map(n=>({connected:n.isConnected,preview:n.preview,loop:n._element?.loop?.playState}))})}`);
 }
-const policy = { version: "0.9.8", enabled: false, dashboards: ["wall-panel"],
+const policy = { version: "0.9.9", enabled: false, dashboards: ["wall-panel"],
   quiet_ms: 30, poll_ms: 10, trace_limit: 200, profiles: { sensor: { height: 120, size: 3, columns: 6, rows: 2 } },
   motion: { enabled: true, quiet_ms: 30, poll_ms: 10, max_ms: 250,
     view_tags: ["HUI-SECTIONS-VIEW", "HUI-MASONRY-VIEW"], progress_tags: ["HA-SPINNER"] } };
@@ -166,6 +166,41 @@ try {
   await sleep(40);
   check(disabled.child.loop.playState === "running", "Default disabled behavior keeps animations running");
   await remove(disabled);
+  // Real IntersectionObserver and CSS/WA animations across scroll and lifecycle.
+  const offHass=makeHass({offscreen:true,motion:{...policy.motion,enabled:false}});
+  const off=await card(offHass);
+  off.owner.style.display="block"; off.owner.style.marginTop="2000px";
+  await until(()=>off.child.loop.playState==="paused" && off.child.css.playState==="paused");
+  check(off.child.finite.playState==="running", "Off-screen finite transitions continue");
+  check(off.child.progress.playState==="running" && off.child.spinner.playState==="running", "Off-screen loading indicators continue");
+  const fixed=document.createElement("span"); fixed.textContent="popup";
+  fixed.style.cssText="position:fixed;top:10px;left:10px;width:30px;height:30px";
+  off.child.shadowRoot.append(fixed);
+  const popup=fixed.animate([{opacity:0.5},{opacity:1}],{duration:5000,iterations:Infinity});
+  await sleep(60); check(popup.playState==="running", "Visible fixed popup stays animated");
+  off.owner.scrollIntoView();
+  await until(()=>off.child.loop.playState==="running" && off.child.css.playState==="running");
+  check(off.child.prepaused.playState==="paused", "Scrolling must preserve pre-existing pause");
+  window.scrollTo(0,0); await until(()=>off.child.loop.playState==="paused");
+  off.owner.preview=true; await off.owner.updateComplete;
+  await until(()=>off.child.loop.playState==="running");
+  off.owner.preview=false; await off.owner.updateComplete;
+  await until(()=>off.child.loop.playState==="paused");
+  offHass.connection.publish({...policy,offscreen:false,motion:{...policy.motion,enabled:false}});
+  await until(()=>off.child.loop.playState==="running");
+  offHass.connection.publish({...policy,offscreen:true,motion:{...policy.motion,enabled:false}});
+  await until(()=>off.child.loop.playState==="paused");
+  // Nested native owners must not share an animation's pause ownership.
+  const inner=document.createElement("hui-card");
+  Object.assign(inner,{config:{type:"custom:test-animation"},hass:offHass});
+  inner.style.cssText="display:block;margin-top:2500px";
+  off.child.shadowRoot.append(inner);await inner.updateComplete;
+  await until(()=>inner._element?.loop.playState==="paused");
+  off.owner.scrollIntoView();
+  await until(()=>off.child.loop.playState==="running");
+  check(inner._element.loop.playState==="paused", "Visible outer owner must not resume its off-screen nested owner");
+  off.view.remove(); await until(()=>window.loonaOffscreenMotionReport().paused===0);
+  check(off.child.loop.playState==="running", "Disconnect restores owned off-screen motion");
   document.body.dataset.result = "passed";
   document.body.textContent = "Native HuiCard startup animation checks passed";
 } catch (error) {

@@ -8,6 +8,7 @@ if (!window.loonaCreateResourceLoader) {
     let deadline, quiet, idle, idleTimer = false, pumping = false, inFlight = 0;
     let path = location.pathname + (location.search || "");
     const pending = new Map(), started = new Set();
+    const preloaded = new Set();
     const info = {status: "native", initial: 0, deferred: 0, loaded: 0, failed: 0};
     const publish = () => { window.__loonaResourceLoading = {...info, pending: pending.size}; };
     const clearIdle = () => {
@@ -95,9 +96,21 @@ if (!window.loonaCreateResourceLoader) {
     }
     return {
       policy(value) {
+        if (stopped) return;
         const valid = value && Array.isArray(value.defer) && value.defer.every(url => typeof url === "string")
           && ["quiet_ms", "max_ms", "load_ms", "idle_ms"].every(key => Number.isFinite(value[key]) && value[key] > 0);
-        if (!valid || !value.enabled) { if (pending.size) flush(); plan = undefined; return; }
+        if (!valid) { if (pending.size) flush(); plan = undefined; return; }
+        // Start verified current-route fetch/compile work after authenticated
+        // context, before Core consumes its config and resource responses.
+        for (const url of Array.isArray(value.preload) ? value.preload.slice(0,40) : []) {
+          if (typeof url !== "string" || !url.startsWith("/") || !/^\/(local|hacsfiles|uix)\//.test(url) || preloaded.has(url)) continue;
+          const parsed=new URL(url,location.href);
+          if (parsed.origin!==location.origin || !/^\/(local|hacsfiles|uix)\//.test(parsed.pathname)) continue;
+          preloaded.add(url);
+          const link = document.createElement("link"); link.rel = "modulepreload"; link.href = url;
+          document.head.append(link);
+        }
+        if (!value.enabled) { if (pending.size) flush(); plan = undefined; return; }
         if (used && plan && JSON.stringify(value) !== JSON.stringify(plan)) flush();
         plan = timing = value;
       },

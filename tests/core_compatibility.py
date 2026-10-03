@@ -303,13 +303,13 @@ async def check(hass: HomeAssistant) -> None:
         await runtime.async_scan()
         expected = {"enabled", "entity_filtering", "registry_filtering", "resource_filtering",
                     "delay_card_resources", "current_dashboard_updates",
-                    "visible_first_graphs", "pause_animations_during_loading"}
+                    "visible_first_graphs", "pause_animations_during_loading", "idle_updates", "preload_card_resources", "pause_offscreen_animations"}
         assert runtime.available_controls == expected
         rows = er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
         controls = {row.unique_id.rsplit(":", 1)[-1]: row.entity_id for row in rows if row.domain == "switch"}
-        assert set(controls) == {"enabled", "entity_filtering", "current_dashboard_updates", "registry_filtering", "resource_filtering", "delay_card_resources", "visible_first_graphs", "pause_animations_during_loading"}
+        assert set(controls) == {"enabled", "entity_filtering", "current_dashboard_updates", "registry_filtering", "resource_filtering", "delay_card_resources", "visible_first_graphs", "pause_animations_during_loading", "idle_updates", "preload_card_resources", "pause_offscreen_animations"}
         assert all(hass.states.get(controls[key]).state == "unavailable" for key in set(controls) - expected)
-        assert len(rows) == 28
+        assert len(rows) == 31
         assert all(hass.states.get(row.entity_id) is not None for row in rows)
         assert not ({row.entity_id for row in rows} & runtime.entity_ids)
         child = dr.async_get(hass).async_get(runtime.dashboard_devices["wall-panel"])

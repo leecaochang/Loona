@@ -20,6 +20,7 @@ from .const import (
     CONTROL_GRAPHS,
     CONTROL_MASTER,
     CONTROL_MOTION,
+    CONTROL_OFFSCREEN,
     MOTION_MAX_MS,
     MOTION_POLL_MS,
     MOTION_PROGRESS_TAGS,
@@ -67,6 +68,7 @@ async def _async_register_frontend(hass: HomeAssistant) -> Callable[[], None]:
         paths = (
             (_ASSET_PATH, str(Path(__file__).parent / "frontend" / "graph-loading.js")),
             ("/loona/startup-motion.js", str(Path(__file__).parent / "frontend" / "startup-motion.js")),
+            ("/loona/offscreen-motion.js", str(Path(__file__).parent / "frontend" / "offscreen-motion.js")),
         )
         if callable(register_many):
             from homeassistant.components.http import StaticPathConfig
@@ -102,7 +104,7 @@ class _ConfigConnection:
     @callback
     def send_result(self, msg_id: int, result: Any = None) -> None:
         context = self.adapter.context(self.connection)
-        if isinstance(result, dict) and (context["enabled"] or context["motion"]["enabled"]):
+        if isinstance(result, dict) and (context["enabled"] or context["motion"]["enabled"] or context["offscreen"]):
             result = {**result, GRAPH_CONTEXT: context}
         self.connection.send_result(msg_id, result)
 
@@ -138,6 +140,7 @@ class GraphLoadingAdapter:
             "version": VERSION,
             "active": not self.stopped,
             "enabled": bool(allowed and self.runtime.controls[CONTROL_GRAPHS]),
+            "offscreen": bool(allowed and self.runtime.controls[CONTROL_OFFSCREEN]),
             "motion": {
                 "enabled": bool(allowed and self.runtime.controls[CONTROL_MOTION]),
                 "quiet_ms": MOTION_QUIET_MS,

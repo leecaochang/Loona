@@ -128,12 +128,13 @@ class _Subscription:
 class SubscriptionAdapter:
     """Own one command replacement and its tracked unscoped subscriptions."""
 
-    def __init__(self, hass: HomeAssistant, policy: ScopePolicy, statistics: LiveStatistics | None = None, dashboard_active: Callable[[websocket_api.ActiveConnection], bool] | None = None, delivery_scope: Callable[[websocket_api.ActiveConnection, frozenset[str]], frozenset[str]] | None = None) -> None:
+    def __init__(self, hass: HomeAssistant, policy: ScopePolicy, statistics: LiveStatistics | None = None, dashboard_active: Callable[[websocket_api.ActiveConnection], bool] | None = None, delivery_scope: Callable[[websocket_api.ActiveConnection, frozenset[str]], frozenset[str]] | None = None, idle: Callable[[websocket_api.ActiveConnection], bool] | None = None) -> None:
         self.hass = hass
         self.policy = policy
         self.statistics = statistics
         self.dashboard_active = dashboard_active
         self.delivery_scope = delivery_scope
+        self.idle = idle
         self._table: HandlerTable | None = None
         self._original: HandlerEntry | None = None
         self._owned_entry: HandlerEntry | None = None
@@ -229,6 +230,8 @@ class SubscriptionAdapter:
         """Only narrow an already eligible union; empty native scopes mean full."""
         if retained is None or self.delivery_scope is None:
             return retained
+        if self.idle is not None and self.idle(connection):
+            return frozenset()
         delivery = self.delivery_scope(connection, retained) & retained
         return delivery or retained
 
@@ -241,9 +244,22 @@ class SubscriptionAdapter:
         *,
         initial: bool = False,
         refresh_retained: bool = False,
+        parked_snapshot: frozenset[str] | None = None,
     ) -> _Subscription:
         """Stage Core's listener and snapshot; roll back on handler failure."""
         assert self._original is not None
+        if scope == frozenset():
+            # Native empty entity_ids means full data. Park the live listener
+            # explicitly, retaining a permission-safe native snapshot instead.
+            assert retained_scope
+            if parked_snapshot is None and not initial and not refresh_retained and self.delivery_scope:
+                parked_snapshot = self.delivery_scope(connection, retained_scope) & retained_scope
+            parked = self._prepare(connection, request, parked_snapshot or retained_scope, retained_scope, initial=initial)
+            parked.stop()
+            relay = _SubscriptionRelay(connection, acknowledge=initial)
+            relay.buffer = parked.relay.buffer
+            return _Subscription(connection, dict(request), scope, retained_scope, relay,
+                                 lambda: None, parked.possible_ids, parked.initial_counts)
         msg_id = request["id"]
         previous_callback = connection.subscriptions.get(msg_id)
         seed = None
@@ -350,7 +366,7 @@ class SubscriptionAdapter:
                 if unloading or scope != previous.scope or retained != previous.retained_scope:
                     candidate = self._prepare(
                         previous.connection, previous.request, scope, retained,
-                        refresh_retained=retained != previous.retained_scope,
+                        refresh_retained=retained != previous.retained_scope or previous.scope == frozenset(),
                     )
                     staged.append((previous, candidate))
         except Exception:
@@ -373,6 +389,30 @@ class SubscriptionAdapter:
         """Reconcile this socket's ordinary feeds after a panel transition."""
         self._check_owner()
         staged = self._stage_changes(self.policy, connection=connection)
+        for previous, candidate in staged:
+            self._publish(candidate, previous=previous, managed=True)
+
+    @callback
+    def refresh_idle(self, connection: websocket_api.ActiveConnection) -> None:
+        """Refresh parked feeds from Core snapshots without replaying stale diffs."""
+        self._check_owner()
+        staged: list[tuple[_Subscription, _Subscription]] = []
+        try:
+            for previous in self._records.values():
+                if previous.connection is not connection or previous.scope != frozenset():
+                    continue
+                if connection.subscriptions.get(previous.request["id"]) is not previous.owned_unsubscribe:
+                    raise CompatibilityError("Another owner replaced a parked listener")
+                retained = self._scope_for(self.policy, connection)
+                if retained is None or self._delivery_for(connection, retained) != frozenset():
+                    continue
+                delivery = self.delivery_scope(connection, retained) & retained if self.delivery_scope else retained
+                staged.append((previous, self._prepare(connection, previous.request, frozenset(), retained,
+                                                       parked_snapshot=delivery or retained)))
+        except Exception:
+            for _, candidate in staged:
+                candidate.stop()
+            raise
         for previous, candidate in staged:
             self._publish(candidate, previous=previous, managed=True)
 

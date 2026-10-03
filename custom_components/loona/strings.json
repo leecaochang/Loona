@@ -48,7 +48,8 @@
           "filters": "Filters and performance",
           "rules": "Entity rules",
           "resource_preview": "Cards",
-          "cards": "Loona dashboard"
+          "cards": "Loona dashboard",
+          "idle": "Idle timing"
         }
       },
       "dashboards": {
@@ -68,7 +69,7 @@
       },
       "filters": {
         "title": "Filters and performance",
-        "description": "Enable or disable the features you need. Entity filtering is automatic. Registry filtering reduces entity and device details. Delay graph loading waits to load off-screen graphs; scrolling to them loads them immediately. Animation pausing resumes automatically. Resource filtering loads required files and your selections under Cards. Refresh the browser after resource changes. Delay card files loads this dashboard's modules first and the rest later. Reload after enabling.",
+        "description": "Enable or disable the features you need. Entity filtering is automatic. Registry filtering reduces entity and device details. Delay graph loading waits to load off-screen graphs; scrolling to them loads them immediately. Animation pausing resumes automatically. Resource filtering loads required files and your selections under Cards. Refresh the browser after resource changes. Delay card files loads this tab's modules and shared files first; unknown tab routes use the whole dashboard. Reload after enabling. Idle mode pauses entity updates and resumes on interaction. Off-screen pausing affects repeating animations only. Tab file preloading fetches and compiles modules early.",
         "data": {
           "entity_filtering": "Entity filtering",
           "registry_filtering": "Registry filtering",
@@ -76,7 +77,10 @@
           "pause_animations_during_loading": "Pause animations during loading",
           "resource_filtering": "Resource filtering",
           "delay_card_resources": "Delay card files",
-          "current_dashboard_updates": "Current tab updates"
+          "current_dashboard_updates": "Current tab updates",
+          "preload_card_resources": "Preload tab card files",
+          "pause_offscreen_animations": "Pause off-screen animations",
+          "idle_updates": "Idle mode"
         }
       },
       "rules": {
@@ -109,6 +113,14 @@
         "description": "Remove the generated Loona dashboard and its cards? Edited dashboards are preserved. Cancel this flow to keep the current selection.",
         "data": {
           "confirm": "Confirm removal"
+        }
+      },
+      "idle": {
+        "title": "Idle timing",
+        "description": "Enter idle mode after inactivity. Refresh 0 pauses until interaction; 1 to 60 refreshes at that interval in seconds, default 60. Independent clocks, cameras and card timers may continue.",
+        "data": {
+          "idle_after_minutes": "Idle after (minutes)",
+          "idle_refresh_seconds": "Idle refresh (seconds)"
         }
       }
     },
@@ -149,6 +161,15 @@
       },
       "current_dashboard_updates": {
         "name": "Current tab updates"
+      },
+      "preload_card_resources": {
+        "name": "Preload tab card files"
+      },
+      "pause_offscreen_animations": {
+        "name": "Pause off-screen animations"
+      },
+      "idle_updates": {
+        "name": "Idle mode"
       }
     },
     "button": {

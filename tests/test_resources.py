@@ -18,6 +18,7 @@ from custom_components.loona.config_flow import LoonaOptionsFlow
 from custom_components.loona.diagnostics import async_get_config_entry_diagnostics
 from custom_components.loona.resources import (
     ResourceAdapter, resource_dependencies, resource_report,
+    resource_view_dependencies,
 )
 from custom_components.loona.runtime import LoonaRuntime
 from custom_components.loona.websocket import ScopePolicy
@@ -66,6 +67,54 @@ async def test_resource_delay_targets_exceptions_missing_context_and_dynamic_fal
     assert not output[-2]["event"]["resources"]["enabled"]
     runtime.resource_complete = False
     assert not runtime.resource_loading_plan(chosen,"wall-panel")["enabled"]
+
+
+async def test_initial_view_resource_priority_preserves_shared_files_and_native_union(resources_runtime, make_user, make_connection, dashboards):
+    runtime, collection = resources_runtime
+    await collection.async_create_item({"url": "/local/apexcharts-card.js?v=2", "res_type": "module"})
+    await dashboards["wall-panel"].async_save({
+        "button_card_templates": {"shared": {"type": "custom:button-card"}},
+        "views": [
+            {"path": "main", "cards": [{"type": "custom:mini-graph-card", "entities": ["sensor.wall"]}]},
+            {"path": "energy", "cards": [{"type": "custom:apexcharts-card", "series": [{"entity": "sensor.wall"}]}]},
+        ],
+    })
+    await runtime.async_scan()
+    await runtime.async_set_control("delay_card_resources", True)
+    connection, output = make_connection(make_user(admin=True))
+    connection.async_handle({"id": 1, "type": "loona/subscribe_panel", "dashboard": "wall-panel", "live_dashboard": True, "view": "main"})
+    assert output[-1]["event"]["resources"]["defer"] == ["/local/apexcharts-card.js?v=2"]
+    assert (await request(runtime.hass, connection, output))["result"] == collection.async_items()
+    await runtime.async_set_control("preload_card_resources", True)
+    assert runtime.resource_loading_plan(connection, "wall-panel")["preload"] == ["/local/mini-graph-card-bundle.js?v=1", "/local/button-card.js"]
+    await runtime.async_set_control("delay_card_resources", False)
+    plan = runtime.resource_loading_plan(connection, "wall-panel")
+    assert not plan["enabled"] and plan["preload"]
+    await runtime.async_set_control("delay_card_resources", True)
+    for route, delayed in [("0", "/local/apexcharts-card.js?v=2"), ("energy", "/local/mini-graph-card-bundle.js?v=1"), ("1", "/local/mini-graph-card-bundle.js?v=1")]:
+        connection.async_handle({"id": connection.last_id+1, "type": "loona/panel", "dashboard": "wall-panel", "live_dashboard": True, "view": route})
+        assert runtime.resource_loading_plan(connection, "wall-panel")["defer"] == [delayed]
+    for route in [None, "missing", "01"]:
+        connection.async_handle({"id": connection.last_id+1, "type": "loona/panel", "dashboard": "wall-panel", "live_dashboard": True, "view": route})
+        assert runtime.resource_loading_plan(connection, "wall-panel")["defer"] == []
+    connection.async_handle({"id": connection.last_id+1, "type": "loona/panel", "dashboard": "wall-panel", "live_dashboard": True, "view": "main", "expanded": True})
+    assert not runtime.resource_loading_plan(connection, "wall-panel")["enabled"]
+    connection.async_handle({"id": connection.last_id+1, "type": "loona/panel", "dashboard": "wall-panel", "view": "main"})
+    assert runtime.resource_loading_plan(connection, "wall-panel")["defer"] == [], "Older reporters keep dashboard priority"
+
+
+def test_view_resource_routes_match_entity_routes_and_keep_shared_declarations():
+    config = {"decluttering_templates": {"shared": {"card": {"type": "custom:button-card"}}}, "views": [
+        {"path": "1", "cards": [{"type": "custom:mini-graph-card"}]},
+        {"path": "energy", "cards": [{"type": "custom:apexcharts-card"}]},
+        {"path": "01", "cards": [{"type": "custom:bubble-card"}]},
+    ]}
+    plans = resource_view_dependencies(config)
+    assert plans["0"] == plans["1"]
+    assert plans["1"].custom_types == {"mini-graph-card", "button-card"}
+    assert plans["energy"].custom_types == {"apexcharts-card", "button-card"}
+    assert "01" not in plans and "" not in plans
+    assert resource_view_dependencies({"strategy": {"type": "custom:auto"}}) == {}
 
 
 async def request(hass, connection, output, name="lovelace/resources/list", **fields):

@@ -42,7 +42,7 @@ const context = vm.createContext({
   customElements: { get: () => App },
 });
 const source = readFileSync(new URL("../custom_components/loona/frontend/panel-context.js", import.meta.url), "utf8")
-  .replace('import "./resource-loading.js?v=0.9.8";', readFileSync(new URL("../custom_components/loona/frontend/resource-loading.js", import.meta.url), "utf8"))
+  .replace('import "./resource-loading.js?v=0.9.9";', readFileSync(new URL("../custom_components/loona/frontend/resource-loading.js", import.meta.url), "utf8"))
   .replaceAll("import.meta.url", JSON.stringify("http://test/loona/panel-context.js?poll=100"));
 vm.runInContext(source, context);
 const socket = new Socket();
