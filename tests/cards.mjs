@@ -17,7 +17,7 @@ globalThis.window=window;
 globalThis.IntersectionObserver=class { observe() {} disconnect() {} };
 const app=document.createElement("home-assistant"); document.body.append(app);
 let current={
-  version:"0.9.7",revision:"a".repeat(64),choice_page:50,
+  version:"0.9.8",revision:"a".repeat(64),choice_page:50,
   values:{controls:{enabled:true,entity_filtering:true,current_dashboard_updates:true},dashboards:{dashboards:["wall-panel"]},targets:{target_mode:"all",user_ids:[]},
     rules:{extra_entities:[],include_domains:[],include_globs:[],exclude_globs:[]},resources:{always_forward_resources:[]},cards:{dashboard_cards:[]}},
   choices:{dashboards:[{value:"wall-panel",label:"Wall"}],user_ids:[],extra_entities:[{value:"sensor.wall",label:"Wall"}],include_domains:[],include_globs:[],exclude_globs:[],always_forward_resources:[],dashboard_cards:[{value:"statistics",label:"statistics"}]},
@@ -27,11 +27,11 @@ const copy=value=>JSON.parse(JSON.stringify(value));
 let conflict=false;
 const requests=[];
 const services=[];
-const statistics={version:"0.9.7",controls:{enabled:true,entity_filtering:true},complete:true,metrics:{current_scope:1,filtered_subscriptions:1,managed_subscriptions:1,forwarded_rate:1,avoided_rate:2,update_reduction:3,forwarded_updates:4,avoided_updates:5,reduction_estimate:6},reset_at:"2026-10-02T01:00:00Z",page_loads:[],notices:[],interval_seconds:30};
+const statistics={version:"0.9.8",controls:{enabled:true,entity_filtering:true},complete:true,metrics:{current_scope:1,filtered_subscriptions:1,managed_subscriptions:1,forwarded_rate:1,avoided_rate:2,update_reduction:3,forwarded_updates:4,avoided_updates:5,reduction_estimate:6},reset_at:"2026-10-02T01:00:00Z",rate_history:[{at:"2026-10-02T01:00:30Z",seconds:30,sent:0,filtered:0},{at:"2026-10-02T01:01:00Z",seconds:30,sent:.5,filtered:3},{at:"2026-10-02T01:01:30Z",seconds:30,sent:1,filtered:2}],page_loads:[],notices:[],interval_seconds:30};
 const hass={user:{id:"admin",is_admin:true},language:"en",connection:Object.assign(new window.EventTarget(),{connected:true}),locale:{language:"en",number_format:"decimal_comma",time_format:"24",time_zone:"server"},config:{time_zone:"UTC"},
   async callWS(request) {
     requests.push(request);
-    if(request.type==="loona/statistics") return copy(statistics);
+    if(request.type==="loona/statistics") { const data=copy(statistics); data.rate_history=request.include_rate_history ? copy(statistics.rate_history) : []; return data; }
     if(request.type==="loona/settings_choices") return {choices:[{value:"sensor.remote",label:"Remote"}],selected:[],more:false};
     if(request.type==="loona/save_settings") {
       if(conflict) throw {code:"conflict"};
@@ -51,22 +51,58 @@ await new Promise(setImmediate);
 assert.equal(stats.shadowRoot.getElementById("scope").textContent,"1 entity");
 assert.equal(stats.shadowRoot.getElementById("forwarded").textContent,"1,0");
 assert.ok(stats.shadowRoot.getElementById("reset-time").textContent.includes("01:00:00"));
-// Charts are opt-in and share the existing data without additional requests.
-assert.equal(stats.shadowRoot.getElementById("charts").children.length,0);
+// Chart history is requested on opt-in and reuses normal polling, with no SVG off.
+assert.equal(stats.shadowRoot.querySelectorAll(".metric-chart svg").length,0);
 const beforeCharts=requests.length;
+stats.shadowRoot.getElementById("show-charts").click(); await new Promise(setImmediate);
+assert.equal(stats.shadowRoot.querySelectorAll(".metric-chart svg").length,5);
+assert.equal(requests.length,beforeCharts+1);
+assert.equal(requests.at(-1).include_rate_history,true);
+assert.ok(stats.shadowRoot.querySelector('#reduction-chart [data-part="ring"]').getAttribute("stroke-dasharray").startsWith("3 "));
+assert.equal(stats.shadowRoot.querySelector('#reduction-chart [data-part="value"]').textContent,"3%".replace("%"," %"));
+assert.equal(stats.shadowRoot.querySelector('#feeds-chart [data-part="value"]').textContent,"1 / 1");
+assert.ok(stats.shadowRoot.querySelector('#estimate-chart [data-part="ring"]'));
+const sentPlot=stats.shadowRoot.querySelector("#sent-chart svg");
+const sampleData={...copy(statistics),rate_history:copy(statistics.rate_history)};
+stats._render(sampleData);
+assert.equal(stats.shadowRoot.querySelector("#sent-chart svg"),sentPlot,"Reuse SVG nodes during normal refresh");
+const sentPoints=sentPlot.querySelector('[data-part="line"]').getAttribute("points").split(" ");
+const filteredPoints=stats.shadowRoot.querySelector('#filtered-chart [data-part="line"]').getAttribute("points").split(" ");
+assert.equal(sentPoints.length,3);
+assert.equal(sentPoints.at(-1).split(",")[1],"113.33");
+assert.equal(filteredPoints.at(-1).split(",")[1],"98.67","Both rate curves must use the same scale");
+stats._render({...copy(statistics),rate_history:[],metrics:{...statistics.metrics,forwarded_rate:0,avoided_rate:0}});
+assert.equal(stats.shadowRoot.querySelectorAll(".metric-chart svg").length,5,"Idle and initial readings still have chart geometry");
+assert.ok(stats.shadowRoot.getElementById("sent-chart").textContent.includes("No history yet"));
 stats.shadowRoot.getElementById("show-charts").click();
-assert.equal(stats.shadowRoot.querySelectorAll("#charts svg").length,2);
-assert.equal(requests.length,beforeCharts);
-assert.ok(stats.shadowRoot.querySelector('[data-chart="pie"]').getAttribute("stroke-dasharray").startsWith("3 "));
-assert.equal(stats.shadowRoot.querySelector('[data-chart="percentage"]').textContent,"3%");
-const pie=stats.shadowRoot.querySelector("#charts svg");
-stats._render(copy(statistics));
-assert.equal(stats.shadowRoot.querySelector("#charts svg"),pie,"Reuse SVG nodes during normal refresh");
-stats._renderCharts({...statistics.metrics,forwarded_rate:0,avoided_rate:0});
-assert.equal(stats.shadowRoot.querySelectorAll("#charts svg").length,0);
-assert.ok(stats.shadowRoot.getElementById("charts").textContent.includes("No updates"));
-stats.shadowRoot.getElementById("show-charts").click();
-assert.equal(stats.shadowRoot.getElementById("charts").children.length,0);
+assert.equal(stats.shadowRoot.querySelectorAll(".metric-chart svg").length,0);
+assert.equal(stats.shadowRoot.getElementById("measure"),null,"Measurement action belongs to the benchmark backlog");
+assert.equal(stats.shadowRoot.getElementById("chart-help"),null);
+// An older backend can reject the optional field; still surface its reload notice.
+const nativeCallWS=hass.callWS;
+hass.callWS=async request=>{
+  if(request.type==="loona/statistics" && request.include_rate_history) { requests.push(request); throw {code:"invalid_format"}; }
+  const result=await nativeCallWS(request);
+  if(request.type==="loona/statistics") result.version="0.9.7";
+  return result;
+};
+const beforeFallback=requests.length;
+stats.shadowRoot.getElementById("show-charts").click(); await stats._fetch();
+assert.equal(requests.length,beforeFallback+2,"Retry the native read once for an older backend");
+assert.ok(stats.shadowRoot.getElementById("version").textContent.includes("Reload dashboard"));
+await stats._fetch();
+assert.equal(requests.at(-1).include_rate_history,undefined,"Do not retry unsupported history on subsequent reads");
+stats.shadowRoot.getElementById("show-charts").click(); hass.callWS=nativeCallWS; await stats._fetch();
+// Help works with focus, keyboard, click and native summary controls.
+const help=settings.shadowRoot.querySelector('[data-help-section="Dashboards"]');
+const group=help.closest("details"), wasOpen=group.open;
+help.focus(); assert.equal(help.getAttribute("aria-expanded"),"true");
+help.click(); assert.equal(group.open,wasOpen,"Help must not toggle the settings group");
+const tip=settings.shadowRoot.getElementById(help.getAttribute("aria-describedby"));
+assert.equal(tip.hidden,false); assert.ok(tip.textContent.includes("Choose which dashboards"));
+help.dispatchEvent(new window.KeyboardEvent("keydown",{key:"Escape",bubbles:true,composed:true}));
+assert.equal(tip.hidden,true); assert.equal(help.getAttribute("aria-expanded"),"false");
+assert.equal(stats.shadowRoot.getElementById("interval").hidden,true);
 // Disable Current tab updates immediately for an unsaved filtering change.
 settings.shadowRoot.querySelector('[data-control="entity_filtering"]').click();
 assert.ok(settings.shadowRoot.querySelector('[data-control="current_dashboard_updates"]').disabled);
@@ -81,29 +117,37 @@ assert.ok(matches.textContent.includes("Bathroom ceiling fan"));
 assert.equal(matches.querySelector("small").textContent,"fan.bathroom_ceiling");
 // Reconnect checks the backend version while preserving an unsaved draft.
 settings._edit("rules","extra_entities",["sensor.wall"]);
-statistics.version="0.9.8";
+statistics.version="0.9.9";
 hass.connection.dispatchEvent(new Event("ready")); await new Promise(setImmediate);
 assert.ok(settings._drafts.rules);
 assert.ok(settings.shadowRoot.getElementById("version").querySelector("button").disabled);
 settings.shadowRoot.querySelector('[data-cancel="rules"]').click();
-statistics.version="0.9.7";
+statistics.version="0.9.8";
 // Loaded-module mismatch offers reload; settings drafts prevent accidental loss.
-stats._render({...copy(statistics),version:"0.9.8"});
+stats._render({...copy(statistics),version:"0.9.9"});
 assert.ok(stats.shadowRoot.getElementById("version").textContent.includes("Reload dashboard"));
-settings._data.version="0.9.8"; settings._render(); settings._edit("controls","enabled",false);
+settings._data.version="0.9.9"; settings._render(); settings._edit("controls","enabled",false);
 assert.ok(settings.shadowRoot.getElementById("version").querySelector("button").disabled);
 settings.shadowRoot.querySelector('[data-cancel="controls"]').click();
 assert.ok(!settings.shadowRoot.getElementById("version").querySelector("button").disabled);
-settings._data.version="0.9.7"; settings._render(); stats._render(copy(statistics));
-// Dismissals survive card reconstruction, stay account-local and change with items.
+settings._data.version="0.9.8"; settings._render(); stats._render(copy(statistics));
+// Dismissals survive card reconstruction, stay account-local and remain silent.
 statistics.notices=[{code:"missing_entities",severity:"warning",items:["sensor.lost"]}];
 statistics.notice_labels={"sensor.lost":"Missing sensor"};
+// Preserve a dismissal saved by the previous opaque-fingerprint format.
+const legacyHass={...hass,user:{id:"legacy-admin",is_admin:true}};
+window.localStorage.setItem("loona-card-preferences:legacy-admin",JSON.stringify({dismissed:["f540c17b:21744d15"]}));
+const legacy=document.createElement("loona-statistics-card"); legacy.setConfig({}); document.body.append(legacy); legacy.hass=legacyHass;
+await new Promise(setImmediate);
+assert.equal(legacy.shadowRoot.querySelector('[data-notice="missing_entities"]'),null);
+assert.ok(JSON.parse(window.localStorage.getItem("loona-card-preferences:legacy-admin")).dismissedCodes.includes("missing_entities"));
+legacy.remove();
 await stats._fetch();
 assert.equal(stats.shadowRoot.querySelector(".notice-items small").textContent,"sensor.lost");
 stats.shadowRoot.querySelector('[data-dismiss="missing_entities"]').click();
 assert.equal(stats.shadowRoot.querySelector('[data-notice="missing_entities"]'),null);
 await stats._fetch();
-assert.ok(stats.shadowRoot.querySelector("[data-restore-warnings]"));
+assert.equal(stats.shadowRoot.getElementById("notices").children.length,0,"No dismissal status or restore action");
 const second=document.createElement("loona-statistics-card"); second.setConfig({}); document.body.append(second); second.hass=hass;
 await new Promise(setImmediate);
 assert.equal(second.shadowRoot.querySelector('[data-notice="missing_entities"]'),null);
@@ -111,25 +155,8 @@ second.hass={...hass,user:{id:"other-admin",is_admin:true}}; await new Promise(s
 assert.ok(second.shadowRoot.querySelector('[data-notice="missing_entities"]'));
 second.remove();
 statistics.notices[0].items.push("sensor.new_missing"); await stats._fetch();
-assert.ok(stats.shadowRoot.querySelector('[data-notice="missing_entities"]'),"Changed warnings must reappear");
-statistics.notices[0].items.pop(); await stats._fetch();
-stats.shadowRoot.querySelector("[data-restore-warnings]").click();
-assert.ok(stats.shadowRoot.querySelector('[data-notice="missing_entities"]'));
+assert.equal(stats.shadowRoot.querySelector('[data-notice="missing_entities"]'),null,"Dismissed warning types remain hidden when affected items change");
 statistics.notices=[]; await stats._fetch();
-let finishMeasurement;
-window.loonaMeasurePerformance = () => new Promise(resolve => { finishMeasurement = resolve; });
-const measurement = stats._measure();
-await stats._fetch();
-finishMeasurement();
-await measurement;
-assert.equal(stats.shadowRoot.getElementById("measure-status").textContent,"Measurement saved.","Normal polling must not discard a completed measurement");
-const staleMeasurement = stats._measure();
-stats.hass = {...hass,user:{id:"reader",is_admin:false}};
-finishMeasurement();
-await staleMeasurement;
-assert.equal(stats.shadowRoot.getElementById("measure-status").textContent, "", "An account change clears measurement status");
-stats.hass = hass;
-await new Promise(setImmediate);
 const state=settings.shadowRoot.getElementById("state");
 let announcements=0;
 const observer=new MutationObserver(rows=>announcements+=rows.length);

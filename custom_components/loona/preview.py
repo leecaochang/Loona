@@ -18,7 +18,7 @@ from .runtime import LoonaRuntime
 from .presentation import entity_label, notice_labels, resource_labels
 
 
-def statistics_report(runtime: LoonaRuntime) -> dict[str, Any]:
+def statistics_report(runtime: LoonaRuntime, include_rate_history: bool = False) -> dict[str, Any]:
     """Keep statistics, notices and operating status compact."""
     notices = runtime.notice_report()
     noisy = runtime.live_statistics.noisy_report()
@@ -40,6 +40,7 @@ def statistics_report(runtime: LoonaRuntime) -> dict[str, Any]:
         "reset_at": runtime.live_statistics.reset_at.isoformat(),
         "interval_seconds": METRIC_SECONDS,
         "sample_seconds": runtime.live_statistics.sample_seconds,
+        "rate_history": list(runtime.live_statistics.rate_history) if include_rate_history else [],
         "page_loads": list(reversed(runtime.live_statistics.page_loads.values())),
         "noisy_entities": noisy,
         "browser_reports": reports,
@@ -53,6 +54,7 @@ def statistics_report(runtime: LoonaRuntime) -> dict[str, Any]:
 @websocket_api.require_admin
 @websocket_api.websocket_command({
     vol.Required("type"): "loona/statistics",
+    vol.Optional("include_rate_history", default=False): bool,
 })
 def websocket_statistics(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Never expose configuration or dependency IDs to non-admin accounts."""
@@ -60,7 +62,7 @@ def websocket_statistics(hass: HomeAssistant, connection: websocket_api.ActiveCo
     if runtime is None:
         connection.send_error(msg["id"], "not_loaded", "Loona is not loaded")
         return
-    connection.send_result(msg["id"], statistics_report(runtime))
+    connection.send_result(msg["id"], statistics_report(runtime, msg["include_rate_history"]))
 
 
 def _finite_duration(value: Any) -> float:

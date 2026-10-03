@@ -115,3 +115,28 @@ async def test_multiple_clients_creation_removal_and_reset(hass, make_user, make
         assert statistics.forwarded == 2 and statistics.avoided == 0
     finally:
         adapter.uninstall()
+
+
+def test_rate_history_is_bounded_sampling_only_and_resets():
+    """Reads do not add samples, and idle windows remain visible in history."""
+    from datetime import datetime, timedelta, UTC
+    from custom_components.loona.const import RATE_HISTORY_LIMIT
+    with patch("custom_components.loona.statistics.monotonic", return_value=0):
+        statistics = LiveStatistics()
+    start = datetime(2026, 10, 3, tzinfo=UTC)
+    for index in range(RATE_HISTORY_LIMIT + 5):
+        if index % 2 == 0:
+            for _ in range(60):
+                statistics.record(True)
+        at = start + timedelta(seconds=30 * (index + 1))
+        with patch("custom_components.loona.statistics.monotonic", return_value=30 * (index + 1)), patch("custom_components.loona.statistics.dt_util.utcnow", return_value=at):
+            statistics.sample()
+    rows = list(statistics.rate_history)
+    assert len(rows) == RATE_HISTORY_LIMIT
+    assert rows[0]["at"] == (start + timedelta(seconds=180)).isoformat()
+    assert rows[-1] == {"at": at.isoformat(), "seconds": 30.0, "sent": 2.0, "filtered": 0.0}
+    assert {row["sent"] for row in rows} == {0.0, 2.0}
+    statistics.metrics()
+    assert list(statistics.rate_history) == rows
+    statistics.reset()
+    assert not statistics.rate_history

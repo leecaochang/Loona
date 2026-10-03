@@ -193,7 +193,17 @@ const chinese = {
   "Reload dashboard": "重新加载仪表盘",
   "Sent: {sent} updates/s; filtered: {filtered} updates/s": "已发送：{sent} 次更新/秒；已筛选：{filtered} 次更新/秒",
   "{percent}% of counted updates filtered": "已筛选记录更新的 {percent}%",
-  "{count} sent updates": "已发送 {count} 次更新"
+  "{count} sent updates": "已发送 {count} 次更新",
+  "Help: {section}": "帮助：{section}",
+  "Live updates": "实时更新",
+  "Totals and entity scope": "总计与实体范围",
+  "Rescan checks dashboard changes now.": "立即检查仪表盘变化。",
+  "Reset clears live counters and page-load records; entity counts and recorded history stay unchanged.": "清零实时计数并清除页面加载记录，不影响实体数量或已记录的历史数据。",
+  "Charts show up to 15 minutes of completed samples. Rate charts share the same scale and refresh with statistics.": "图表显示最多 15 分钟的已完成采样。速率图使用相同纵轴范围，并随统计数据刷新。",
+  "{minutes} min history": "{minutes} 分钟历史",
+  "No history yet": "暂无历史",
+  "No updates": "没有更新",
+  "{label}: {rate} updates/s. {history}": "{label}：每秒 {rate} 次更新。{history}"
 };
 
 export function cancelConfirmation(host) {
@@ -248,7 +258,68 @@ export function text(hass, key, values = {}) {
   const message = simplified ? chinese[key] || key : key;
   return message.replace(/\{(\w+)\}/g, (_, name) => String(values[name] ?? ""));
 }
+export const helpStyles = `
+  ha-card { position:relative; }
+  .help { display:inline-flex; vertical-align:middle; margin-inline-start:auto; }
+  .help-button { display:inline-flex; align-items:center; justify-content:center; min-width:44px; height:44px; padding:8px; flex-shrink:0; }
+  .help-button svg { width:20px; height:20px; }
+  .help-text { position:fixed; z-index:1000; box-sizing:border-box; width:320px; max-width:calc(100vw - 32px);
+    max-height:calc(100vh - 32px); overflow:auto; padding:16px; border:1px solid var(--divider-color);
+    border-radius:var(--ha-border-radius,8px); background:var(--card-background-color); color:var(--primary-text-color);
+    font-family:inherit; font-size:14px; font-weight:400; line-height:1.5; text-align:start; white-space:normal; }
+  .section-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .section-heading h2 { flex:1; min-width:0; }
+  summary.section-heading,summary.section-summary { display:list-item; line-height:44px; }
+  summary .help { float:right; float:inline-end; }
+  .action-help { display:inline-flex; align-items:center; }
+`;
+let helpSequence = 0, activeHelp;
+export function closeHelp(root) {
+  if (!root || activeHelp?.root.getRootNode() === root) activeHelp?.close();
+}
+export function createHelp(hass, section, message, id) {
+  const root=document.createElement("span"); root.className="help";
+  const button=document.createElement("button"); button.type="button"; button.className="help-button"; button.dataset.helpSection=section;
+  button.setAttribute("aria-label",text(hass,"Help: {section}",{section:text(hass,section)}));
+  button.setAttribute("aria-expanded","false");
+  button.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="16.5" r=".8" fill="currentColor"/></svg>';
+  const body=document.createElement("span"); body.className="help-text"; body.id=id || "loona-help-"+(++helpSequence); body.setAttribute("role","tooltip"); body.hidden=true;
+  body.textContent=text(hass,message); if (message) body.dataset.i18n=message;
+  button.setAttribute("aria-describedby",body.id); root.append(button,body);
+  let leaveTimer;
+  const close=()=>{
+    window.clearTimeout(leaveTimer);
+    body.hidden=true; button.setAttribute("aria-expanded","false");
+    document.removeEventListener("pointerdown",outside); document.removeEventListener("keydown",escape);
+    window.removeEventListener("resize",close); window.removeEventListener("scroll",close,true);
+    if (activeHelp?.root===root) activeHelp=undefined;
+  };
+  const outside=event=>{ if (!event.composedPath().includes(root)) close(); };
+  const escape=event=>{ if (event.key==="Escape") { event.preventDefault(); event.stopPropagation(); close(); } };
+  const open=pinned=>{
+    if (activeHelp?.root!==root) activeHelp?.close();
+    activeHelp={root,close,pinned}; body.hidden=false; button.setAttribute("aria-expanded","true");
+    const bounds=button.getBoundingClientRect(), width=Math.min(320,window.innerWidth-32);
+    body.style.left=Math.max(16,Math.min(bounds.right-width,window.innerWidth-width-16))+"px";
+    body.style.top="16px";
+    const height=body.getBoundingClientRect().height;
+    body.style.top=Math.max(16,bounds.bottom+height+8<=window.innerHeight-16 ? bounds.bottom+8 : bounds.top-height-8)+"px";
+    document.addEventListener("pointerdown",outside); document.addEventListener("keydown",escape);
+    window.addEventListener("resize",close); window.addEventListener("scroll",close,true);
+  };
+  button.addEventListener("pointerenter",()=>{ if (!activeHelp?.pinned) open(false); });
+  button.addEventListener("focus",()=>{ if (activeHelp?.root!==root) open(false); });
+  button.addEventListener("click",event=>{
+    event.preventDefault(); event.stopPropagation();
+    if (activeHelp?.root===root && activeHelp.pinned) close(); else open(true);
+  });
+  root.addEventListener("pointerenter",()=>window.clearTimeout(leaveTimer));
+  root.addEventListener("pointerleave",()=>{ if (activeHelp?.root===root && !activeHelp.pinned && root.getRootNode().activeElement!==button) leaveTimer=window.setTimeout(close,150); });
+  button.addEventListener("blur",()=>{ if (activeHelp?.root===root && !activeHelp.pinned) close(); });
+  return root;
+}
 export function translate(root, hass) {
+  root.querySelectorAll("[data-help-section]").forEach(button=>button.setAttribute("aria-label",text(hass,"Help: {section}",{section:text(hass,button.dataset.helpSection)})));
   root.querySelectorAll("[data-i18n]").forEach(element => { element.textContent = text(hass, element.dataset.i18n); });
   root.querySelectorAll("[data-i18n-placeholder]").forEach(element => {
     element.placeholder = text(hass, element.dataset.i18nPlaceholder);
@@ -339,13 +410,13 @@ export function cardPreferences(hass) {
   } catch { /* Private browsing may block persistent storage. */ }
   return localPreferences.get(key) || {};
 }
-export function saveCardPreferences(hass, changes, reset = false) {
+export function saveCardPreferences(hass, changes, reset = false, notify = true) {
   if (!hass?.user?.is_admin) return;
   const key = preferenceKey(hass);
   const values = reset ? {} : {...cardPreferences(hass), ...changes};
   localPreferences.set(key, values);
   try { window.localStorage.setItem(key, JSON.stringify(values)); } catch { /* Keep session preferences. */ }
-  window.dispatchEvent(new Event("loona-card-preferences"));
+  if (notify) window.dispatchEvent(new Event("loona-card-preferences"));
 }
 function noticeFingerprint(item) {
   // Two independent hashes avoid storing affected entity IDs in browser preferences.
@@ -373,17 +444,17 @@ export function renderNotices(root, hass, items, labels = {}) {
   }
   items = items.filter(item => notices[item.code]);
   const preferences = cardPreferences(hass);
-  const dismissed = new Set(Array.isArray(preferences.dismissed) ? preferences.dismissed : []);
-  const visible = items.filter(item => !dismissed.has(noticeFingerprint(item)));
-  const hiddenCount = items.length - visible.length;
+  const legacy = new Set(Array.isArray(preferences.dismissed) ? preferences.dismissed : []);
+  const dismissed = new Set(Array.isArray(preferences.dismissedCodes) ? preferences.dismissedCodes : []);
+  let migrated=false;
+  for (const item of items) if (!dismissed.has(item.code) && legacy.has(noticeFingerprint(item))) { dismissed.add(item.code); migrated=true; }
+  if (migrated) saveCardPreferences(hass,{dismissedCodes:[...dismissed]},false,false);
+  const visible = items.filter(item => !dismissed.has(item.code));
   const open = root.querySelector("details")?.open;
   root.replaceChildren();
-  if (!visible.length) {
-    const healthy=document.createElement("p"); healthy.textContent=text(hass,hiddenCount ? "No visible warnings" : "No warnings"); root.append(healthy);
-  } else {
+  if (visible.length) {
     const section=document.createElement("details"); section.className="loona-notices"; section.open=Boolean(open);
     const summary=document.createElement("summary"); summary.textContent=text(hass,"Warnings and checks ({count})",{count:visible.length}); section.append(summary);
-    const explanation=document.createElement("p"); explanation.textContent=text(hass,"Dismissals apply to this account in this browser. Changed warnings appear again."); section.append(explanation);
     const list=document.createElement("ul");
     for (const item of visible) {
       const message=notices[item.code];
@@ -408,22 +479,14 @@ export function renderNotices(root, hass, items, labels = {}) {
       dismiss.setAttribute("aria-label",text(hass,"Dismiss")+": "+text(hass,message[0]));
       dismiss.addEventListener("click", () => {
         const latest=cardPreferences(hass);
-        const previous=Array.isArray(latest.dismissed) ? latest.dismissed : [];
-        saveCardPreferences(hass,{dismissed:[...new Set([...previous,noticeFingerprint(item)])].slice(-100)});
+        const previous=Array.isArray(latest.dismissedCodes) ? latest.dismissedCodes : [];
+        saveCardPreferences(hass,{dismissedCodes:[...new Set([...previous,item.code])].filter(code=>notices[code])});
         renderNotices(root,hass,source,labels);
         root.querySelector("summary,button")?.focus();
       });
       row.append(dismiss); list.append(row);
     }
     section.append(list); root.append(section);
-  }
-  if (hiddenCount) {
-    const restore=document.createElement("button"); restore.dataset.restoreWarnings="";
-    restore.textContent=text(hass,"Show dismissed warnings ({count})",{count:hiddenCount});
-    restore.addEventListener("click", () => {
-      saveCardPreferences(hass,{dismissed:[]}); renderNotices(root,hass,source,labels);
-      root.querySelector("summary")?.focus();
-    }); root.append(restore);
   }
 }
 

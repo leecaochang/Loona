@@ -1,5 +1,5 @@
 /* Report dashboard context and recover when Core reconnects before Loona. */
-import "./resource-loading.js?v=0.9.7";
+import "./resource-loading.js?v=0.9.8";
 
 if (!window.__loonaPanelContext) {
   window.__loonaPanelContext = true;

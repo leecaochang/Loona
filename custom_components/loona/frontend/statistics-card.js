@@ -1,7 +1,7 @@
 /* Native-themed live filtering statistics. */
-import { language, text, translate, renderNotices, renderVersion, cardPreferences, saveCardPreferences, setText, formatNumber, formatDateTime, confirmAction, cancelConfirmation } from "./i18n.js?v=0.9.7";
+import { language, text, translate, renderNotices, renderVersion, cardPreferences, saveCardPreferences, setText, formatNumber, formatDateTime, confirmAction, cancelConfirmation, createHelp, closeHelp, helpStyles } from "./i18n.js?v=0.9.8";
 
-const cardVersion = "0.9.7";
+const cardVersion = "0.9.8";
 const command = "loona/statistics";
 const elementName = "loona-statistics-card";
 
@@ -10,6 +10,77 @@ function node(tag, text, className) {
   if (text !== undefined) element.textContent = text;
   if (className) element.className = className;
   return element;
+}
+
+function svg(tag, attributes = {}) {
+  const element=document.createElementNS("http://www.w3.org/2000/svg",tag);
+  for (const [key,value] of Object.entries(attributes)) element.setAttribute(key,String(value));
+  return element;
+}
+function chartText(x,y,size,attributes={}) { return svg("text",{x,y,"font-size":size,fill:"var(--primary-text-color)",...attributes}); }
+function rateChart(root,hass,label,value,history,key,max) {
+  if (!root.firstElementChild) {
+    const plot=svg("svg",{viewBox:"0 0 120 160",role:"img","data-chart":key});
+    plot.append(chartText(6,18,14,{"data-part":"label"}),chartText(6,50,26,{"data-part":"value"}),chartText(6,72,14,{"data-part":"unit"}));
+    plot.append(svg("line",{x1:6,x2:114,y1:128,y2:128,stroke:"var(--divider-color)"}));
+    plot.append(svg("polyline",{fill:"none",stroke:"var(--primary-color)","stroke-width":2,"data-part":"line"}));
+    plot.append(svg("circle",{r:2.5,fill:"var(--primary-color)","data-part":"latest"}));
+    plot.append(chartText(6,150,13.5,{"data-part":"history",fill:"var(--secondary-text-color)"})); root.append(plot);
+  }
+  const plot=root.firstElementChild;
+  const formatted=formatNumber(hass,value,{minimumFractionDigits:1,maximumFractionDigits:1});
+  plot.querySelector('[data-part="label"]').textContent=text(hass,label);
+  const number=plot.querySelector('[data-part="value"]'); number.textContent=formatted;
+  number.setAttribute("font-size",String(Math.min(26,104/(Math.max(1,formatted.length)*.62))));
+  plot.querySelector('[data-part="unit"]').textContent=text(hass,"updates/s");
+  const start=history.length ? Date.parse(history[0].at)-1000*history[0].seconds : 0;
+  const end=history.length ? Date.parse(history[history.length-1].at) : 0;
+  const span=Math.max(1,end-start);
+  const points=history.map(row=>[6+108*(Date.parse(row.at)-start)/span,128-44*Math.max(0,row[key])/max]);
+  plot.querySelector('[data-part="line"]').setAttribute("points",points.map(([x,y])=>`${x.toFixed(2)},${y.toFixed(2)}`).join(" "));
+  const dot=plot.querySelector('[data-part="latest"]'); dot.hidden=!points.length; dot.style.display=points.length ? "" : "none";
+  if (points.length) { dot.setAttribute("cx",String(points[points.length-1][0])); dot.setAttribute("cy",String(points[points.length-1][1])); }
+  const caption=history.length ? text(hass,"{minutes} min history",{minutes:formatNumber(hass,span/60000,{maximumFractionDigits:1})}) : text(hass,"No history yet");
+  plot.querySelector('[data-part="history"]').textContent=caption;
+  plot.setAttribute("aria-label",text(hass,"{label}: {rate} updates/s. {history}",{label:text(hass,label),rate:formatted,history:caption}));
+}
+function ringChart(root,hass,label,value,full,hasUpdates) {
+  if (!root.firstElementChild) {
+    const chart=svg("svg",{viewBox:full ? "0 0 120 160" : "0 0 100 100",role:"img","data-chart":"ring"});
+    if (full) chart.append(chartText(60,18,14,{"text-anchor":"middle","data-part":"label"}));
+    const cx=full ? 60 : 50, cy=full ? 88 : 50;
+    chart.append(svg("circle",{cx,cy,r:34,fill:"none",stroke:"var(--divider-color)","stroke-width":12}));
+    chart.append(svg("circle",{cx,cy,r:34,fill:"none",stroke:"var(--primary-color)","stroke-width":12,pathLength:100,transform:`rotate(-90 ${cx} ${cy})`,"data-part":"ring"}));
+    chart.append(chartText(cx,cy+7,22,{"text-anchor":"middle","data-part":"value"}));
+    if (full) chart.append(chartText(60,150,13.5,{"text-anchor":"middle","data-part":"empty",fill:"var(--secondary-text-color)"})); root.append(chart);
+  }
+  const chart=root.firstElementChild, percentage=Math.min(100,Math.max(0,Number(value)||0));
+  const formatted=formatNumber(hass,percentage/100,{style:"percent",maximumFractionDigits:1});
+  chart.querySelector('[data-part="ring"]').setAttribute("stroke-dasharray",`${percentage} ${100-percentage}`);
+  const number=chart.querySelector('[data-part="value"]'); number.textContent=formatted;
+  number.setAttribute("font-size",String(Math.min(22,58/(Math.max(1,formatted.length)*.62))));
+  if (full) {
+    chart.querySelector('[data-part="label"]').textContent=text(hass,label);
+    chart.querySelector('[data-part="empty"]').textContent=hasUpdates ? "" : text(hass,"No updates");
+  }
+  chart.setAttribute("aria-label",text(hass,label)+": "+formatted+(!hasUpdates ? ". "+text(hass,"No updates") : ""));
+}
+function feedChart(root,hass,filtered,total) {
+  if (!root.firstElementChild) {
+    const chart=svg("svg",{viewBox:"0 0 320 78",role:"img","data-chart":"feeds"});
+    chart.append(chartText(0,18,14,{"data-part":"label"}));
+    chart.append(svg("rect",{x:0,y:30,width:320,height:40,fill:"var(--secondary-background-color)"}));
+    chart.append(svg("rect",{x:0,y:30,height:40,fill:"var(--primary-color)","data-part":"bar"}));
+    chart.append(svg("rect",{x:123,y:37,width:74,height:26,fill:"var(--card-background-color)"}));
+    chart.append(chartText(160,56,18,{"text-anchor":"middle","data-part":"value"})); root.append(chart);
+  }
+  const chart=root.firstElementChild, count=Math.min(Math.max(0,Number(total)||0),Math.max(0,Number(filtered)||0));
+  chart.querySelector('[data-part="label"]').textContent=text(hass,"Filtered update feeds");
+  chart.querySelector('[data-part="bar"]').setAttribute("width",String(total ? 320*count/total : 0));
+  const formatted=formatNumber(hass,count)+" / "+formatNumber(hass,total);
+  const number=chart.querySelector('[data-part="value"]'); number.textContent=formatted;
+  number.setAttribute("font-size",String(Math.min(18,66/(Math.max(1,formatted.length)*.62))));
+  chart.setAttribute("aria-label",text(hass,"{filtered} of {total} update feeds filtered",{filtered:formatNumber(hass,count),total:formatNumber(hass,total)}));
 }
 
 function install() {
@@ -26,11 +97,10 @@ function install() {
       super();
       this.attachShadow({ mode: "open" });
       this._sequence = 0;
-      this._measureSequence = 0;
       this._visible = true;
       this._lastRequest = 0;
       this.shadowRoot.innerHTML = `
-        <style>
+        <style>${helpStyles}
           :host { user-select:text; -webkit-user-select:text; display:block; color:var(--primary-text-color); }
           ha-card { user-select:text; -webkit-user-select:text; padding:24px; overflow:hidden; }
           header { display:flex; justify-content:space-between; align-items:start; gap:16px; }
@@ -66,10 +136,20 @@ function install() {
           .chart-choice { display:flex; align-items:center; gap:12px; min-height:44px; font-size:14px; margin-top:16px; cursor:pointer; }
           .chart-choice input { width:18px; height:18px; accent-color:var(--primary-color); }
           .chart-choice input:focus-visible { outline:2px solid var(--primary-color); outline-offset:2px; }
-          #charts { display:flex; align-items:center; gap:24px; margin-top:16px; }
-          #charts svg { display:block; max-width:100%; }
-          #charts .distribution { flex:1; min-width:0; }
-          #charts .pie { width:88px; height:88px; flex-shrink:0; }
+          .metric-tools { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:12px; }
+          .metric-tools .chart-choice { margin:0; }
+          .rates { margin-top:12px; }
+          .metric-chart svg { display:block; width:100%; height:auto; font-family:inherit; }
+          .metric-chart { min-width:0; }
+          #feeds-chart { grid-column:1/-1; min-width:0; margin:8px 0; }
+          #feeds-chart svg { display:block; width:100%; height:auto; }
+          #estimate-chart { width:88px; }
+          #estimate-chart svg { display:block; width:100%; }
+          .facts { align-items:center; }
+          .fact-heading { margin:20px 0 0; }
+          .fact-heading h3 { margin:0; font-size:15px; font-weight:500; }
+          .section-summary { min-height:44px; }
+          .section-summary .help { margin-inline-start:auto; }
           .rows small,.notice-items small { display:block; font-size:12px; color:var(--secondary-text-color); overflow-wrap:anywhere; }
           #version { font-size:12px; }
           .loona-notices ul { list-style:none; padding:0; margin:0; }
@@ -89,44 +169,41 @@ function install() {
           <p id="error" role="alert" hidden></p>
           <div id="content" hidden>
             <p id="version"></p><div id="notices"></div>
+            <div class="metric-tools"><label class="chart-choice"><input id="show-charts" type="checkbox"><span data-i18n="Show statistics charts">Show statistics charts</span></label><span id="rates-help"></span></div>
             <dl class="rates">
-              <div><dt data-i18n="Sent">Sent</dt><dd><span id="forwarded">0</span><small data-i18n="updates/s">updates/s</small></dd></div>
-              <div><dt data-i18n="Filtered out">Filtered out</dt><dd><span id="avoided">0</span><small data-i18n="updates/s">updates/s</small></dd></div>
-              <div><dt data-i18n="Updates filtered">Updates filtered</dt><dd><span id="reduction">0</span>%<small data-i18n="of counted updates">of counted updates</small></dd></div>
+              <div><dt class="metric-text" data-i18n="Sent">Sent</dt><dd class="metric-text"><span id="forwarded">0</span><small data-i18n="updates/s">updates/s</small></dd><div id="sent-chart" class="metric-chart" hidden></div></div>
+              <div><dt class="metric-text" data-i18n="Filtered out">Filtered out</dt><dd class="metric-text"><span id="avoided">0</span><small data-i18n="updates/s">updates/s</small></dd><div id="filtered-chart" class="metric-chart" hidden></div></div>
+              <div><dt class="metric-text" data-i18n="Updates filtered">Updates filtered</dt><dd class="metric-text"><span id="reduction">0</span>%<small data-i18n="of counted updates">of counted updates</small></dd><div id="reduction-chart" class="metric-chart" hidden></div></div>
             </dl>
-            <p id="interval"></p>
-            <label class="chart-choice"><input id="show-charts" type="checkbox"><span data-i18n="Show statistics charts">Show statistics charts</span></label>
-            <p id="chart-help" hidden data-i18n="Charts refresh with statistics. This choice is saved for this account in this browser.">Charts refresh with statistics. This choice is saved for this account in this browser.</p>
-            <div id="charts" hidden></div>
+            <div class="section-heading fact-heading"><h3 data-i18n="Totals and entity scope">Totals and entity scope</h3><span id="scope-help"></span></div>
             <dl class="facts">
               <dt data-i18n="Updates sent since reset">Updates sent since reset</dt><dd id="forwarded-total"></dd>
               <dt data-i18n="Updates filtered since reset">Updates filtered since reset</dt><dd id="avoided-total"></dd>
-              <dt data-i18n="Filtered / tracked update feeds">Filtered / tracked update feeds</dt><dd id="subscriptions"></dd>
+              <dt id="subscriptions-label" data-i18n="Filtered / tracked update feeds">Filtered / tracked update feeds</dt><dd id="subscriptions"></dd>
+              <div id="feeds-chart" class="metric-chart" hidden></div>
               <dt data-i18n="Entities currently included">Entities currently included</dt><dd id="scope"></dd>
-              <dt data-i18n="Estimated entity reduction">Estimated entity reduction</dt><dd id="estimate"></dd>
+              <dt data-i18n="Estimated entity reduction">Estimated entity reduction</dt><dd><span id="estimate"></span><div id="estimate-chart" class="metric-chart" hidden></div></dd>
             </dl>
-            <p data-i18n="An update feed receives live entity changes; one tab can have more than one. The entity reduction estimate compares included entities with all current entities, even when filtering is off.">An update feed receives live entity changes; one tab can have more than one. The entity reduction estimate compares included entities with all current entities, even when filtering is off.</p>
             <div class="actions"><p id="reset-time"></p><button id="reset" data-i18n="Reset live statistics">Reset live statistics</button></div>
-            <details id="loads"><summary><span data-i18n="Latest page loads">Latest page loads</span> <span id="load-count"></span></summary>
-              <p data-i18n="Initial snapshots are filtered when startup dashboard detection succeeds. Startup fallback retains full data. File counts cover registered Lovelace files for the whole page session.">Initial snapshots are filtered when startup dashboard detection succeeds. Startup fallback retains full data. File counts cover registered Lovelace files for the whole page session.</p>
+            <details id="loads"><summary class="section-summary"><span data-i18n="Latest page loads">Latest page loads</span> <span id="load-count"></span><span id="loads-help"></span></summary>
               <ul id="load-rows" class="rows"></ul>
             </details>
-            <details><summary data-i18n="Performance diagnostics">Performance diagnostics</summary>
-              <p data-i18n="Measurements belong to this browser and dashboard. Long frames show only part of CPU work; buffered entries precede the measurement window.">Measurements belong to this browser and dashboard. Long frames show only part of CPU work; buffered entries precede the measurement window.</p>
-              <button id="measure" data-i18n="Measure this dashboard for 30 seconds">Measure this dashboard for 30 seconds</button>
-              <p id="measure-status" role="status"></p>
+            <details><summary class="section-summary"><span data-i18n="Performance diagnostics">Performance diagnostics</span><span id="performance-help"></span></summary>
               <ul id="performance-rows" class="rows"></ul>
               <p data-i18n="Busiest tracked entities since reset">Busiest tracked entities since reset</p>
               <ul id="noisy-rows" class="rows"></ul>
             </details>
           </div>
         </ha-card>`;
+      this._get("rates-help").append(createHelp(this._hass,"Live updates","","interval"));
+      this._get("scope-help").append(createHelp(this._hass,"Totals and entity scope","An update feed receives live entity changes; one tab can have more than one. The entity reduction estimate compares included entities with all current entities, even when filtering is off."));
+      this._get("loads-help").append(createHelp(this._hass,"Latest page loads","Initial snapshots are filtered when startup dashboard detection succeeds. Startup fallback retains full data. File counts cover registered Lovelace files for the whole page session."));
+      this._get("performance-help").append(createHelp(this._hass,"Performance diagnostics","Measurements belong to this browser and dashboard. Long frames show only part of CPU work; buffered entries precede the measurement window."));
       this._get("refresh").addEventListener("click", () => this._fetch());
       this._get("reset").addEventListener("click", () => this._reset());
       this._get("show-charts").addEventListener("change", () => {
         if (this._hass?.user?.is_admin) saveCardPreferences(this._hass, {charts:this._get("show-charts").checked});
       });
-      this._get("measure").addEventListener("click", () => this._measure());
     }
 
     static getStubConfig() { return { type: "custom:loona-statistics-card" }; }
@@ -158,9 +235,8 @@ function install() {
       this._hass = value;
       if (changedLanguage) this._localize();
       if (changedUser || !value?.user?.is_admin) {
-        cancelConfirmation(this);
+        cancelConfirmation(this); closeHelp(this.shadowRoot);
         this._sequence++;
-        this._measureSequence++;
         this._data = undefined;
         this._errorKey = undefined; this._get("error").hidden = true;
         this._loading = false;
@@ -169,9 +245,8 @@ function install() {
         this._get("notices").replaceChildren();
         this._get("noisy-rows").replaceChildren();
         this._get("performance-rows").replaceChildren();
-        this._get("measure-status").textContent = "";
         this._get("version").textContent = "";
-        this._get("charts").replaceChildren(); this._get("charts").hidden = true;
+        this.shadowRoot.querySelectorAll(".metric-chart").forEach(root=>{ root.replaceChildren(); root.hidden=true; });
         this._get("show-charts").checked = false;
       }
       if (!value?.user?.is_admin) {
@@ -192,20 +267,19 @@ function install() {
       }, 1000);
       this._capabilityListener = () => { if (this._data) renderNotices(this._get("notices"), this._hass, this._data.notices || [], this._data.notice_labels); };
       window.addEventListener("loona-capabilities", this._capabilityListener);
-      this._preferenceListener = () => { if (this._data && this._hass?.user?.is_admin) { this._renderCharts(this._data.metrics); this._capabilityListener(); } };
+      this._preferenceListener = () => { if (this._data && this._hass?.user?.is_admin) { this._renderCharts(this._data); this._capabilityListener(); if (this._chartsEnabled() && !this._historyRequested && !this._loading) this._fetch(); } };
       window.addEventListener("loona-card-preferences", this._preferenceListener);
       this._resetListener = () => this._fetch(); window.addEventListener("loona-statistics-reset", this._resetListener);
       if (this._hass) this._fetch();
     }
     disconnectedCallback() {
-      cancelConfirmation(this);
+      cancelConfirmation(this); closeHelp(this.shadowRoot);
       window.removeEventListener("loona-capabilities", this._capabilityListener);
       window.removeEventListener("loona-card-preferences", this._preferenceListener);
       window.removeEventListener("loona-statistics-reset", this._resetListener);
       window.clearInterval(this._timer);
       this._observer?.disconnect();
       this._sequence++;
-      this._measureSequence++;
       this._loading = false;
     }
     async _fetch() {
@@ -215,9 +289,15 @@ function install() {
       this._lastRequest = Date.now();
       this._get("refresh").disabled = true;
       try {
-        const data = await this._hass.callWS({ type: command });
+        const withHistory=this._chartsEnabled() && (!this._data || this._data.version===cardVersion);
+        let data;
+        try { data=await this._hass.callWS({type:command,...(withHistory ? {include_rate_history:true} : {})}); }
+        catch (error) {
+          if (!withHistory || error.code!=="invalid_format") throw error;
+          data=await this._hass.callWS({type:command});
+        }
         if (sequence !== this._sequence || !this._hass?.user?.is_admin) return;
-        this._data = data;
+        this._data = data; this._historyRequested=withHistory || (this._chartsEnabled() && data.version!==cardVersion);
         this._errorKey = undefined;
         this._get("error").hidden = true;
         this._render(data);
@@ -231,6 +311,7 @@ function install() {
         if (sequence === this._sequence) {
           this._loading = false;
           this._get("refresh").disabled = false;
+          if (!this._errorKey && this._data?.version===cardVersion && this._chartsEnabled() && !this._historyRequested) this._fetch();
         }
       }
     }
@@ -254,69 +335,31 @@ function install() {
         this._get("reset").disabled = !this._data?.reset_entity;
       }
     }
-    async _measure() {
-      if (!this._hass?.user?.is_admin || this._measuring) return;
-      this._measuring = true;
-      const sequence = this._measureSequence;
-      this._get("measure").disabled = true;
-      this._get("measure-status").textContent = text(this._hass, "Measuring. Keep this dashboard open.");
-      try {
-        if (typeof window.loonaMeasurePerformance !== "function") throw new Error("Reporter unavailable");
-        await window.loonaMeasurePerformance(this._hass);
-        if (sequence !== this._measureSequence) return;
-        this._get("measure-status").textContent = text(this._hass, "Measurement saved.");
-        await this._fetch();
-      } catch {
-        if (sequence === this._measureSequence) this._get("measure-status").textContent = text(this._hass, "Measurement failed. Refresh and keep the dashboard open.");
-      } finally {
-        this._measuring = false;
-        this._get("measure").disabled = false;
-      }
+    _chartsEnabled() {
+      const preference=cardPreferences(this._hass).charts;
+      return typeof preference==="boolean" ? preference : this._defaultCharts===true;
     }
-    _renderCharts(metrics) {
-      const preference = cardPreferences(this._hass).charts;
-      const enabled = typeof preference === "boolean" ? preference : this._defaultCharts === true;
-      this._get("show-charts").checked = Boolean(enabled);
-      const root=this._get("charts"); root.hidden=!enabled; this._get("chart-help").hidden=!enabled;
-      if (!enabled) { root.replaceChildren(); return; }
-      const sent=Math.max(0,Number(metrics.forwarded_rate)||0), filtered=Math.max(0,Number(metrics.avoided_rate)||0);
-      const total=sent+filtered;
-      if (!total) { root.replaceChildren(node("p",text(this._hass,"No updates counted in this interval"))); return; }
-      const percentage=Math.min(100,Math.max(0,Number(metrics.update_reduction)||0));
-      const feeds=Math.max(0,Number(metrics.managed_subscriptions)||0);
-      const filteredFeeds=Math.min(feeds,Math.max(0,Number(metrics.filtered_subscriptions)||0));
-      const format=value=>formatNumber(this._hass,value,{maximumFractionDigits:1});
-      const svg=(tag,attributes={})=>{
-        const element=document.createElementNS("http://www.w3.org/2000/svg",tag);
-        for (const [key,value] of Object.entries(attributes)) element.setAttribute(key,String(value));
-        return element;
-      };
-      if (!root.querySelector("svg")) {
-        const pie=svg("svg",{viewBox:"0 0 40 40",role:"img",class:"pie"});
-        pie.append(svg("circle",{cx:20,cy:20,r:15,fill:"none",stroke:"var(--secondary-text-color)","stroke-width":8}));
-        pie.append(svg("circle",{cx:20,cy:20,r:15,fill:"none",stroke:"var(--primary-color)","stroke-width":8,pathLength:100,transform:"rotate(-90 20 20)","data-chart":"pie"}));
-        pie.append(svg("text",{x:20,y:20,"text-anchor":"middle","dominant-baseline":"central",fill:"var(--primary-text-color)","font-size":6,"data-chart":"percentage","aria-hidden":"true"}));
-        const content=node("div",undefined,"distribution"); content.append(node("p",text(this._hass,"Filtered update feeds")));
-        const bar=svg("svg",{viewBox:"0 0 200 16",role:"img"});
-        bar.append(svg("rect",{x:0,y:0,width:200,height:16,fill:"var(--secondary-text-color)"}));
-        bar.append(svg("rect",{x:0,y:0,height:16,fill:"var(--primary-color)","data-chart":"bar"}));
-        content.append(bar,node("p","","chart-legend")); root.replaceChildren(pie,content);
-      }
-      root.querySelector(".pie").setAttribute("aria-label",text(this._hass,"{percent}% of counted updates filtered",{percent:format(percentage)}));
-      root.querySelector('[data-chart="pie"]').setAttribute("stroke-dasharray",`${percentage} ${100-percentage}`);
-      root.querySelector('[data-chart="bar"]').setAttribute("width",String(feeds ? 200*filteredFeeds/feeds : 0));
-      const legend=text(this._hass,"{filtered} of {total} update feeds filtered",{filtered:format(filteredFeeds),total:format(feeds)});
-      root.querySelector(".distribution svg").setAttribute("aria-label",legend);
-      root.querySelector(".chart-legend").textContent=legend;
-      root.querySelector('[data-chart="percentage"]').textContent=format(percentage)+"%";
-      root.querySelector(".distribution>p").textContent=text(this._hass,"Filtered update feeds");
-      this._get("chart-help").textContent=text(this._hass,"Charts refresh with statistics. This choice is saved for this account in this browser.")+" "+text(this._hass,"Accent color shows the filtered share.");
+    _renderCharts(data) {
+      const enabled=this._chartsEnabled();
+      this._get("show-charts").checked=enabled;
+      this.shadowRoot.querySelectorAll(".metric-text").forEach(root=>root.hidden=enabled);
+      for (const id of ["subscriptions-label","subscriptions","estimate"]) this._get(id).hidden=enabled;
+      this.shadowRoot.querySelectorAll(".metric-chart").forEach(root=>{ root.hidden=!enabled; if (!enabled) root.replaceChildren(); });
+      if (!enabled) return;
+      const metrics=data.metrics;
+      const history=(data.rate_history || []).filter(row=>Number.isFinite(Date.parse(row.at)) && Number.isFinite(row.sent) && Number.isFinite(row.filtered));
+      const max=Math.max(1,metrics.forwarded_rate,metrics.avoided_rate,...history.flatMap(row=>[row.sent,row.filtered]));
+      rateChart(this._get("sent-chart"),this._hass,"Sent",metrics.forwarded_rate,history,"sent",max);
+      rateChart(this._get("filtered-chart"),this._hass,"Filtered out",metrics.avoided_rate,history,"filtered",max);
+      ringChart(this._get("reduction-chart"),this._hass,"Updates filtered",metrics.update_reduction,true,metrics.forwarded_rate+metrics.avoided_rate>0);
+      ringChart(this._get("estimate-chart"),this._hass,"Estimated entity reduction",metrics.reduction_estimate,false,true);
+      feedChart(this._get("feeds-chart"),this._hass,metrics.filtered_subscriptions,metrics.managed_subscriptions);
     }
     _render(data) {
       const metrics = data.metrics;
       renderVersion(this._get("version"), this._hass, data.version, cardVersion);
       renderNotices(this._get("notices"), this._hass, data.notices || [], data.notice_labels);
-      this._renderCharts(metrics);
+      this._renderCharts(data);
       const format = (value) => formatNumber(this._hass, value, { maximumFractionDigits: 1 });
       this._get("content").hidden = false;
       setText(this._get("state"), data.compatibility_problem ? text(this._hass, "A feature is unavailable. Check Loona diagnostics.")
@@ -328,7 +371,8 @@ function install() {
       this._get("interval").textContent = (data.sample_seconds
         ? text(this._hass, "Measured over the last {seconds} seconds.", { seconds: format(data.sample_seconds) })
         : text(this._hass, "Rates update within {seconds} seconds.", { seconds: format(data.interval_seconds) }))
-        + " " + text(this._hass, "Each update is counted once per update feed, so multiple tabs can increase totals. These numbers do not measure loading speed or network traffic.");
+        + " " + text(this._hass, "Each update is counted once per update feed, so multiple tabs can increase totals. These numbers do not measure loading speed or network traffic.")
+        + " " + text(this._hass,"Charts show up to 15 minutes of completed samples. Rate charts share the same scale and refresh with statistics.");
       this._get("subscriptions").textContent = format(metrics.filtered_subscriptions) + " / " + format(metrics.managed_subscriptions);
       this._get("scope").textContent = text(this._hass, metrics.current_scope === 1 ? "1 entity" : "{count} entities", { count: format(metrics.current_scope) });
       this._get("estimate").textContent = formatNumber(this._hass, metrics.reduction_estimate / 100, {style:"percent",maximumFractionDigits:1});

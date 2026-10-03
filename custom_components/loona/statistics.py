@@ -1,11 +1,12 @@
 """Count permission-eligible logical updates without decoding websocket packets."""
 
+from collections import deque
 from time import monotonic
 from typing import Any
 
 from homeassistant.util import dt as dt_util
 
-from .const import LIVE_RATE_PRECISION, NOISY_ENTITY_LIMIT, NOISY_ENTITY_REPORT_LIMIT
+from .const import LIVE_RATE_PRECISION, RATE_HISTORY_LIMIT, NOISY_ENTITY_LIMIT, NOISY_ENTITY_REPORT_LIMIT
 
 
 class LiveStatistics:
@@ -22,6 +23,7 @@ class LiveStatistics:
         self.forwarded = self.avoided = 0
         self.forwarded_rate = self.avoided_rate = self.reduction = 0.0
         self.sample_seconds = 0.0
+        self.rate_history: deque[dict[str, Any]] = deque(maxlen=RATE_HISTORY_LIMIT)
         self._previous_forwarded = self._previous_avoided = 0
         self._sample_time = monotonic()
         self.reset_at = dt_util.utcnow()
@@ -63,6 +65,8 @@ class LiveStatistics:
         self.sample_seconds = round(elapsed, 1)
         self._previous_forwarded, self._previous_avoided = self.forwarded, self.avoided
         self._sample_time = now
+        self.rate_history.append({"at": dt_util.utcnow().isoformat(), "seconds": self.sample_seconds,
+                                  "sent": self.forwarded_rate, "filtered": self.avoided_rate})
 
     def metrics(self) -> dict[str, int | float]:
         """Return small numeric values suitable for native HA sensors."""

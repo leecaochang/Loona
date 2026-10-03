@@ -1,11 +1,11 @@
 /* Prefilled administrator settings using native Loona validation and storage. */
-import { language, text, translate, renderVersion, saveCardPreferences, setText, confirmAction, cancelConfirmation } from "./i18n.js?v=0.9.7";
+import { language, text, translate, renderVersion, saveCardPreferences, setText, confirmAction, cancelConfirmation, createHelp, closeHelp, helpStyles } from "./i18n.js?v=0.9.8";
 
 const groups = {
   controls: "Filters and performance", dashboards: "Dashboards", targets: "Accounts",
   rules: "Entity rules", resources: "Cards", cards: "Loona dashboard",
 };
-const cardVersion = "0.9.7";
+const cardVersion = "0.9.8";
 const labels = {
   enabled: "Enabled", entity_filtering: "Entity filtering", registry_filtering: "Registry filtering",
   current_dashboard_updates: "Current tab updates",
@@ -30,6 +30,8 @@ const help = {
 const groupHelp = {
   dashboards: "Choose which dashboards you want to filter.",
   targets: "Choose which accounts receive filtered data while viewing selected dashboards.",
+  resources: "Known unused bundles can be skipped for the whole page session. Unknown modules always load. Save, then reload.",
+  cards: "Loona dashboard cards",
   rules: "Loona finds dashboard entities automatically. Use these rules to add anything it missed or exclude entities you do not need.",
 };
 const statusLabels = { unused: "Not used in configured dashboards", unclassified: "Usage unknown" };
@@ -50,7 +52,7 @@ function install() {
       this._drafts = {}; this._conflicts = new Set(); this._searches = {}; this._limits = {};
       this._sequence = 0;
       this.shadowRoot.innerHTML = `
-        <style>
+        <style>${helpStyles}
           :host { user-select:text; -webkit-user-select:text; display:block; color:var(--primary-text-color); }
           ha-card { user-select:text; -webkit-user-select:text; padding:24px; overflow:hidden; }
           header { display:flex; align-items:start; justify-content:space-between; gap:16px; }
@@ -77,6 +79,7 @@ function install() {
           #sections { margin-top:20px; }
           #sections>details { margin-top:0; padding-top:0; }
           #sections>details>summary { box-sizing:border-box; min-height:48px; padding:12px 0; font-weight:500; }
+          #sections>details>summary.section-heading { padding:2px 0; }
           #sections>details[open] { padding-bottom:20px; }
           .field { margin-top:16px; }
           .rule-groups { display:grid; gap:24px; margin-top:24px; }
@@ -109,7 +112,7 @@ function install() {
           [hidden] { display:none !important; }
           @media(max-width:480px) { ha-card { padding:16px; } }
         </style>
-        <ha-card><header><div><h2 data-i18n="Loona settings">Loona settings</h2>
+        <ha-card><header><div><div class="section-heading"><h2 data-i18n="Loona settings">Loona settings</h2><span id="settings-help"></span></div>
           <p id="state" role="status" data-i18n="Loading settings...">Loading settings...</p></div>
           <button id="refresh" data-i18n="Refresh">Refresh</button></header>
           <p id="version"></p><p id="error" role="alert" hidden></p><div id="sections"></div>
@@ -117,9 +120,13 @@ function install() {
             <button data-action="rescan" data-i18n="Rescan dashboards">Rescan dashboards</button>
             <button data-action="reset_live_statistics" data-i18n="Reset live statistics">Reset live statistics</button>
             <button data-action="restore_defaults" data-i18n="Restore defaults">Restore defaults</button>
-          </div><p data-i18n="Rescan checks dashboard changes now. Reset clears live counters and page-load records; entity counts and recorded history stay unchanged.">Rescan checks dashboard changes now. Reset clears live counters and page-load records; entity counts and recorded history stay unchanged.</p>
-          <p data-i18n="Restore defaults clears all Loona settings and live statistics. Confirmation is required.">Restore defaults clears all Loona settings and live statistics. Confirmation is required.</p>
+          </div>
           <p id="action-status" role="status"></p></div></ha-card>`;
+      this.shadowRoot.getElementById("settings-help").append(createHelp(this._hass,"Loona settings","Entity and registry feeds follow the selected dashboard scope, including its dialogs."));
+      for (const [key,message] of Object.entries({rescan:"Rescan checks dashboard changes now.",reset_live_statistics:"Reset clears live counters and page-load records; entity counts and recorded history stay unchanged.",restore_defaults:"Restore defaults clears all Loona settings and live statistics. Confirmation is required."})) {
+        const button=this.shadowRoot.querySelector(`[data-action="${key}"]`), wrapper=make("span",undefined,"action-help");
+        button.replaceWith(wrapper); wrapper.append(button,createHelp(this._hass,button.dataset.i18n,message));
+      }
       this.shadowRoot.getElementById("refresh").addEventListener("click", () => this._fetch());
       this.shadowRoot.querySelectorAll("[data-action]").forEach(button => button.addEventListener("click", () => this._press(button.dataset.action)));
     }
@@ -145,7 +152,7 @@ function install() {
       this._hass = value;
       this._watchConnection();
       if (changedUser || !value?.user?.is_admin) {
-        cancelConfirmation(this);
+        cancelConfirmation(this); closeHelp(this.shadowRoot);
         this._sequence++; this._data = undefined; this._drafts = {}; this._conflicts.clear();
         this._searches = {}; this._limits = {}; this._loading = false; this._saving = undefined; this._error = undefined; this._saved = undefined; this._rendered = false; this._acting = undefined; this._actionStatus = undefined;
         this.shadowRoot.getElementById("sections").replaceChildren();
@@ -161,7 +168,7 @@ function install() {
       if (this._hass) this._fetch();
     }
     disconnectedCallback() {
-      cancelConfirmation(this);
+      cancelConfirmation(this); closeHelp(this.shadowRoot);
       this._versionConnection?.removeEventListener?.("ready", this._versionListener);
       this._versionConnection = undefined;
       this._sequence++; this._loading = false; this._acting = undefined;
@@ -284,8 +291,9 @@ function install() {
       refresh.title = Object.keys(this._drafts).length ? this._t("Refresh is unavailable while you have unsaved changes.") : "";
       setText(this.shadowRoot.getElementById("state"), !admin ? this._t("Sign in as an administrator to change Loona settings.")
         : this._data ? this._t((this._drafts.controls || this._data.values.controls).enabled
-          ? "Entity and registry feeds follow the selected dashboard scope, including its dialogs."
+          ? ""
           : "Enable Loona to change other settings.") : this._t("Loading settings..."));
+      this.shadowRoot.getElementById("state").hidden = Boolean(admin && this._data && (this._drafts.controls || this._data.values.controls).enabled);
       const error = this.shadowRoot.getElementById("error"); error.hidden = !this._error || !admin; error.textContent = this._error ? this._t(this._error) : "";
       const controls = this._drafts.controls || this._data?.values.controls;
       for (const element of this.shadowRoot.querySelectorAll("[data-save]")) element.disabled = !admin || element.dataset.save !== "controls" && !controls?.enabled || !this._drafts[element.dataset.save] || Boolean(this._saving) || Boolean(this._acting) || this._conflicts.has(element.dataset.save);
@@ -311,11 +319,16 @@ function install() {
       const openFields = new Set([...container.querySelectorAll("details[data-rule-field][open]")].map(e => e.dataset.ruleField));
       const focused = this.shadowRoot.activeElement;
       const focusKey = focused?.dataset.field;
+      closeHelp(this.shadowRoot);
       container.replaceChildren();
       for (const [group,title] of Object.entries(groups)) {
         const section = make("details"); section.dataset.group = group; section.open = open.has(group) || group === "controls" && !this._rendered;
-        section.append(make("summary", this._t(title)));
-        if (groupHelp[group]) section.append(make("p", this._t(groupHelp[group])));
+        const heading=make("summary"); heading.append(make("span",this._t(title)));
+        if (groupHelp[group]) {
+          heading.className="section-heading";
+          heading.append(createHelp(this._hass,title,groupHelp[group]));
+        }
+        section.append(heading);
         const values = this._drafts[group] || this._data.values[group];
         if (group === "controls") {
           for (const [key,value] of Object.entries(values)) {
@@ -337,7 +350,7 @@ function install() {
               const item=make("li"); const label=this._data.resource_labels?.[url] || url;
               item.append(make("span",label)); if (label!==url) item.append(make("small",url)); list.append(item);
             }); required.append(list); section.append(required);
-            section.append(make("p",this._t(this._data.resources_editable ? "Known unused bundles can be skipped for the whole page session. Unknown modules always load. Save, then reload." : "File choices are unavailable on this installation.")));
+            if (!this._data.resources_editable) section.append(make("p",this._t("File choices are unavailable on this installation.")));
           }
           if (group === "rules") {
             const panels = make("div", undefined, "rule-groups");
@@ -374,7 +387,7 @@ function install() {
       this._sync();
     }
     _field(section,group,key) {
-      const field=make("div",undefined,"field"); const label=make("label",this._t(labels[key]));
+      const field=make("div",undefined,"field"); const label=make("label",key==="dashboard_cards" ? "" : this._t(labels[key]));
       const search=make("input"); search.type="search"; search.dataset.field=key; search.value=this._searches[key] || "";
       search.placeholder=this._t("Search available choices"); search.setAttribute("aria-label",this._t(labels[key])+": "+this._t("Search available choices"));
       label.append(search); const rows=make("div"); field.append(label,rows); section.append(field);

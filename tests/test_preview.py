@@ -151,3 +151,26 @@ async def test_statistics_endpoint_rejects_removed_dependency_queries(preview_ru
     connection.async_handle({'id': 1, 'type': 'loona/statistics', 'include_dependencies': True})
     assert not output[-1]['success']
     assert 'dependencies' not in statistics_report(preview_runtime)
+
+
+async def test_rate_history_requires_admin_and_explicit_opt_in(preview_runtime, make_user, make_connection):
+    """History adds no payload to default readers and no new sampling on reads."""
+    from unittest.mock import patch
+    runtime = preview_runtime
+    for _ in range(3):
+        runtime.live_statistics.record(True)
+    with patch("custom_components.loona.statistics.monotonic", return_value=runtime.live_statistics._sample_time + 30):
+        runtime.live_statistics.sample()
+    admin, output = make_connection(make_user(admin=True))
+    admin.async_handle({"id": 1, "type": "loona/statistics"})
+    assert output[-1]["result"]["rate_history"] == []
+    admin.async_handle({"id": 2, "type": "loona/statistics", "include_rate_history": True})
+    history = output[-1]["result"]["rate_history"]
+    assert len(history) == 1 and history[0]["sent"] == .1
+    admin.async_handle({"id": 3, "type": "loona/statistics", "include_rate_history": True})
+    assert output[-1]["result"]["rate_history"] == history
+    reader, denied = make_connection(make_user())
+    reader.async_handle({"id": 1, "type": "loona/statistics", "include_rate_history": True})
+    assert denied[-1]["error"]["code"] == "unauthorized"
+    runtime.live_statistics.reset()
+    assert statistics_report(runtime, True)["rate_history"] == []
