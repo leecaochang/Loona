@@ -379,14 +379,14 @@ async def test_empty_incomplete_and_disabled_scopes_preserve_native_metadata(
         adapter.uninstall()
 
 
-async def test_unsupported_registry_version_leaves_all_commands_native(loona_hass):
+async def test_below_baseline_leaves_all_registry_commands_native(loona_hass):
     table = loona_hass.data[websocket_api.DOMAIN]
     originals = dict(table)
     adapter = RegistryAdapter(
         loona_hass, ScopePolicy(), RegistryScope(), lambda error: None
     )
     with (
-        patch("homeassistant.const.__version__", "2025.1.0"),
+        patch("homeassistant.const.__version__", "2024.5.5"),
         pytest.raises(CompatibilityError),
     ):
         adapter.install()

@@ -26,6 +26,7 @@ async def async_get_config_entry_diagnostics(
         "metrics": runtime.metrics(),
         "compatibility_problem": runtime.compatibility_problem,
         "panel_compatibility_problem": runtime.panel_compatibility_problem,
+        "bootstrap_compatibility_problem": runtime.bootstrap_compatibility_problem,
         "registry_compatibility_problem": runtime.registry_compatibility_problem,
         "graph_compatibility_problem": runtime.graph_compatibility_problem,
         "resource_preview": preview,

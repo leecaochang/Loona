@@ -1,169 +1,136 @@
 # Loona
 
-Loona transparently reduces the weight of Home Assistant Lovelace dashboards by removing unnecessary resources and reducing websocket updates. No extra software is required, only this integration. Your dashboards, login and Home Assistant address stay the same. You just set it and forget it.
+Loona reduces initial entity snapshots and live updates on selected Home Assistant Lovelace dashboards. It also offers optional registry and card resource filtering, delayed graph creation, and temporary animation pausing. Your dashboards, login and Home Assistant address stay the same. No additional runtime software is required.
 
-Loona is experimental. Smaller responses can help slower devices, but do not guarantee faster card loading.
-
-Entity, registry and resource filtering applies only while a selected account is viewing a selected dashboard. Settings, Developer Tools, other panels and unselected dashboards receive normal Home Assistant data. Each browser tab reports its own panel automatically; clients without panel context receive normal data. If the report arrives after startup, Loona applies filtering to the existing updates. Reload browser pages after upgrading so they load the panel reporter. Home Assistant permissions still apply.
+Loona is experimental. When a compatible entity, registry or resource filter is enabled, an inline hook queues dashboard context before Home Assistant's initial requests on selected dashboard URLs. It does not wait for a context acknowledgement or an extra module to load. Other named routes bypass the hook, and turning off Enabled removes it from newly served pages. The root URL `/` needs one parallel lookup of native dashboard visibility and default-panel preferences; this can add a network round trip even for an untargeted account. That lookup waits at most two seconds after authentication. Failed probes, unsupported root routing or a timeout can leave the initial snapshot full; later filtering still works. Smaller payloads do not guarantee faster page loading.
 
 ## Supported Home Assistant versions
 
-| Core version | Features |
-| --- | --- |
-| **2024.6 +** | Entity, registry and resource filtering; settings; diagnostics; statistics. |
-| **2026.9 +** | All of the above, plus graph optimizations and animation pausing. |
+Loona requires Home Assistant Core 2024.6.0 or newer. Every integration load, including initial setup and reload, probes the installed native capabilities. An unfamiliar version number does not disable compatible features.
 
-Loona checks the Home Assistant functions it uses before enabling a feature. If a check fails or another integration replaces those functions, the affected feature stops filtering.
+| Capability probe | Fallback when unavailable |
+| --- | --- |
+| Entity schemas, scoped snapshots, live diffs and read permissions | Full native entity feeds |
+| Registry schemas, list envelopes and update subscriptions | Full native registry lists |
+| Registered resource commands, schemas and list results | All native card files |
+| Native config, frontend registration and browser card hooks | Normal graph creation and animations |
+| Connection-local dashboard reporting | Full entity, registry and resource data on unrecognized connections |
+| Native HTML ownership, startup promise and root routing | Normal startup with later filtering; unfamiliar root routing affects `/` only |
+
+Features pass or fail independently, so a failed probe can leave other filtering available. Failed backend features appear in diagnostics, the cards and the Home Assistant log; their device switches retain saved preferences but become unavailable. The browser checks its actual card container before changing any method. Missing hooks keep native loading, with a browser-local notice when loading optimizations were requested. A late native container can be probed successfully after it loads. Another integration owning a required handler can disable that feature.
+
+Representative native backend acceptance runs cover Core 2024.6.0, 2024.6.4, 2024.12.5, 2025.6.3, 2026.1.3, 2026.8.3, 2026.9.2, 2026.9.3 and 2026.9.4. These are test samples, not an allowlist or a guarantee of every future internal API. Graph and animation acceptance currently uses the native frontend shipped with Core 2026.9.4; older frontends may retain native loading while backend filtering still works.
+
+The integration syntax requires Python 3.12 or newer. Use the Python version required by your Core release. The HACS installation minimum is also 2024.6.0.
+
+Use a current Chrome, Edge, Firefox or Safari browser. The bundled cards and graph module require ES2020 syntax, including optional chaining; Safari versions older than 13.1 cannot parse them. The panel reporter also uses optional chaining and optional catch bindings. Failed capability checks retain native behavior where the module can execute. Current Chrome is covered by browser acceptance tests; older browser engines have not been tested.
 
 ## Install and set up
 
 For manual installation, copy `custom_components/loona` into the `custom_components` folder in your Home Assistant configuration directory, then restart Home Assistant.
 
-For HACS, add `https://github.com/leecaochang/Loona` as a custom repository with category **Integration**, download Loona, then restart Home Assistant. You need access to the repository to download it.
+For HACS, add [leecaochang/Loona](https://github.com/leecaochang/Loona) as a custom repository with category **Integration**, download Loona, then restart Home Assistant.
 
 1. Open **Settings > Devices & services > Add integration** and choose **Loona**. Only one instance can be installed.
-2. Select the dashboards you want to filter.
-3. Choose **Selected accounts** or **All accounts**. Dashboards for accounts you do not select will not be filtered. Home Assistant permissions still apply, Loona does not restrict access.
-4. Optionally add the **Loona settings** card, the **Loona statistics** card, or both. Loona creates an administrator-only **Loona** dashboard containing your choices. Choose neither to skip creating this dashboard.
-5. If you selected a card, the final setup step reminds you to refresh your browser before viewing it.
+2. Select the dashboards to filter.
+3. Choose **Selected accounts** or **All accounts**. Home Assistant permissions still apply; Loona does not restrict or grant access.
+4. Optionally select the **Loona settings** card, the **Loona statistics** card, or both. Loona creates an administrator-only **Loona** dashboard containing those cards. Choose neither to skip it.
+5. Refresh the browser to load the installed modules.
 
-## Controls
+## Controls and settings
 
-Use the **Loona settings** card, or open the Loona device under **Settings > Devices & services**. You can enable or disable any of these controls, as needed. Enable all for maximal resource filtering. Resource changes require a browser reload.
+Use the **Loona settings** card or the integration's **Configure** menu. The Loona device also exposes switches and action buttons.
 
-| Control | What it does |
+| Control | Behavior |
 | --- | --- |
-| Enabled | Master switch. `Off` restores standard dashboard behavior. Works instantly, no restart or refresh required. On by default. |
-| Entity filtering | **Entity filtering is automatic.** Loona reads your selected dashboards and finds the entities their cards use. Use **Entity rules** to add individual entities, broader groups or patterns, or to exclude entities. On by default. |
-| Pause animations during loading | Pauses repeating card animations during startup and resumes them automatically. Off by default. |
-| Registry filtering | Reduces the information HA sends about entities and devices, such as their names, icons, device relationships, areas and other details. Off by default. |
-| Resource filtering | Always loads the card resources for any cards you selected under **Cards**. Refresh the Home Assistant page after making changes. Off by default.|
-| Delay graph loading | Off-screen graphs will load only after the dashboard has completely loaded, or immediately when you scroll to them. On-screen graphs always display immediately. Off by default. |
-| Rescan dashboards | Check for any dashboard changes now. Normally, dashboard changes are automatically scanned about once a minute. |
-| Reset live statistics | Clears live update totals, rates and page-load records. Entity counts, settings and recorded Home Assistant history remain unchanged. |
+| Enabled | Master switch, on by default. Turning it off restores managed live entity feeds and native registry responses. |
+| Entity filtering | On by default. Keeps entities discovered in selected dashboards and added by Entity rules. |
+| Registry filtering | Off by default. Narrows native entity, device, area, floor and label lists. |
+| Resource filtering | Off by default. Skips recognized card bundles unused by all configured dashboards. A browser reload is required to change loaded files. |
+| Delay graph loading | Off by default. Defers eligible off-screen graphs until visible work settles. Scrolling to one loads it immediately. |
+| Pause animations during loading | Off by default. Temporarily pauses repeating animations during dashboard startup, then resumes them. |
+| Rescan dashboards | Runs discovery now. Dashboard edits normally trigger a scan; periodic checks cover YAML changes. |
+| Reset live statistics | Clears live counters and page-load records without changing settings or recorded Home Assistant history. |
 
-## Change settings
+Configure includes **Dashboards**, **Accounts**, **Filters and performance**, **Entity rules**, **Cards** for resource exceptions, and **Loona dashboard** for the generated dashboard. Card selections can be changed after setup. Loona updates or removes only its exact unedited generated configuration. An edited dashboard requires manual management. Deleting the owned dashboard opts out of automatic recreation, including after a reload. Upgrading an older entry without a card selection does not create a new dashboard.
 
-Use the **Loona settings** card or Loona's **Configure** menu under **Settings > Devices & services**.
+You can place `type: custom:loona-statistics-card` and `type: custom:loona-settings-card` on your own dashboards even if you skip the generated one. Both require an administrator account.
 
-| Section | Purpose |
-| --- | --- |
-| Dashboards | Choose which dashboards you want to filter. |
-| Accounts | Choose which user accounts receive filtered data. |
-| Filters and performance | Turn the available features on or off. |
-| Entity rules | Use these rules to add anything Loona missed, or exclude entities you don’t need. Exclusions always override inclusions. |
-| Cards | Choose additional card resource files to load when Resource filtering is on. Required files can not be disabled. |
-## Cards
+## Entity and registry scope
 
-Automatic resource filtering reads the saved configurations of all selected dashboards and allows resources for recognized custom cards, shared styles and configured helpers. Automatic scanning is not perfect, it may still miss a some JavaScript files or templates, so a card may require additional files Loona cannot detect.
+Each browser connection reports its current panel. Entity and registry filtering applies to selected accounts while viewing selected dashboards. Settings, Developer Tools, other panels, unselected dashboards and clients without a report receive native data. Navigation updates the current connection's scope. Person, update and zone entities are always retained for the Home Assistant interface.
 
-Required resource files will have no checkbox, as they must always be included. Unchecked resource files, including newly installed ones, are skipped while Resource filtering is on. For resources you need, find their filename and check them to be included.
+The entity scope is the union of selected dashboard dependencies and your Entity rules. Add individual entities, whole domains, known entity IDs or domain patterns such as `sensor.*`. Previously saved custom patterns remain available for removal or reuse. Exclusions override ordinary inclusions, while interface entities remain protected. The settings card searches large entity lists on the server rather than downloading the full catalog.
 
-If a card, icon or helper is missing, turn off Resource filtering and reload the browser page. Then check the needed file before turning filtering back on.
+Quick-bar search, dialogs, dashboard editors and service selectors opened within a selected dashboard still see its scoped data. Add entities they need under Entity rules, or disable filtering while using broader selectors. Loona cannot infer every dependency of a custom card or popup.
 
-This filter covers only registered dashboard files. It does not filter Home Assistant's own frontend files, extra frontend modules or direct requests for a file. Home Assistant's file registrations are not affected.
+One incomplete selected dashboard pauses entity and registry filtering for the whole union. This avoids dropping data whose dependencies cannot be determined. Save automatically generated dashboards and check unsupported templates, strategies or dynamic auto-entities rules. Missing but valid entity references alone do not cause bypass.
 
- With Resource filtering off, Home Assistant loads all registered files.
+Ordinary subscriptions are reconciled when rules, accounts, dashboard selections or switches change. Explicit native subscription scopes, including an explicit empty `entity_ids` list, retain native behavior. After startup or reload, an early native feed can trigger one stock-client reconnect so its original requests are replayed through Loona. The reporter removes stale cached entities locally when the ordinary feed receives its new first snapshot; explicit subscriptions retain their original events. A transient reporter error is retried. After an integration unload, the reporter restores native methods and probes for a reload for about one minute. A reload during that window reattaches context and can recover ordinary feeds through one stock-client reconnect. Refresh after a slower reload or a Loona upgrade to load the current frontend code.
+
+## Card resource filtering
+
+Lovelace loads registered modules once for the whole page session. Loona therefore considers the saved configurations of all configured dashboards, including unselected ones, before omitting a recognized unused card bundle. It retains CSS, global helpers such as card-mod and kiosk-mode, native extra modules, and files whose usage it cannot safely classify. Newly installed unknown files are retained automatically. Native Map, the unsaved default Overview and recognized built-in strategies do not require registered custom card files. Custom or unknown strategies, templates, unmatched custom types or an incomplete resource scan retain the full list. An unsaved selected Overview still pauses entity and registry filtering because its generated entity dependencies cannot be determined safely.
+
+Under **Cards**, automatically retained files have no checkbox. Select additional known optional bundles needed by popups or other features outside the saved configurations. Saved unavailable files remain removable. Disabling Resource filtering restores the registered list, but cannot unload JavaScript already running in a page or load a previously skipped module by itself. Reload after resource changes or when comparing enabled and disabled behavior.
+
+This feature filters native registered Lovelace resource-list responses, including Core's first request on `/` and `/lovelace/` when the startup hook establishes selected context. It does not change stored registrations, core frontend bundles, extra module registrations or direct file requests. Startup fallback or an incomplete resource dependency scan retains the full list.
+
+## Graphs and animations
+
+Delayed loading supports native sensor cards with `graph: line`, Mini Graph Card and ApexCharts Card, including native stacks. Other cards and panel layouts load normally. Dashboard editing and previews create real cards immediately.
+
+Visible graphs start immediately. Background graphs wait for visible rendering and Home Assistant requests to settle, followed by 750 ms without activity, then start one at a time when the browser is idle. Custom cards have no common completion signal, so this is a heuristic. Temporary placeholders reserve estimated space and expose their loading state. Disabling the feature starts pending graphs immediately.
+
+Animation pausing affects running browser animations with infinite iterations in supported dashboard views. Finite transitions, progress indicators, previews and already paused animations are preserved. Interaction, navigation, disabling, page hiding or the maximum startup interval resumes owned pauses. JavaScript, SMIL and closed-shadow animations are outside this feature's scope.
+
+Turning off Enabled bypasses these features and releases queued work. Modules and lightweight reporting hooks already loaded in a page remain until it reloads. Newly served pages omit the startup hook while Enabled is off; disabling Loona preserves its settings.
 
 ## Diagnostics
 
-The **Loona statistics** dashboard card shows filtering status, live update rates, totals and each dashboard's latest browser reload. It refreshes visible statistics about every 30 seconds. The first rate reading after startup or reset appears at the next update.
+The **Loona statistics** card shows live update rates, totals, filtering status and the latest observed full page load for each dashboard. Visible statistics refresh about every 30 seconds. The first rate reading after startup or reset appears at the next interval. Both bundled cards show **Warnings and checks** with recovery steps.
 
-Initial snapshots, denied entities, explicitly filtered requests, unselected accounts and changes to Loona's own entities are excluded. When filtering is bypassed, counted updates are recorded as sent.
+Live counters count logical permission-eligible entity changes per tracked ordinary selected-account feed. Multiple tabs can increase totals. Initial snapshots, denied entities, explicit scopes, unselected accounts and changes to Loona's own entities are excluded. When filtering is bypassed, eligible changes count as sent. These figures do not measure bytes, bandwidth, CPU or loading speed.
 
-| Device sensor | Meaning |
+| Device diagnostic | Meaning |
 | --- | --- |
-| Available included entities | IDs kept after dashboard discovery and your include/exclude rules, that currently are available in Home Assistant. |
-| Compatibility | `Supported` when Loona's compatibility checks pass; `Limited` when a feature is unavailable. |
-| Dashboard scan | `Complete` when Loona can safely build the entity list; `Incomplete` while entity and registry filtering are paused. |
-| Entity updates filtered (per second) | Entities skipped, averaged over the last measured interval. |
-| Entity updates sent (per second) | Entities included, averaged over the last measured interval. |
-| Estimated entity reduction | Percentage of current entities outside the included list. This estimate is shown even when filtering is off. |
-| Filtered update feeds | Feeds are an ongoing connection through which Home Assistant sends entity changes to a browser tab or app. This tracks feeds currently receiving a reduced entity list. |
-| Included entities | IDs kept after dashboard discovery and your include/exclude rules. May include IDs that no longer exist. |
-| Last successful scan | Time of the latest complete dashboard scan. |
-| Live update reduction | Measures ongoing entity changes, rather than the initial page load. It fluctuates depending on which entities are changing, and shows 0% when no updates occurred during the update interval. |
-| Scan duration | Time taken by the latest scan, in milliseconds. |
-| Version | Installed Loona version. |
-| Warnings | Number of current warnings. Informational checks are not counted. |
-| Tracked update feeds | Feeds are an ongoing connection through which Home Assistant sends entity changes to a browser tab or app. This tracks ordinary entity feeds Loona tracks, including unfiltered accounts. |
+| Included entities / Available included entities | Computed scope size / scope IDs with a current state |
+| Estimated entity reduction | Fraction of current state IDs outside the scope, even while filtering is off |
+| Tracked / Filtered update feeds | Owned ordinary subscriptions / subscriptions currently narrowed |
+| Entity updates sent / filtered per second | Changes averaged over the latest measured interval |
+| Live update reduction | Fraction of counted live changes omitted during that interval |
+| Compatibility / Dashboard scan | Feature availability / completeness of selected dashboard discovery |
+| Last successful scan / Scan duration | Latest complete entity scan time / latest scan duration |
+| Version / Warnings | Installed version / active warning conditions, excluding informational checks |
 
-Each selected dashboard has a related device with **Entities not found** and **Referenced entities** sensors. They count references before entity rules. An entity is not found when it has neither a current state nor an entity registry entry. It may be a deleted entity, a typo or a temporary entity. Missing entities alone do not stop filtering. These counts do not measure traffic for an individual dashboard.
+Each selected dashboard has a device with **Referenced entities** and **Entities not found** counts before Entity rules. Missing means neither a current state nor a registry entry exists. These counts do not attribute traffic to individual dashboards. Loona's diagnostic entities are included in filtered feeds only when referenced or explicitly selected.
 
-**Reset live statistics** clears the live counters and page-load records. Statistics also reset when Loona reloads or HA restarts. They are not saved between restarts. Home Assistant's recorded history and the current entity counts are unaffected.
+Counters and page-load records reset on reload or restart. **Reset live statistics** also clears them. Recorded Home Assistant history remains unchanged. No Home Assistant Repairs notifications are created; legacy Loona Repairs are removed. Compatibility changes and native-operation failures are recorded in the Home Assistant log, with debug details for scan failures.
 
-The cards show update rates with one decimal place. **Entity rules** combines individual entities, entity types and patterns in separate **Included** and **Excluded** groups, with one Save action.
-
-## Warnings
-
-Both Loona cards show **Warnings and checks** with an explanation and recovery steps. Warnings cover unavailable features, failed dashboard creation, incomplete scans, missing entity references, exclusions affecting cards, and saved card files that are no longer registered. They clear when the condition is resolved.
-
-Informational checks cover custom cards and files Loona cannot fully inspect, including template-driven dependencies and unchecked files with unknown usage. If everything works, no action is needed. These checks do not increase the Warnings sensor count.
-
-Loona does not create Home Assistant Repairs notifications. Existing Loona Repairs are removed when the updated integration loads. Statistics and warnings refresh about every 30 seconds in the statistics card; use Refresh or Rescan dashboards in the settings card to check again.
-
-## Custom Dashboard Cards
-
-You can add `type: custom:loona-statistics-card` and `type: custom:loona-settings-card` to your own dashboards. Both cards require an administrator account. The bundled cards are available even if you skipped the generated dashboard during setup.
-
-## Supported languages
-
-This integration and the custom dashboard cards support English and Simplified Chinese. The cards follow your profile language.
-
-Uninstalling removes Loona's modules and its unedited generated dashboard. Remove Loona cards from your own dashboards before uninstalling.
-
-## Delayed graph loading
-
-Delayed graphs loading supports native sensor cards with `graph: line`, Mini Graph Card and ApexCharts Card, including native stacks. Other cards and panel layouts load normally. Dashboard editing and previews load real cards immediately.
-
-Visible graphs start immediately, including when you scroll to them. Off-screen graphs wait until visible rendering and HA requests settle, followed by 750 ms without activity. They then load one at a time when the browser is idle.
-
-Custom cards have no common finished-loading signal, so Loona estimates when it can start background work.
-
-Temporary placeholders reserve space for waiting graphs. Turning this feature off immediately starts any waiting graphs; already loaded graphs stay loaded.
-
-Enabling this feature does not guarantee faster loading.
-
-## Animations
-
-Animation pausing applies to repeating CSS and web animations inside dashboard cards. Animations resume when the browser is idle after 750 ms without activity, when you scroll or interact, or after at most 10 seconds. Live data keeps updating.
-
-Loading indicators, transitions, editing and previews remain untouched. JavaScript drawing loops, SVG SMIL and inaccessible shadow roots are also not covered.
-
-When delayed graph loading is also enabled, animations resume before background graphs start.
-
-Enabling this feature does not guarantee faster loading.
-
-## Troubleshooting
-
-Compare the same dashboard with each feature on and off. Reports for troubleshooting are available from your browser console:
-
-`window.loonaGraphLoadingReport()`
-`window.loonaGraphLoadingTrace()`
-`window.loonaStartupMotionReport()`
+The integration and cards support English and Simplified Chinese. Traditional Chinese profiles fall back to English. Cards follow profile language and number/time preferences. Native entity and device labels follow Home Assistant's system language.
 
 ## Performance measurements
 
-The reproducible synthetic benchmark uses 10,000 sensor states and registry entries, 1,000 devices, 100 areas, 10 floors, and 100 labels. Its selected entity list contains the first 200 sensors with their metadata relationships. Each state has a name, power unit/class, and a 64-byte padding attribute. A burst changes 1,000 evenly spaced sensors, including 20 in the selected entity list.
+The synthetic fixture contains 10,000 sensor states and registry entries, 1,000 devices, 100 areas, 10 floors and 100 labels. The selected scope contains 200 sensors and their metadata. Each state includes a name, power unit/class and a 64-byte padding attribute. A burst changes 1,000 evenly spaced sensors, of which 20 are in scope.
 
-Measurements below were taken with Loona 0.3.1, Core 2026.9.4, Python 3.14.6, and stock JS websocket client 9.6.0 on Node 22.23.2, running on an Apple M2 Ultra with 64 GiB RAM and macOS. Timings are medians of five samples after one warmup; Core serialization caches are warm. The full snapshot baseline uses Loona's disabled policy, and the live-update baseline uses an explicitly unfiltered native subscription.
+Measurements use Loona 0.9.1, Core 2026.9.4, Python 3.14.6 and stock JS websocket client 9.6.0 on Node 22.23.2, on an Apple M2 Ultra with 64 GiB RAM and macOS. Timings are medians of five samples after warmup; native serialization caches are warm. The following requests occur after a selected dashboard report, so these are scoped-response measurements, not normal browser startup measurements.
 
-| Measurement | Full data | Filtered data |
+| Measurement after context | Full data | Scoped data |
 | --- | ---: | ---: |
 | State snapshot entities | 10,000 | 200 |
-| State snapshot JSON bytes | 2,640,912 | 52,860 |
-| Full entity registry JSON bytes | 5,305,763 | 105,877 |
+| State snapshot JSON bytes | 2,640,852 | 52,850 |
+| Full entity registry JSON bytes | 5,305,698 | 105,870 |
 | Compact entity registry JSON bytes | 1,269,116 | 25,496 |
-| Logical state events in the update burst | 1,000 | 20 |
-| Update burst JSON bytes | 143,178 | 2,865 |
-| Standard client snapshot processing | 12.45 ms | 0.23 ms |
-| Standard client update burst processing | 2,263.44 ms | 0.74 ms |
+| Logical events in update burst | 1,000 | 20 |
+| Update burst JSON bytes | 143,209 | 2,861 |
+| Stock client snapshot processing | 12.68 ms | 0.24 ms |
+| Stock client update processing | 2,396.18 ms | 0.76 ms |
 
-JSON sizes include each logical event/result envelope before transport compression; they exclude websocket framing and grouped-message separators. Client timings cover JSON decoding and the standard client's state updates on Node. They exclude network time, dashboard rendering, and tablet interaction. The approximately 98% reduction in these payloads is specific to this fixture, and is not a measured reduction in compressed network traffic or total CPU usage.
+A separate bootstrap comparison measures the context acknowledgement and initial state stream. Context first sends 200 states in 52,959 JSON bytes, with no reconciliation. Native startup sends 10,000 states in 2,640,919 bytes. If the startup hook falls back and context arrives late, full data plus reconciliation uses 3,026,084 bytes, about 15% more than native startup. The fixture contains only sensors; interface-domain retention can increase the scope on a real installation. Stock-client tests exercise Core's preload sequence, and live Chrome checks confirm a single scoped first snapshot and first-request resource omission, including the root route and a delayed reporter. These checks do not measure visible rendering speed.
 
-Registry filtering still parses the complete native list before selecting rows. In this fixture, a full entity-registry request took 2.86 ms with filtering bypassed and 13.19 ms with filtering active. Loona 0.3.1 uses Core's JSON decoder to reduce that filtering cost; the preceding decoder measured 28.24 ms on the same fixture. Smaller responses trade additional server processing for less data to transfer and process on the client.
+JSON sizes include logical event/result envelopes before compression, excluding websocket framing and grouped-message separators. Node timings include decoding and state collection updates, excluding network time, dashboard rendering and tablet interaction. Registry filtering parses the full native response: the full registry request took 4.40 ms while bypassed and 15.55 ms while filtered. Smaller replies can cost more server processing.
 
-To reproduce from a checkout with uv and Node.js installed, install the pinned development dependencies and run:
+To reproduce with uv and Node.js installed:
 
 ```sh
 uv venv --python 3.14 venv
@@ -172,31 +139,39 @@ npm ci
 LOONA_BENCHMARK=1 LOONA_BENCHMARK_OUTPUT=/tmp/loona-benchmark.json venv/bin/python -m pytest tests/test_benchmark.py -q -s
 ```
 
-The benchmark creates an isolated in-memory Home Assistant fixture and writes aggregate results. It requires no Home Assistant login or running server. The ordinary test suite runs a smaller fixture to verify the measurements and final stock-client state.
-
-For a real-browser comparison, use the same dashboard, account, network, and browser with a warm cache. Compare several page loads and normal card interactions with Loona's Enabled switch on and off, then restore it to on. Check that values update and service buttons work in both modes. Record the device model, browser/app version, and observed load times separately from the protocol measurements above. These benchmark numbers do not measure how fast your cards finish loading.
+The fixture runs in memory without a Home Assistant server or login. Ordinary tests use a smaller fixture and check final stock-client state. Compare real browser loads and interactions separately, using the same dashboard, account, device, browser and network, and reload when changing resource policy.
 
 ## Troubleshooting
 
-**A card has missing or incorrect data:** turn off Enabled and compare. If that fixes it, check the selected dashboards and entity rules. Press Rescan dashboards after correcting them.
+**Missing card data or selector choices:** turn off Enabled and compare. Check Entity rules, selected dashboards and accounts. Dialogs opened inside a filtered dashboard retain its scope.
 
-**A card or icon does not appear:** turn off Resource filtering and reload the browser. Check the needed file in **Cards**  before enabling the filter again.
+**Missing card or icon:** turn off Resource filtering and reload. Check optional files under Cards and the Home Assistant log. Unknown global modules are retained automatically.
 
-**Entity filtering is not active:** check Enabled, Entity filtering and the selected accounts. Filtered update feeds should be greater than zero. Reload pages opened before setup or an integration reload. Check Compatibility, Dashboard scan and **Warnings and checks** in either Loona card.
+**No filtered feed:** check Enabled, Entity filtering, accounts and dashboard selections. Check Compatibility, Dashboard scan and the cards' notices. Refresh after upgrading; transient startup reporting failures retry automatically.
 
-**Dashboard scan says Incomplete:** check for removed dashboards/accounts and save automatically generated dashboards. Unsupported templates, strategies or auto-entities rules can prevent a complete scan. Loona sends all entity data while this condition remains. Missing entity IDs alone do not cause this condition.
+**Incomplete scan:** check removed dashboards/accounts, save generated dashboards and review unsupported dynamic constructs. Native data is retained while a scan is unsafe. Missing entity IDs alone do not make it incomplete.
 
-**Compatibility says Limited:** check your HA version and Loona diagnostics. Another integration may also have replaced a function Loona requires. The affected feature leaves its requests to HA.
+**Limited compatibility:** inspect the failed capability probe in diagnostics. Compatible features remain usable on Core 2024.6.0 or newer. Reload Loona after resolving missing APIs or conflicting handler ownership; refresh the browser for frontend changes.
 
-**A panel is missing choices:** reload the browser after upgrading Loona. Non-dashboard panels and unselected dashboards receive normal data. Selectors opened within a filtered dashboard still use its scope; add needed entities under **Entity rules** or disable filtering while editing.
+Report problems at [Loona issues](https://github.com/leecaochang/Loona/issues) with the Core version, affected card type and integration diagnostics. Diagnostics redact account/entity IDs, dashboard paths, resource URLs and reference locations.
 
-When reporting a problem at [Loona issues](https://github.com/leecaochang/Loona/issues), include your HA version, affected card type and integration diagnostics. Diagnostics hide account and entity IDs, dashboard paths, file URLs and reference locations.
+## Uninstall
+
+Remove Loona through **Settings > Devices & services**. This unregisters its modules, deletes its saved controls and dashboard ownership record through native Stores, and removes only its unedited owned dashboard. Native entry selections are deleted with the entry, so a new installation starts with defaults. Edited or foreign dashboards are preserved for manual management. Remove manually placed Loona cards and refresh browser pages. If installed through HACS, remove its files there afterward.
+
+Uninstall also permanently deletes short-term and long-term Recorder statistics for sensors verified as belonging to Loona. Native registry records include previously removed Loona sensors and retained records from earlier uninstalls; an entity ID currently reused by another integration or an unregistered active entity is protected. Dashboard entities and their statistics are preserved. Ordinary state history follows Recorder's usual retention policy. Cleanup uses Recorder's own queue; a database failure or a wait longer than 15 seconds is logged, and queued deletion can finish afterward.
 
 ## Development tests
 
-The GitHub Actions compatibility matrix runs `tests/core_compatibility.py` against each supported HA release with its matching dependencies and frontend. It checks setup/unload, native storage and YAML dashboards, entity discovery, registry lists, options, controls, permissions, live updates, bypass and restoration. Graph and animation tests cover the verified current frontends.
+The commit- and image-digest-pinned GitHub Actions workflow defines eight representative native Core/frontend environments, the full pytest suite including frontend and Chromium acceptance tests, pyflakes, mypy, hassfest and HACS validation. Dependabot monitors action, Python and npm dependencies; validator image digests require deliberate updates. The native matrix exercises the minimum baseline and representative later releases. It does not control runtime admission. Update native frontend fixtures and their provenance when the container changes.
 
-To reproduce a compatibility test, follow `.github/workflows/compatibility.yml` in an isolated environment and run `python tests/core_compatibility.py`. Development dependencies in `pyproject.toml` pin HA 2026.9.4 and require Python 3.14.2 or newer. Supported older HA releases use Python 3.12.
+The native runner checks setup/unload, storage and YAML loading, discovery, permissions, options, controls, resources, live updates, dashboard ownership and restoration. The full development suite is pinned to Core 2026.9.4 and requires Python 3.14.2 or newer. Loona's own syntax floor remains Python 3.12. Use each older Core's matching interpreter and constraints for its native runner.
+
+```sh
+venv/bin/python -m pytest tests/ -q
+venv/bin/python -m pyflakes custom_components/loona/ tests/
+venv/bin/python -m mypy custom_components/loona/
+```
 
 ## License
 

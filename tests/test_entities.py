@@ -30,7 +30,8 @@ async def test_native_platforms_and_dashboard_selection_cleanup(
         "binary_sensor",
         "button",
     }
-    assert {entity.entity_id for entity in entities} <= runtime.entity_ids
+    assert not ({entity.entity_id for entity in entities} & runtime.entity_ids)
+    assert runtime.entity_ids == {"sensor.wall"}
     assert (
         len(
             dr.async_child_entries_for_config_entry(
@@ -111,7 +112,9 @@ async def test_missing_frontend_api_preserves_native_panel_data(
         assert "sensor.other" in wire[-1]["event"]["a"]
         assert runtime.panel_compatibility_problem
         entities = er.async_entries_for_config_entry(er.async_get(loona_hass), entry.entry_id)
-        assert not any(entity.unique_id.endswith((":visible_first_graphs", ":pause_animations_during_loading")) for entity in entities)
+        graph_controls = [entity for entity in entities if entity.unique_id.endswith((":visible_first_graphs", ":pause_animations_during_loading"))]
+        assert len(graph_controls) == 2
+        assert all(loona_hass.states.get(entity.entity_id).state == "unavailable" for entity in graph_controls)
     finally:
         assert await async_unload_entry(loona_hass, entry)
         await entry._async_process_on_unload(loona_hass)

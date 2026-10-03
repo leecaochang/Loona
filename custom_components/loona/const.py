@@ -7,16 +7,11 @@ SUBSCRIBE_ENTITIES: Final = "subscribe_entities"
 PANEL_SUBSCRIBE: Final = "loona/subscribe_panel"
 PANEL_COMMAND: Final = "loona/panel"
 PANEL_ASSET: Final = "/loona/panel-context.js"
-PANEL_POLL_MS: Final = 100
-SUPPORTED_CORE_VERSIONS: Final = frozenset(
-    {
-        "2024.5.5", "2024.12.5", "2025.6.3", "2026.1.3", "2026.8.3",
-        "2026.9.3", "2026.9.4",
-    }
-)
-REGISTRY_CORE_VERSIONS: Final = SUPPORTED_CORE_VERSIONS
-FRONTEND_CORE_VERSIONS: Final = frozenset({"2026.9.3", "2026.9.4"})
-VERSION: Final = "0.9.0"
+PANEL_POLL_MS: Final = 2000
+BOOTSTRAP_TIMEOUT_MS: Final = 2000
+RECORDER_CLEANUP_SECONDS: Final = 15
+MIN_CORE_VERSION: Final = "2024.6.0"
+VERSION: Final = "0.9.2"
 CONF_DASHBOARD_CARDS: Final = "dashboard_cards"
 DASHBOARD_CARDS: Final = ("statistics", "settings")
 CONF_DASHBOARDS: Final = "dashboards"
@@ -30,17 +25,14 @@ TARGET_SELECTED: Final = "selected"
 TARGET_ALL: Final = "all"
 TARGET_MODES: Final = (TARGET_SELECTED, TARGET_ALL)
 DEFAULT_DASHBOARD: Final = "lovelace"
+# Native strategies generate built-in cards; unknown strategies retain all files.
+RESOURCE_NATIVE_STRATEGIES: Final = frozenset({"map", "iframe", "original-states", "areas", "area", "areas-overview", "home", "home-overview", "home-area", "home-media-players", "home-other-devices"})
 CONTROL_MASTER: Final = "enabled"
 CONTROL_ENTITIES: Final = "entity_filtering"
 CONTROL_REGISTRIES: Final = "registry_filtering"
 CONTROL_RESOURCES: Final = "resource_filtering"
 CONF_ALWAYS_FORWARD: Final = "always_forward_resources"
-RESOURCE_CORE_VERSIONS: Final = SUPPORTED_CORE_VERSIONS
 RESOURCE_COMMANDS: Final = ("lovelace/resources", "lovelace/resources/list")
-RESOURCE_COMMAND_PROFILES: Final = {
-    version: RESOURCE_COMMANDS[:1] if version == "2024.5.5" else RESOURCE_COMMANDS
-    for version in RESOURCE_CORE_VERSIONS
-}
 # Published bundle names and the custom element families they register.
 RESOURCE_CARDS: Final = {
     "card-mod.js": ("mod-card",),
@@ -80,12 +72,11 @@ RESOURCE_CARDS: Final = {
     "loona-deferred-card.js": ("loona-deferred-card",),
 }
 # card-mod also applies theme styles and patches native cards globally.
-RESOURCE_SHARED: Final = frozenset({"card-mod.js"})
+RESOURCE_SHARED: Final = frozenset({"card-mod.js", "kiosk-mode.js"})
 # These cards are installed as frontend modules, outside Lovelace's file list.
 BUNDLED_CARD_TYPES: Final = frozenset({"loona-statistics-card", "loona-settings-card"})
 # Browser Mod registers this resource for Cast as well as an extra frontend module.
 RESOURCE_SHARED_PATHS: Final = {"/browser_mod.js": "Browser Mod frontend service and Cast companion"}
-RESOURCE_CONFIG_KEYS: Final = {"kiosk_mode": "kiosk-mode.js"}
 CONTROL_GRAPHS: Final = "visible_first_graphs"
 CONTROL_MOTION: Final = "pause_animations_during_loading"
 MOTION_QUIET_MS: Final = 750
@@ -100,6 +91,7 @@ MOTION_PROGRESS_TAGS: Final = (
 GRAPH_CONTEXT: Final = "loona_graph_loading"
 GRAPH_SUBSCRIBE: Final = "loona/subscribe_graph_loading"
 GRAPH_QUIET_MS: Final = 750
+GRAPH_PROBE_MS: Final = 10000
 GRAPH_POLL_MS: Final = 100
 GRAPH_TRACE_LIMIT: Final = 200
 GRAPH_PROFILES: Final = {
@@ -125,12 +117,14 @@ SETTINGS_ASSET: Final = "/loona/settings-card.js"
 I18N_ASSET: Final = "/loona/i18n.js"
 SETTINGS_COMMAND: Final = "loona/settings"
 SETTINGS_SAVE_COMMAND: Final = "loona/save_settings"
+SETTINGS_CHOICES_COMMAND: Final = "loona/settings_choices"
 SETTINGS_GROUPS: Final = {
     "controls": frozenset(),
     "dashboards": frozenset({CONF_DASHBOARDS}),
     "targets": frozenset({CONF_TARGET_MODE, CONF_USER_IDS}),
     "rules": frozenset({CONF_EXTRA_ENTITIES, CONF_INCLUDE_DOMAINS, CONF_INCLUDE_GLOBS, CONF_EXCLUDE_GLOBS}),
     "resources": frozenset({CONF_ALWAYS_FORWARD}),
+    "cards": frozenset({CONF_DASHBOARD_CARDS}),
 }
 SETTINGS_EMPTY_DEFAULTS: Final = frozenset({CONF_EXTRA_ENTITIES, CONF_INCLUDE_DOMAINS, CONF_INCLUDE_GLOBS, CONF_EXCLUDE_GLOBS, CONF_ALWAYS_FORWARD})
 SETTINGS_CHOICE_PAGE: Final = 50

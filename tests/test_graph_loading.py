@@ -33,13 +33,14 @@ async def test_native_bootstrap_and_redaction(graph_runtime, make_user, make_con
     connection, wire = make_connection(user)
     commands.handle_get_config(graph_runtime.hass, connection, {"id": 1})
     native = wire[-1]["result"]
+    await graph_runtime.async_set_control("visible_first_graphs", True)
     connection.async_handle({"id": 2, "type": "get_config"})
     augmented = wire[-1]["result"]
     assert {key: value for key, value in augmented.items() if key != GRAPH_CONTEXT} == native
     assert "external_url" not in augmented
     context = augmented[GRAPH_CONTEXT]
     assert context["version"] == VERSION
-    assert context["enabled"] is False
+    assert context["enabled"] is True
     assert context["motion"]["enabled"] is False
     assert context["motion"]["max_ms"] == 10000
     assert context["quiet_ms"] == 750
@@ -123,10 +124,10 @@ async def test_unknown_native_owners_preserved(loona_hass, make_entry, dashboard
     assert table["get_config"] is foreign
 
 
-async def test_untested_core_bypasses(loona_hass, make_entry, dashboards):
+async def test_unparseable_core_bypasses(loona_hass, make_entry, dashboards):
     native = loona_hass.data[websocket_api.DOMAIN]["get_config"]
     runtime = LoonaRuntime(loona_hass, make_entry({"dashboards": ["wall-panel"], "target_mode": "all"}))
-    with patch("custom_components.loona.graph_loading.ha_const.__version__", "unknown"):
+    with patch("custom_components.loona.compatibility.ha_const.__version__", "unknown"):
         await runtime.async_start()
     assert runtime.graph_adapter is None
     assert loona_hass.data[websocket_api.DOMAIN]["get_config"] is native
@@ -160,5 +161,22 @@ def test_genuine_hui_card_scheduling(script):
     """Use native HuiCard and Lit to expose lifecycle and editor assumptions."""
     result = subprocess.run(
         ["node", str(Path("tests") / script)], capture_output=True, text=True, timeout=30
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("hook", ["_loadElement", "_updateElement", "_setElementVisibility"])
+def test_missing_native_browser_hook_preserves_original_methods(hook):
+    result = subprocess.run(
+        ["node", "tests/graph_loading.mjs", hook], capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Missing native hook preserves ordinary graph loading" in result.stdout
+
+
+def test_missing_native_container_falls_back_and_recovers_when_loaded():
+    result = subprocess.run(
+        ["node", "tests/graph_loading_bootstrap.mjs", "missing-container"],
+        capture_output=True, text=True, timeout=30,
     )
     assert result.returncode == 0, result.stdout + result.stderr

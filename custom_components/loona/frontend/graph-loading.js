@@ -1,15 +1,32 @@
-import { StartupMotion } from "./startup-motion.js?v=0.9.0";
+import { StartupMotion } from "./startup-motion.js?v=0.9.2";
+import { text } from "./i18n.js?v=0.9.2";
 
-// Optional graph scheduling for the tested native Home Assistant card container.
+// Probe the native card container before enabling optional graph scheduling.
 // Dashboard configuration and loaded card elements remain native.
 if (!window[Symbol.for("loona.graph-loading")]) {
   window[Symbol.for("loona.graph-loading")] = true;
-  const moduleVersion = "0.9.0";
+  const moduleVersion = "0.9.2";
   const motion = new StartupMotion(moduleVersion);
+  const capability = window.__loonaGraphCapability = { status: "pending", enabled: false };
+  let probeTimer;
+  function probeStatus(status) {
+    clearTimeout(probeTimer);
+    capability.status = status;
+    window.dispatchEvent(new window.Event("loona-capabilities"));
+  }
+  function probePolicy(policy) {
+    const enabled = Boolean(policy?.enabled || policy?.motion?.enabled);
+    const changed = capability.enabled !== enabled;
+    capability.enabled = enabled;
+    if (changed) window.dispatchEvent(new window.Event("loona-capabilities"));
+    if (capability.status === "pending" && !probeTimer && Number.isFinite(policy?.probe_ms) && policy.probe_ms > 0) {
+      probeTimer = setTimeout(() => probeStatus("unavailable"), policy.probe_ms);
+    }
+  }
   const connectedCards = new Set();
   const records = new WeakMap();
   const policies = new WeakMap();
-  const subscriptions = new WeakSet();
+  const subscriptions = new WeakMap();
   const events = [];
   const started = performance.now();
   let sequence = 0;
@@ -59,24 +76,58 @@ if (!window[Symbol.for("loona.graph-loading")]) {
       policies.set(connection, policy);
       lastPolicy = policy;
       motion.update(policy, hass);
+      probePolicy(policy);
     }
     if (!subscriptions.has(connection) && typeof connection.subscribeMessage === "function") {
-      subscriptions.add(connection);
+      const state = { generation: 0, pending: false, stopped: false };
+      subscriptions.set(connection, state);
       const update = (value) => {
         policies.set(connection, valid(value) ? value : { enabled: false });
         motion.update(valid(value) ? value : undefined, hass);
+        probePolicy(valid(value) ? value : undefined);
         if (valid(value)) lastPolicy = value;
         for (const card of connectedCards) {
           if (card._hass?.connection === connection && !eligible(card._owner, card._config)) {
             card._load(false, "disabled");
           }
         }
+        if (value?.active === false) {
+          state.stopped = true;
+          clearTimeout(state.retry);
+          connection.removeEventListener?.("ready", ready);
+          if (state.unsubscribe) Promise.resolve(state.unsubscribe()).catch(() => {});
+        }
       };
-      Promise.resolve(connection.subscribeMessage(update, { type: "loona/subscribe_graph_loading" }))
-        .catch(() => update(undefined));
+      const subscribe = () => {
+        if (!connection.connected || state.pending || state.stopped) return;
+        state.pending = true;
+        const generation = state.generation;
+        Promise.resolve(connection.subscribeMessage((value) => {
+          if (generation === state.generation) update(value);
+        }, { type: "loona/subscribe_graph_loading" }, { resubscribe: false }))
+          .then((remove) => { if (generation === state.generation) state.unsubscribe = remove; })
+          .catch(() => {
+            if (generation !== state.generation) return;
+            update(undefined);
+            state.retry = setTimeout(subscribe, 2000);
+          })
+          .finally(() => { if (generation === state.generation) state.pending = false; });
+      };
+      const ready = () => {
+        clearTimeout(state.retry);
+        state.generation++;
+        state.pending = false;
+        state.unsubscribe = undefined;
+        update(undefined);
+        subscribe();
+      };
+      connection.addEventListener?.("ready", ready);
+      subscribe();
     }
     return valid(policy) ? policy : undefined;
   }
+
+  window.loonaProbeFrontend = policyFor;
 
   function eligible(owner, config) {
     const policy = policyFor(owner?.hass ?? construction?.hass);
@@ -353,6 +404,12 @@ if (!window[Symbol.for("loona.graph-loading")]) {
   // HA replaces the registry and HTMLElement during bootstrap. Both the class
   // and its registration must wait for the native card container to be ready.
   customElements.whenDefined("hui-card").then(() => {
+    const prototype = customElements.get("hui-card").prototype;
+    if (!["_loadElement", "_updateElement", "_setElementVisibility"]
+      .every((name) => typeof prototype[name] === "function")) {
+      probeStatus("unavailable");
+      return;
+    }
     class GraphPlaceholder extends HTMLElement {
       constructor() {
         super();
@@ -388,7 +445,10 @@ if (!window[Symbol.for("loona.graph-loading")]) {
       }
 
       connectedCallback() {
+        this.setAttribute("role", "status");
+        this.setAttribute("aria-busy", "true");
         this._owner = this.parentElement;
+        this.setAttribute("aria-label", text(this._owner?.hass || this._hass, "Graph loading"));
         this._profile = policyFor(this._owner?.hass)?.profiles[this._config.type];
         if (!nativeLoad) return;
         this.style.setProperty("--loona-graph-height", `${this._profile?.height ?? 0}px`);
@@ -401,7 +461,7 @@ if (!window[Symbol.for("loona.graph-loading")]) {
           return;
         }
         this._observer = new IntersectionObserver((entries) => {
-          const entry = entries.at(-1);
+          const entry = entries[entries.length - 1];
           if (!this._owner?.isConnected || this._owner.hidden) return;
           const visible = Boolean(entry?.isIntersecting);
           if (visible && !this._visible) {
@@ -465,9 +525,6 @@ if (!window[Symbol.for("loona.graph-loading")]) {
     }
 
     customElements.define("loona-graph-placeholder", GraphPlaceholder);
-    const prototype = customElements.get("hui-card").prototype;
-    if (!["_loadElement", "_updateElement", "_setElementVisibility"]
-      .every((name) => typeof prototype[name] === "function")) return;
     nativeLoad = prototype._loadElement;
     prototype._loadElement = function (config) {
       // Existing graphs and native rebuilds keep Home Assistant's ordinary path.
@@ -505,5 +562,6 @@ if (!window[Symbol.for("loona.graph-loading")]) {
         construction = previous;
       }
     };
+    probeStatus("available");
   });
 }

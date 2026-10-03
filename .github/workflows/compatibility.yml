@@ -15,7 +15,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - core: '2024.5.5'
+          - core: '2024.6.0'
+            python: '3.12'
+          - core: '2024.6.4'
             python: '3.12'
           - core: '2024.12.5'
             python: '3.12'
@@ -30,11 +32,11 @@ jobs:
           - core: '2026.9.4'
             python: '3.14'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ matrix.python }}
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
       - name: Install pinned Core and frontend
         env:
           GH_TOKEN: ${{ github.token }}
@@ -52,3 +54,42 @@ jobs:
           uv pip install --python .compat-venv/bin/python -c /tmp/loona-constraints.txt "$loona_frontend"
       - name: Check native integration lifecycle and filtering
         run: .compat-venv/bin/python tests/core_compatibility.py
+
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - run: uv venv venv
+      - run: uv pip install --python venv/bin/python -r pyproject.toml --extra test
+      - run: npm ci
+      - name: Install Chromium for the browser acceptance tests
+        run: test -x /usr/bin/google-chrome || (sudo apt-get update && sudo apt-get install -y chromium)
+      - run: venv/bin/python -m pytest tests/ -q
+      - run: venv/bin/python -m pyflakes custom_components/loona/ tests/
+      - run: venv/bin/python -m mypy custom_components/loona/
+
+  hassfest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Validate with the pinned upstream hassfest image
+        run: docker run --rm -v "$GITHUB_WORKSPACE:/github/workspace" ghcr.io/home-assistant/hassfest@sha256:39031fe75baf5566814a01f3c414764c029c54a0e1d742965d5b94a0d6120875
+
+  hacs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker://ghcr.io/hacs/action@sha256:dc92fdad2f6ffbe74bffb7269d781ea8e064f52d9bb486cdf3925d74e7ab6ebf
+        env:
+          INPUT_CATEGORY: integration
+          INPUT_COMMENT: 'false'
+          INPUT_GITHUB_TOKEN: ${{ github.token }}
+          INPUT_REPOSITORY: ${{ github.repository }}

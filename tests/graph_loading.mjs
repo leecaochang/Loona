@@ -84,21 +84,40 @@ StackCard = class extends native.HuiStackCard {};
 customElements.define("test-native-stack", StackCard);
 const moduleSource = (await build({ entryPoints: ["custom_components/loona/frontend/graph-loading.js"],
   bundle: true, write: false, format: "esm" })).outputFiles[0].text;
+const missingHook = process.argv[2];
+const probedNativeLoad = native.HuiCard.prototype._loadElement;
+if (missingHook) delete native.HuiCard.prototype[missingHook];
 await import(`data:text/javascript;base64,${Buffer.from(moduleSource).toString("base64")}`);
 await Promise.resolve();
+
+if (missingHook) {
+  assert.equal(window.__loonaGraphCapability.status, "unavailable");
+  assert.equal(native.HuiCard.prototype._loadElement, missingHook === "_loadElement" ? undefined : probedNativeLoad);
+  assert.equal(customElements.get("loona-graph-placeholder"), undefined);
+  console.log("Missing native hook preserves ordinary graph loading");
+  await window.happyDOM.abort();
+  process.exit(0);
+}
+assert.equal(window.__loonaGraphCapability.status, "available");
 
 const profiles = {
   sensor: { height: 120, size: 3, columns: 6, rows: 2 },
   "custom:mini-graph-card": { height: 150, size: 3, columns: 6, rows: 3 },
   "custom:apexcharts-card": { height: 250, size: 5, columns: 6, rows: 5 },
 };
-const initialPolicy = { version: "0.9.0", enabled: true, dashboards: ["wall-panel"],
+const initialPolicy = { version: "0.9.2", enabled: true, dashboards: ["wall-panel"],
   quiet_ms: 20, poll_ms: 5, trace_limit: 200, profiles };
 function makeHass(policy = initialPolicy) {
   const connection = {
     connected: true, commands: new Map(),
-    subscribeMessage(callback, message) {
+    subscriptions: 0, listeners: new Map(),
+    addEventListener(name, callback) { this.listeners.set(name, callback); },
+    removeEventListener(name) { this.listeners.delete(name); },
+    subscribeMessage(callback, message, options) {
       assert.equal(message.type, "loona/subscribe_graph_loading");
+      assert.equal(options.resubscribe, false);
+      this.subscriptions++;
+      if (this.failNext) { this.failNext = false; return Promise.reject({code:"unknown_command"}); }
       this.publish = callback;
       return Promise.resolve(() => {});
     },
@@ -298,6 +317,16 @@ for (const config of [{ type: "sensor" }, { type: "entity" }, { type: "custom:ot
 const error = await owner({ type: "sensor", graph: "line", throw: true }, { visible: true });
 assert.equal(error._element.config.type, "error");
 await cleanup();
+// Optional policy subscriptions retry a handled startup error after reconnect.
+const recoveryHass = makeHass();
+await owner({type:"sensor",graph:"line"}, {hass:recoveryHass,visible:true});
+await cleanup();
+recoveryHass.connection.failNext = true;
+recoveryHass.connection.listeners.get("ready")();
+await sleep(2100);
+assert.equal(recoveryHass.connection.subscriptions,3);
+recoveryHass.connection.publish({...initialPolicy,active:false});
+assert.equal(recoveryHass.connection.listeners.has("ready"),false);
 const originalLoad = customElements.get("hui-card").prototype._loadElement;
 await import(`data:text/javascript;base64,${Buffer.from(`${moduleSource}\n// second import`).toString("base64")}`);
 assert.equal(customElements.get("hui-card").prototype._loadElement, originalLoad);

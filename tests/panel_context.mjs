@@ -118,5 +118,9 @@ assert.equal(finalSocket.sent.at(-1).type, "unsubscribe_events");
 assert.equal(finalConnection.commands.has(panelId), false, "Unload releases the stock client's persistent subscription");
 const finalCount = finalSocket.sent.length;
 timers[0]();
-assert.equal(finalSocket.sent.length, finalCount);
+assert.equal(finalSocket.sent.length, finalCount + 1, "Unload probes for a reload through native methods");
+assert.equal(finalConnection.sendMessagePromise,Connection.prototype.sendMessagePromise);
+for(let i=0;i<35;i++) { await new Promise(setImmediate); timers[0](); }
+await new Promise(setImmediate);
+assert.equal(finalSocket.sent.length, finalCount + 30, "Reload probes stop after a bounded retry window");
 console.log("Panel context passes native-client bootstrap, navigation, ordering, reconnect and account replacement");

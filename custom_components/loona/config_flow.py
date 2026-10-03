@@ -79,7 +79,7 @@ def dashboard_schema(hass: HomeAssistant, current: dict[str, Any]) -> vol.Schema
                 selector.SelectSelectorConfig(
                     options=[
                         selector.SelectOptionDict(value=key, label=title)
-                        for key, title in titles.items()
+                        for key, title in sorted(titles.items(), key=lambda item: (item[1].casefold(), item[0]))
                     ],
                     multiple=True,
                     mode=selector.SelectSelectorMode.DROPDOWN,
@@ -111,7 +111,7 @@ async def target_schema(hass: HomeAssistant, current: dict[str, Any]) -> vol.Sch
                 selector.SelectSelectorConfig(
                     options=[
                         selector.SelectOptionDict(value=key, label=label)
-                        for key, label in accounts.items()
+                        for key, label in sorted(accounts.items(), key=lambda item: (item[1].casefold(), item[0]))
                     ],
                     multiple=True,
                     mode=selector.SelectSelectorMode.DROPDOWN,
@@ -158,10 +158,10 @@ async def validate_targets(hass: HomeAssistant, data: dict[str, Any]) -> str | N
 class LoonaConfigFlow(ConfigFlow, domain=DOMAIN):
     """Select dashboards and accounts once through native HA selectors."""
 
-    VERSION = 1
+    VERSION = 2
 
     def __init__(self) -> None:
-        """Collect dashboard, account and optional card choices."""
+        """Initialize the setup selections."""
         super().__init__()
         self._settings: dict[str, Any] = {}
 
@@ -193,7 +193,7 @@ class LoonaConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_targets(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Target administrators intentionally; never infer a role bypass."""
+        """Select active accounts or apply to every account."""
         errors: dict[str, str] = {}
         if user_input is not None:
             if error := await validate_targets(self.hass, user_input):
@@ -279,6 +279,7 @@ class LoonaOptionsFlow(OptionsFlow):
                 "filters",
                 "rules",
                 "resource_preview",
+                "cards",
             ],
         )
 
@@ -324,11 +325,12 @@ class LoonaOptionsFlow(OptionsFlow):
             if runtime is None:
                 errors["base"] = "not_loaded"
             else:
-                if set(user_input) - (runtime.available_controls - {CONTROL_MASTER}):
-                    raise ValueError("Unsupported Loona control")
-                for key, enabled in user_input.items():
-                    await runtime.async_set_control(key, enabled)
-                return self.finish({})
+                if (set(user_input) - (runtime.available_controls - {CONTROL_MASTER})
+                    or any(not isinstance(value, bool) for value in user_input.values())):
+                    errors["base"] = "invalid_selection"
+                else:
+                    await runtime.async_set_controls(user_input)
+                    return self.finish({})
         return self.async_show_form(
             step_id="filters", errors=errors,
             data_schema=vol.Schema(
@@ -351,12 +353,14 @@ class LoonaOptionsFlow(OptionsFlow):
         schema = vol.Schema(
             {
                 vol.Optional(key, default=self.settings.get(key, [])):
-                    selector.SelectSelector(selector.SelectSelectorConfig(
-                        options=values,
+                    (selector.EntitySelector(selector.EntitySelectorConfig(multiple=True)) if key == CONF_EXTRA_ENTITIES
+                     else selector.SelectSelector(selector.SelectSelectorConfig(
+                        options=[value for value in values if ".*" in value or value in self.settings.get(key, [])]
+                        if key in {CONF_INCLUDE_GLOBS, CONF_EXCLUDE_GLOBS} else values,
                         multiple=True,
-                        custom_value=False,
+                        custom_value=key in {CONF_INCLUDE_GLOBS, CONF_EXCLUDE_GLOBS},
                         mode=selector.SelectSelectorMode.DROPDOWN,
-                    ))
+                    )))
                 for key, values in choices.items()
             }
         )
@@ -366,7 +370,7 @@ class LoonaOptionsFlow(OptionsFlow):
             except vol.Invalid:
                 errors["base"] = "invalid_selection"
             else:
-                if any(len(items) != len(set(items)) for items in values.values()):
+                if any(len(items) != len(set(items)) or not set(items) <= set(choices[key]) for key, items in values.items()):
                     errors["base"] = "invalid_selection"
                 else:
                     return self.finish(values)
@@ -389,9 +393,10 @@ class LoonaOptionsFlow(OptionsFlow):
         except CompatibilityError:
             return self.async_abort(reason="resources_unavailable")
         required = {row["url"] for row in report["resources"] if row["status"] == "required"}
+        current = self.settings.get(CONF_ALWAYS_FORWARD, [])
         choices = {
             row["url"]: f"{row['url']} ({row['type']})"
-            for row in report["resources"] if row["status"] != "required"
+            for row in report["resources"] if row["status"] == "unused" or row["url"] in current and row["status"] != "required"
         }
         current = self.settings.get(CONF_ALWAYS_FORWARD, [])
         for url in report["stale_exceptions"]:
@@ -425,7 +430,7 @@ class LoonaOptionsFlow(OptionsFlow):
                 return self.finish({CONF_ALWAYS_FORWARD: sorted(saved)})
         fixed = [
             f"- `{row['url']}` ({row['type']})"
-            for row in report["resources"] if row["status"] == "required"
+            for row in report["resources"] if row["status"] != "unused"
         ]
         schema: dict[Any, Any] = {}
         if editable:
@@ -455,8 +460,21 @@ class LoonaOptionsFlow(OptionsFlow):
             },
         )
 
-    async def async_step_resource_exceptions(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Route older flow links to the combined resource settings form."""
-        return await self.async_step_resource_preview(user_input)
+    async def async_step_cards(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Change the generated dashboard's card selection."""
+        schema = vol.Schema({vol.Optional(CONF_DASHBOARD_CARDS, default=self.settings.get(CONF_DASHBOARD_CARDS, [])):
+            selector.SelectSelector(selector.SelectSelectorConfig(
+                options=list(DASHBOARD_CARDS), multiple=True, translation_key="dashboard_cards",
+                mode=selector.SelectSelectorMode.LIST,
+            ))})
+        errors = {}
+        if user_input is not None:
+            try:
+                values = schema(user_input)
+                if len(values[CONF_DASHBOARD_CARDS]) != len(set(values[CONF_DASHBOARD_CARDS])):
+                    raise vol.Invalid("Duplicate card")
+            except vol.Invalid:
+                errors["base"] = "invalid_selection"
+            else:
+                return self.finish(values)
+        return self.async_show_form(step_id="cards", data_schema=schema, errors=errors)

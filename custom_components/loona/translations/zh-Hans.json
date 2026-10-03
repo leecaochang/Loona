@@ -32,9 +32,7 @@
     "error": {
       "no_dashboards": "请至少选择一个仪表盘。",
       "no_accounts": "请至少选择一个有效账户。",
-      "invalid_selection": "部分选项已失效或被重复选择。请从当前列表中重新选择。",
-      "invalid_pattern": "请选择 light 等实体类型，或 sensor.room_* 等匹配规则。规则不能包含空格或未配对的括号。",
-      "not_loaded": "Loona 尚未运行。请重新加载集成，然后重试。"
+      "invalid_selection": "部分选项已失效或被重复选择。请从当前列表中重新选择。"
     },
     "abort": {
       "already_configured": "只能配置一个 Loona 集成。"
@@ -49,7 +47,8 @@
           "targets": "账户",
           "filters": "筛选与性能",
           "rules": "实体规则",
-          "resource_preview": "卡片"
+          "resource_preview": "卡片",
+          "cards": "Loona 仪表盘"
         }
       },
       "dashboards": {
@@ -80,7 +79,7 @@
       },
       "rules": {
         "title": "实体规则",
-        "description": "在包含项中添加 Loona 遗漏的实体。需要时可包含整个实体类型或 sensor.* 等匹配规则。排除规则始终优先于包含规则。Loona 自身的控制和统计实体会保留。",
+        "description": "在“包含”中添加 Loona 未识别的实体。需要时可以包含整个实体类型，或填写已知实体 ID、sensor.* 等类型规则。排除规则优先于包含规则。Home Assistant 界面使用的人员、更新和区域实体始终保留。",
         "data": {
           "extra_entities": "包含：实体",
           "include_domains": "包含：实体类型",
@@ -90,10 +89,17 @@
       },
       "resource_preview": {
         "title": "卡片",
-        "description": "{required_start}自动保留的文件（{required_count}）{required_summary_end}\n\n这些文件用于仪表盘卡片或共享样式。\n\n{required}\n\n{required_end}\n\n无法匹配到文件的卡片类型（{unresolved_count}）：{unresolved}\n\n已保存但不再注册的文件（{stale_count}）：{stale}\n\n开启资源筛选后，下方勾选的文件也会加载，未勾选的文件会跳过。新出现的可选文件默认不勾选。“启用”总开关也需要开启。关闭资源筛选时，所有已注册的文件都会加载。\n\n模板可能需要 Loona 无法识别的文件。如果卡片或图标缺失，请勾选对应文件，或关闭资源筛选。取消勾选已失效的文件即可移除保存的选择。没有显示开关时，表示当前安装无法使用此功能。保存后，请刷新浏览器页面；已加载的文件会保留到刷新为止。",
+        "description": "{required_start}自动保留的文件（{required_count}）{required_summary_end}\n\n这些文件用于已配置的仪表盘、全局辅助功能，或无法安全识别用途。\n\n{required}\n\n无法匹配文件的卡片类型（{unresolved_count}）：{unresolved}\n\n已保存但不再注册的文件（{stale_count}）：{stale}\n\n启用资源筛选后，下方勾选的文件也会加载。只有已知但未使用的卡片文件可以跳过。未知文件始终保留；动态配置或扫描不完整时保留全部文件。\n\n勾选弹窗等功能所需的可选文件，并取消不再需要的已保存文件。保存后重新加载浏览器页面。已经加载的文件会保留到页面重新加载。如果资源筛选控件不可用，请查看诊断信息。",
         "data": {
           "resource_filtering": "资源筛选",
           "always_forward_resources": "额外加载的文件"
+        }
+      },
+      "cards": {
+        "title": "添加仪表盘卡片",
+        "description": "可选择任一卡片、两张卡片，或都不选择。所选卡片将添加到仅管理员可见的 Loona 仪表盘。以后也可以将内置卡片添加到自己的仪表盘。",
+        "data": {
+          "dashboard_cards": "仪表盘卡片"
         }
       }
     },
@@ -101,7 +107,6 @@
       "no_dashboards": "请至少选择一个仪表盘。",
       "no_accounts": "请至少选择一个有效账户。",
       "invalid_selection": "部分选项已失效或被重复选择。请从当前列表中重新选择。",
-      "invalid_pattern": "请选择 light 等实体类型，或 sensor.room_* 等匹配规则。规则不能包含空格或未配对的括号。",
       "not_loaded": "Loona 尚未运行。请重新加载集成，然后重试。"
     },
     "abort": {

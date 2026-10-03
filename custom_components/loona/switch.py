@@ -1,4 +1,4 @@
-"""Persisted automation controls with immediate subscription reconciliation."""
+"""Persisted filtering and performance controls with immediate subscription reconciliation."""
 
 from typing import Any
 
@@ -7,7 +7,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import CONTROL_RESOURCES, CONTROL_ENTITIES, CONTROL_GRAPHS, CONTROL_MASTER, CONTROL_MOTION, CONTROL_REGISTRIES
+from .const import CONTROL_DEFAULTS
 from .entity import LoonaEntity
 from .runtime import LoonaConfigEntry, LoonaRuntime
 
@@ -19,16 +19,7 @@ async def async_setup_entry(
 ) -> None:
     async_add_entities(
         [
-            LoonaSwitch(entry.runtime_data, key, name)
-            for key, name in (
-                (CONTROL_MASTER, "Enabled"),
-                (CONTROL_ENTITIES, "Entity filtering"),
-                (CONTROL_REGISTRIES, "Registry filtering"),
-                (CONTROL_RESOURCES, "Resource filtering"),
-                (CONTROL_GRAPHS, "Delay graph loading"),
-                (CONTROL_MOTION, "Pause animations during loading"),
-            )
-            if key in entry.runtime_data.available_controls
+            LoonaSwitch(entry.runtime_data, key) for key in CONTROL_DEFAULTS
         ]
     )
 
@@ -38,8 +29,8 @@ class LoonaSwitch(LoonaEntity, SwitchEntity):
 
     _attr_entity_category = EntityCategory.CONFIG
 
-    def __init__(self, runtime: LoonaRuntime, key: str, name: str) -> None:
-        super().__init__(runtime, key, name)
+    def __init__(self, runtime: LoonaRuntime, key: str) -> None:
+        super().__init__(runtime, key)
         self.key = key
 
     @property

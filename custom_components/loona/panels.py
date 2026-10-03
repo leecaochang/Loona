@@ -10,7 +10,7 @@ import voluptuous as vol
 from homeassistant.components import frontend, websocket_api
 from homeassistant.core import HomeAssistant, callback
 
-from .compatibility import CompatibilityError, HandlerEntry
+from .compatibility import CompatibilityError, probe_error, HandlerEntry
 from .const import PANEL_ASSET, PANEL_COMMAND, PANEL_SUBSCRIBE, PANEL_POLL_MS, VERSION
 
 
@@ -20,15 +20,25 @@ def _released_context() -> None:
 
 
 async def async_register_frontend(hass: HomeAssistant) -> Callable[[], None]:
-    """Load context reporting on all admitted Core versions and every panel."""
+    """Keep frontend API changes isolated from working backend adapters."""
+    try:
+        return await _async_register_frontend(hass)
+    except CompatibilityError:
+        raise
+    except Exception as err:
+        raise probe_error("Native frontend registration probe failed", err) from err
+
+
+async def _async_register_frontend(hass: HomeAssistant) -> Callable[[], None]:
+    """Load context reporting using the available native frontend APIs."""
     key = "loona_panel_asset_registered"
     if not hass.data.get(key):
         path = str(Path(__file__).parent / "frontend" / "panel-context.js")
         if callable(getattr(hass.http, "async_register_static_paths", None)):
             from homeassistant.components.http import StaticPathConfig
-            await hass.http.async_register_static_paths([StaticPathConfig(PANEL_ASSET, path, cache_headers=False)])
+            await hass.http.async_register_static_paths([StaticPathConfig(PANEL_ASSET, path, cache_headers=True)])
         elif callable(register := getattr(hass.http, "register_static_path", None)):
-            register(PANEL_ASSET, path, cache_headers=False)
+            register(PANEL_ASSET, path, cache_headers=True)
         else:
             raise CompatibilityError("Frontend panel context registration is unavailable")
         hass.data[key] = True
@@ -122,6 +132,11 @@ class PanelContext:
         for handler in (subscribe, update):
             websocket_api.async_register_command(self.hass, handler)
         self._owned = {name: table[name] for name in (PANEL_COMMAND, PANEL_SUBSCRIBE)}
+
+    def request_resubscribe(self, connection: websocket_api.ActiveConnection) -> None:
+        """Ask the stock client to replay the original, lossless requests."""
+        if panel := self._connections.get(connection):
+            connection.send_event(panel.msg_id, {"resubscribe": True})
 
     def set_dashboards(self, dashboards: frozenset[str]) -> None:
         """Changing selected dashboards also reconciles already open panels."""

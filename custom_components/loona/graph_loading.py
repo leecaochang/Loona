@@ -6,12 +6,13 @@ from typing import TYPE_CHECKING, Any, cast
 
 import voluptuous as vol
 
-from homeassistant import const as ha_const
 from homeassistant.components import frontend, websocket_api
 from homeassistant.components.websocket_api import commands
 from homeassistant.core import HomeAssistant, callback
 
-from .compatibility import CompatibilityError, HandlerEntry, HandlerTable
+from .compatibility import (
+    CompatibilityError, probe_error, HandlerEntry, ProbeConnection, inspect_native_command, probe_sync,
+)
 from .const import (
     CONF_DASHBOARDS,
     CONF_TARGET_MODE,
@@ -26,11 +27,11 @@ from .const import (
     MOTION_VIEW_TAGS,
     GRAPH_CONTEXT,
     GRAPH_POLL_MS,
+    GRAPH_PROBE_MS,
     GRAPH_PROFILES,
     GRAPH_QUIET_MS,
     GRAPH_SUBSCRIBE,
     GRAPH_TRACE_LIMIT,
-    FRONTEND_CORE_VERSIONS,
     TARGET_ALL,
     VERSION,
 )
@@ -44,37 +45,47 @@ _ASSET_REGISTERED = "loona_graph_asset_registered"
 
 
 async def async_register_frontend(hass: HomeAssistant) -> Callable[[], None]:
-    """Register a native extra module once, without editing resource storage."""
+    """Keep frontend API changes isolated from working backend adapters."""
     try:
-        from homeassistant.components.http import StaticPathConfig
-    except ImportError as err:
-        raise CompatibilityError("Frontend static path API is unavailable") from err
-    if not all(callable(api) for api in (
-        StaticPathConfig,
-        getattr(hass.http, "async_register_static_paths", None),
-        getattr(frontend, "add_extra_js_url", None),
-        getattr(frontend, "remove_extra_js_url", None),
-    )):
-        raise CompatibilityError("Frontend registration APIs are unavailable")
+        return await _async_register_frontend(hass)
+    except CompatibilityError:
+        raise
+    except Exception as err:
+        raise probe_error("Native frontend registration probe failed", err) from err
 
+
+async def _async_register_frontend(hass: HomeAssistant) -> Callable[[], None]:
+    """Register a native extra module once, without editing resource storage."""
+    register_many = getattr(hass.http, "async_register_static_paths", None)
+    register_one = getattr(hass.http, "register_static_path", None)
+    if not callable(getattr(frontend, "add_extra_js_url", None)) or not (
+        callable(getattr(frontend, "remove_extra_js_url", None))
+        or callable(getattr(hass.data.get(frontend.DATA_EXTRA_MODULE_URL), "remove", None))
+    ):
+        raise CompatibilityError("Frontend module APIs are unavailable")
     if not hass.data.get(_ASSET_REGISTERED):
-        await hass.http.async_register_static_paths(
-            [
-                StaticPathConfig(
-                    _ASSET_PATH,
-                    str(Path(__file__).parent / "frontend" / "graph-loading.js"),
-                    cache_headers=False,
-                ),
-                StaticPathConfig(
-                    "/loona/startup-motion.js",
-                    str(Path(__file__).parent / "frontend" / "startup-motion.js"),
-                    cache_headers=False,
-                )
-            ]
+        paths = (
+            (_ASSET_PATH, str(Path(__file__).parent / "frontend" / "graph-loading.js")),
+            ("/loona/startup-motion.js", str(Path(__file__).parent / "frontend" / "startup-motion.js")),
         )
+        if callable(register_many):
+            from homeassistant.components.http import StaticPathConfig
+            await register_many([StaticPathConfig(url, path, cache_headers=True) for url, path in paths])
+        elif callable(register_one):
+            for url, path in paths:
+                register_one(url, path, cache_headers=True)
+        else:
+            raise CompatibilityError("Frontend static path API is unavailable")
         hass.data[_ASSET_REGISTERED] = True
+
+    def remove() -> None:
+        if callable(unregister := getattr(frontend, "remove_extra_js_url", None)):
+            unregister(hass, _ASSET_URL)
+        else:
+            hass.data[frontend.DATA_EXTRA_MODULE_URL].remove(_ASSET_URL)
+
     frontend.add_extra_js_url(hass, _ASSET_URL)
-    return lambda: frontend.remove_extra_js_url(hass, _ASSET_URL)
+    return remove
 
 
 class _ConfigConnection:
@@ -90,13 +101,14 @@ class _ConfigConnection:
 
     @callback
     def send_result(self, msg_id: int, result: Any = None) -> None:
-        if isinstance(result, dict):
-            result = {**result, GRAPH_CONTEXT: self.adapter.context(self.connection)}
+        context = self.adapter.context(self.connection)
+        if isinstance(result, dict) and (context["enabled"] or context["motion"]["enabled"]):
+            result = {**result, GRAPH_CONTEXT: context}
         self.connection.send_result(msg_id, result)
 
 
 class GraphLoadingAdapter:
-    """Own only the tested native config hook and a read-only policy subscription."""
+    """Own only the probed native config hook and a read-only policy subscription."""
 
     def __init__(self, runtime: "LoonaRuntime") -> None:
         self.runtime = runtime
@@ -124,6 +136,7 @@ class GraphLoadingAdapter:
         )
         return {
             "version": VERSION,
+            "active": not self.stopped,
             "enabled": bool(allowed and self.runtime.controls[CONTROL_GRAPHS]),
             "motion": {
                 "enabled": bool(allowed and self.runtime.controls[CONTROL_MOTION]),
@@ -134,6 +147,7 @@ class GraphLoadingAdapter:
                 "view_tags": MOTION_VIEW_TAGS,
             },
             "dashboards": list(settings.get(CONF_DASHBOARDS, ())) if targeted else [],
+            "probe_ms": GRAPH_PROBE_MS,
             "quiet_ms": GRAPH_QUIET_MS,
             "poll_ms": GRAPH_POLL_MS,
             "trace_limit": GRAPH_TRACE_LIMIT,
@@ -141,23 +155,16 @@ class GraphLoadingAdapter:
         }
 
     def install(self) -> None:
-        """Decline unfamiliar versions, handlers, schemas, or another policy owner."""
-        if ha_const.__version__ not in FRONTEND_CORE_VERSIONS:
-            raise CompatibilityError("Graph loading requires a tested Core version")
-        table = cast(HandlerTable, self.hass.data.get(websocket_api.DOMAIN, {}))
-        if not isinstance(table, dict):
-            raise CompatibilityError("Websocket commands are not registered yet")
-        original = table.get("get_config")
-        native = commands.handle_get_config
-        if (
-            not isinstance(original, tuple)
-            or len(original) != 2
-            or original[0] is not native
-            or original[1] is not getattr(native, "_ws_schema", None)
-            or original[1] is not False
-            or GRAPH_SUBSCRIBE in table
-        ):
+        """Probe native configuration before installing the policy commands."""
+        native = getattr(commands, "handle_get_config", None)
+        table, original = inspect_native_command(self.hass, "get_config", native)
+        native = original[0]
+        if GRAPH_SUBSCRIBE in table:
             raise CompatibilityError("Another handler owns graph loading commands")
+        connection = ProbeConnection(self.hass)
+        probe_sync(self.hass, native, {"id": 1, "type": "get_config"}, connection)
+        if not isinstance(connection.result(), dict):
+            raise CompatibilityError("Native configuration response changed")
         self.original = original
 
         @callback

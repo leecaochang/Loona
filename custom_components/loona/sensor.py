@@ -17,22 +17,22 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .entity import LoonaEntity
 from .runtime import LoonaConfigEntry, LoonaRuntime
 
-_METRICS = {
-    "warnings": "Warnings",
-    "version": "Version",
-    "union_entities": "Union entities",
-    "current_scope": "Current scope entities",
-    "reduction_estimate": "Entity count reduction estimate",
-    "managed_subscriptions": "Managed subscriptions",
-    "filtered_subscriptions": "Filtered subscriptions",
-    "last_scan": "Last successful scan",
-    "scan_duration": "Scan duration",
-    "forwarded_rate": "Entity updates forwarded per second",
-    "avoided_rate": "Entity updates avoided per second",
-    "update_reduction": "Live entity update reduction",
-    "forwarded_updates": "Entity updates forwarded",
-    "avoided_updates": "Entity updates avoided",
-}
+_METRICS = (
+    "warnings",
+    "version",
+    "union_entities",
+    "current_scope",
+    "reduction_estimate",
+    "managed_subscriptions",
+    "filtered_subscriptions",
+    "last_scan",
+    "scan_duration",
+    "forwarded_rate",
+    "avoided_rate",
+    "update_reduction",
+    "forwarded_updates",
+    "avoided_updates",
+)
 
 
 async def async_setup_entry(
@@ -42,7 +42,7 @@ async def async_setup_entry(
 ) -> None:
     runtime = entry.runtime_data
     async_add_entities(
-        [LoonaSensor(runtime, key, name) for key, name in _METRICS.items()]
+        [LoonaSensor(runtime, key) for key in _METRICS]
     )
     children: dict[str, list[LoonaSensor]] = {}
     tasks: set[asyncio.Task] = set()
@@ -74,11 +74,8 @@ async def async_setup_entry(
         for key in runtime.selected_dashboards:
             if key not in children:
                 children[key] = [
-                    LoonaSensor(runtime, metric, name, key)
-                    for metric, name in (
-                        ("discovered_entities", "Discovered entities"),
-                        ("unresolved_entities", "Unresolved entities"),
-                    )
+                    LoonaSensor(runtime, metric, key)
+                    for metric in ("discovered_entities", "unresolved_entities")
                 ]
                 async_add_entities(children[key])
         for key in set(children) - set(runtime.selected_dashboards) - removing:
@@ -108,9 +105,9 @@ class LoonaSensor(LoonaEntity, SensorEntity):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(
-        self, runtime: LoonaRuntime, key: str, name: str, dashboard: str | None = None
+        self, runtime: LoonaRuntime, key: str, dashboard: str | None = None
     ) -> None:
-        super().__init__(runtime, key, name, dashboard)
+        super().__init__(runtime, key, dashboard)
         self.key = key
         if key == "warnings":
             self._attr_icon = "mdi:alert-outline"

@@ -75,13 +75,13 @@ def test_configured_helpers_popups_features_and_exact_bundle_tags():
     # uncertain because browser-local settings can still require its runtime.
     changed = resource_report(rows, resource_dependencies([{}]))
     assert [row["status"] for row in changed["resources"]] == [
-        "unused", "unused", "unused", "unclassified", "required", "unused",
+        "unused", "unused", "unused", "required", "required", "unused",
     ]
     unknown = resource_report(rows, resource_dependencies([{"type": "custom:nodalia-new-card"}]))
     assert unknown["unresolved_custom_types"] == ["nodalia-new-card"]
-    assert not unknown["resources"][2]["forwarded"]
+    assert unknown["resources"][2]["forwarded"], "Unknown card registrations retain all bundles"
     nested = resource_report(rows, resource_dependencies([{"card": {"kiosk_mode": {}}}]))
-    assert nested["resources"][3]["status"] == "unclassified"
+    assert nested["resources"][3]["status"] == "required"
 
 
 def test_helper_mapping_does_not_trust_remote_names_or_wrong_resource_kinds():
@@ -94,7 +94,7 @@ def test_helper_mapping_does_not_trust_remote_names_or_wrong_resource_kinds():
         ("/local/kiosk-mode.js", "html"),
     ]]
     report = resource_report(rows, resource_dependencies([{"kiosk_mode": {}}]))
-    assert all(row["status"] == "unclassified" and not row["forwarded"] for row in report["resources"])
+    assert all(row["status"] == "unclassified" and row["forwarded"] for row in report["resources"])
 
 
 def test_bundled_cards_do_not_need_lovelace_resource_registrations():
@@ -136,10 +136,10 @@ async def test_native_storage_aliases_live_changes_master_and_unload(
     await runtime.async_set_control("resource_filtering", True)
     for name in ("lovelace/resources", "lovelace/resources/list"):
         reduced = (await request(runtime.hass, connection, output, name))["result"]
-        assert reduced == [row for row in full if row["type"] == "css" or "mini-graph" in row["url"]]
+        assert reduced == [row for row in full if row["type"] == "css" or "mini-graph" in row["url"] or "helper.js" in row["url"]]
     # A freshly installed module is evaluated without a manual rescan.
     new = await collection.async_create_item({"url": "/local/unknown-new.js", "res_type": "module"})
-    assert new not in (await request(runtime.hass, connection, output))["result"]
+    assert new in (await request(runtime.hass, connection, output))["result"]
     # Native editing commands still see and update original registrations.
     result = await request(runtime.hass, connection, output, "lovelace/resources/update",
                            resource_id=new["id"], url="/local/apexcharts-card.js")
@@ -163,7 +163,7 @@ async def test_account_targets_native_permissions_and_incomplete_bypass(
     runtime.resource_adapter.set_policy(ScopePolicy(user_ids=frozenset({selected.id})))
     connection, output = make_connection(selected)
     connection.async_handle({"id": 1, "type": "loona/subscribe_panel", "dashboard": "wall-panel"})
-    assert len((await request(runtime.hass, connection, output))["result"]) == 2
+    assert len((await request(runtime.hass, connection, output))["result"]) == 3
     denied = await request(runtime.hass, connection, output, "lovelace/resources/create",
                            url="/local/denied.js", res_type="module")
     assert not denied["success"] and denied["error"]["code"] == "unauthorized"
@@ -199,9 +199,9 @@ async def test_preview_exceptions_dashboard_edits_and_redaction(resources_runtim
     assert "/local/mini-graph-card-bundle.js?v=1" in form["description_placeholders"]["required"]
     assert "/local/button-card.js" not in form["description_placeholders"]["required"]
     assert not runtime.controls["resource_filtering"]
-    form = await flow.async_step_resource_exceptions()
+    form = await flow.async_step_resource_preview()
     assert form["data_schema"]({}) == {"resource_filtering": False, "always_forward_resources": []}
-    result = await flow.async_step_resource_exceptions({"always_forward_resources": ["/local/helper.js"]})
+    result = await flow.async_step_resource_preview({"always_forward_resources": ["/local/button-card.js"]})
     runtime.hass.config_entries.async_update_entry(runtime.entry, options=result["data"])
     await runtime.async_scan()
     assert (await runtime.async_resource_preview())["resources"][-1]["forwarded"]
@@ -212,7 +212,7 @@ async def test_preview_exceptions_dashboard_edits_and_redaction(resources_runtim
     assert statuses["/local/button-card.js"] == "required"
     assert statuses["/local/mini-graph-card-bundle.js?v=1"] == "unused"
     diagnostics = await async_get_config_entry_diagnostics(runtime.hass, runtime.entry)
-    assert "/local/helper.js" not in str(diagnostics)
+    assert "/local/button-card.js" not in str(diagnostics)
 
 
 async def test_native_optional_checkboxes_required_rows_and_master(
@@ -228,19 +228,19 @@ async def test_native_optional_checkboxes_required_rows_and_master(
     picker = schema["always_forward_resources"]
     assert picker.config["mode"] == "list" and picker.config["multiple"]
     assert {choice["value"] for choice in picker.config["options"]} == {
-        "/local/button-card.js", "/local/helper.js",
+        "/local/button-card.js",
     }
     assert form["data_schema"]({})["always_forward_resources"] == []
     assert "/local/shared.css" in form["description_placeholders"]["required"]
     result = await flow.async_step_resource_preview({
-        "resource_filtering": True, "always_forward_resources": ["/local/helper.js"],
+        "resource_filtering": True, "always_forward_resources": ["/local/button-card.js"],
     })
     runtime.hass.config_entries.async_update_entry(runtime.entry, options=result["data"])
     await runtime.async_scan()
     assert runtime.controls["resource_filtering"]
-    assert len((await request(runtime.hass, connection, output))["result"]) == 3
+    assert len((await request(runtime.hass, connection, output))["result"]) == 4
     form = await flow.async_step_resource_preview()
-    assert form["data_schema"]({})["always_forward_resources"] == ["/local/helper.js"]
+    assert form["data_schema"]({})["always_forward_resources"] == ["/local/button-card.js"]
     assert runtime.resource_preview["resources"][-1]["status"] == "unclassified"
     # Optional resources remain editable after being enabled.
     result = await flow.async_step_resource_preview({"always_forward_resources": []})
@@ -248,7 +248,7 @@ async def test_native_optional_checkboxes_required_rows_and_master(
     await runtime.async_scan()
     reduced = (await request(runtime.hass, connection, output))["result"]
     assert {row["url"] for row in reduced} == {
-        "/local/mini-graph-card-bundle.js?v=1", "/local/shared.css",
+        "/local/mini-graph-card-bundle.js?v=1", "/local/shared.css", "/local/helper.js",
     }
     await flow.async_step_resource_preview({"resource_filtering": False})
     assert not runtime.controls["resource_filtering"]
@@ -283,7 +283,7 @@ async def test_required_transitions_preserve_explicit_choices_and_new_optional_d
     result = await flow.async_step_resource_preview({"always_forward_resources": []})
     runtime.hass.config_entries.async_update_entry(runtime.entry, options=result["data"])
     await runtime.async_scan()
-    assert [row["url"] for row in runtime.resource_preview["resources"] if row["forwarded"]] == ["/local/shared.css"]
+    assert [row["url"] for row in runtime.resource_preview["resources"] if row["forwarded"]] == ["/local/shared.css", "/local/helper.js", "/local/new-optional.js"]
 
 
 async def test_preview_is_read_only_when_resource_adapter_unavailable(resources_runtime):
@@ -350,7 +350,7 @@ async def test_resource_lists_bypass_unknown_and_non_dashboard_panels(resources_
     await request(runtime.hass, connection, output, "loona/subscribe_panel", dashboard="config")
     assert (await request(runtime.hass, connection, output))["result"] == collection.async_items()
     await request(runtime.hass, connection, output, "loona/panel", dashboard="wall-panel")
-    assert len((await request(runtime.hass, connection, output))["result"]) == 2
+    assert len((await request(runtime.hass, connection, output))["result"]) == 3
     await request(runtime.hass, connection, output, "loona/panel", dashboard="developer-tools")
     assert (await request(runtime.hass, connection, output))["result"] == collection.async_items()
 
@@ -362,7 +362,7 @@ async def test_resource_notices_stale_exception_and_collection_failure_isolation
     assert issue_key not in issues.issues
     await runtime.async_set_control("resource_filtering", True)
     assert issue_key not in issues.issues
-    assert any(item["code"] == "unchecked_resources" and item["severity"] == "info" for item in runtime.notice_report())
+    assert not any(item["code"] == "unchecked_resources" for item in runtime.notice_report())
     await runtime.async_set_control("resource_filtering", False)
     assert issue_key not in issues.issues
     runtime.hass.config_entries.async_update_entry(runtime.entry, options={
@@ -374,7 +374,9 @@ async def test_resource_notices_stale_exception_and_collection_failure_isolation
     with patch.object(collection, "async_items", return_value=None):
         await runtime.async_scan()
     assert runtime.adapter is not None and runtime.registry_adapter is not None
-    assert runtime.resource_adapter is None and runtime.resource_compatibility_problem
+    assert runtime.resource_adapter is not None and not runtime.resource_complete
+    await runtime.async_scan()
+    assert runtime.resource_complete and runtime.resource_compatibility_problem is None
 
 
 async def test_schema_conflict_is_atomic(resources_runtime):

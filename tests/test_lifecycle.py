@@ -228,7 +228,7 @@ async def test_entity_mapping_updates_existing_state_and_registry_collections(
     assert wire[-1]["event"]["c"][power]["+"]["s"] == "4321"
 
 
-async def test_rules_protect_controls_and_keep_missing_reference(
+async def test_rules_do_not_force_telemetry_and_keep_missing_reference(
     runtime, dashboards, loona_hass
 ):
     control = er.async_get(loona_hass).async_get_or_create(
@@ -248,7 +248,6 @@ async def test_rules_protect_controls_and_keep_missing_reference(
     )
     await runtime.async_scan()
     assert runtime.entity_ids == {
-        control.entity_id,
         "sensor.future",
         "sensor.other",
         "light.extra",
@@ -322,12 +321,12 @@ async def test_registry_control_defaults_persistence_and_independent_policy(runt
         await new.async_stop()
 
 
-async def test_unsupported_version_leaves_native_hook_and_reports_problem(
+async def test_below_baseline_leaves_native_hook_and_reports_problem(
     loona_hass, make_entry, dashboards
 ):
     native = loona_hass.data["websocket_api"]["subscribe_entities"]
     runtime = LoonaRuntime(loona_hass, make_entry(settings()))
-    with patch("homeassistant.const.__version__", "2025.1.0"):
+    with patch("homeassistant.const.__version__", "2024.5.5"):
         await runtime.async_start()
     assert runtime.compatibility_problem and runtime.adapter is None
     assert loona_hass.data["websocket_api"]["subscribe_entities"] is native

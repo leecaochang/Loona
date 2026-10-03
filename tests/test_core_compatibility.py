@@ -14,16 +14,15 @@ def test_native_backend_acceptance_runner():
     assert "Passed full native backend acceptance" in result.stdout
 
 
-def test_ci_matrix_covers_every_admitted_core():
+def test_ci_exercises_minimum_baseline_and_representative_releases():
+    import json
     import yaml
 
-    from custom_components.loona.const import (
-        FRONTEND_CORE_VERSIONS, REGISTRY_CORE_VERSIONS, SUPPORTED_CORE_VERSIONS,
-    )
+    from custom_components.loona.const import MIN_CORE_VERSION
 
-    path = Path(__file__).resolve().parents[1] / ".github/workflows/compatibility.yml"
-    workflow = yaml.safe_load(path.read_text())
+    root = Path(__file__).resolve().parents[1]
+    workflow = yaml.safe_load((root / ".github/workflows/compatibility.yml").read_text())
     rows = workflow["jobs"]["backend"]["strategy"]["matrix"]["include"]
-    assert {row["core"] for row in rows} == SUPPORTED_CORE_VERSIONS
-    assert FRONTEND_CORE_VERSIONS <= SUPPORTED_CORE_VERSIONS
-    assert REGISTRY_CORE_VERSIONS <= SUPPORTED_CORE_VERSIONS
+    assert MIN_CORE_VERSION in {row["core"] for row in rows}
+    assert len({row["core"].split(".")[0] for row in rows}) >= 3
+    assert json.loads((root / "hacs.json").read_text())["homeassistant"] == MIN_CORE_VERSION

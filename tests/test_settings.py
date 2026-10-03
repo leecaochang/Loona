@@ -163,5 +163,5 @@ def test_translations_cover_native_ui_schema():
         fields = {part[1] for part in string.Formatter().parse(value) if part[1] is not None}
         localized_fields = {part[1] for part in string.Formatter().parse(chinese[key]) if part[1] is not None}
         assert fields == localized_fields, key
-    for variant in ['zh', 'zh-Hant']:
-        assert leaves(json.loads((root / f'translations/{variant}.json').read_text())) == chinese
+    assert not (root / "translations/zh-Hant.json").exists()
+    assert not (root / "translations/zh.json").exists()

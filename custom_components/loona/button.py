@@ -1,4 +1,4 @@
-"""Optional troubleshooting rescan using the native Lovelace loader."""
+"""Native buttons for dashboard scans and resetting live statistics."""
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.core import HomeAssistant
@@ -15,8 +15,8 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     async_add_entities([
-        LoonaRescan(entry.runtime_data, "rescan", "Rescan dashboards"),
-        LoonaResetStatistics(entry.runtime_data, "reset_live_statistics", "Reset live statistics"),
+        LoonaRescan(entry.runtime_data, "rescan"),
+        LoonaResetStatistics(entry.runtime_data, "reset_live_statistics"),
     ])
 
 

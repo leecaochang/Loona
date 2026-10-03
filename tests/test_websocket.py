@@ -450,7 +450,7 @@ async def test_changed_native_schema_reports_compatibility_failure(hass, monkeyp
     table = hass.data[websocket_api.DOMAIN]
     entry = (native, schema)
     table["subscribe_entities"] = entry
-    with pytest.raises(CompatibilityError, match="validation changed"):
+    with pytest.raises(CompatibilityError, match="schema changed"):
         SubscriptionAdapter(hass, ScopePolicy()).install()
     assert table["subscribe_entities"] is entry
 
@@ -466,7 +466,7 @@ async def test_unsupported_adapter_does_not_change_command_table(
     table = hass.data[websocket_api.DOMAIN]
     handler, schema = table["subscribe_entities"]
     if problem == "version":
-        monkeypatch.setattr(ha_const, "__version__", "2026.10.0")
+        monkeypatch.setattr(ha_const, "__version__", "2024.5.5")
     elif problem == "missing":
         del table["subscribe_entities"]
     elif problem == "shape":

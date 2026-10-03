@@ -25,6 +25,7 @@ from custom_components.loona.const import DOMAIN
 async def hass(tmp_path):
     """Create a genuine Core with its native websocket command table."""
     instance = HomeAssistant(str(tmp_path))
+    instance.config.skip_pip = True
     dr.async_setup(instance)
     await dr.async_load(instance, load_empty=True)
     await er.async_load(instance, load_empty=True)
@@ -168,10 +169,12 @@ def frontend_http(loona_hass):
     from homeassistant.components.http import HomeAssistantHTTP
     from homeassistant.components.http.cors import setup_cors
 
+    loona_hass.config.components.update({"http", "frontend"})
     loona_hass.http = HomeAssistantHTTP(
         loona_hass, None, None, None, ["127.0.0.1"], 0, [], "modern"
     )
     setup_cors(loona_hass.http.app, [])
+    loona_hass.http.app.router.register_resource(frontend.IndexView(None, loona_hass))
     loona_hass.data[frontend.DATA_EXTRA_MODULE_URL] = frontend.UrlManager(
         lambda operation, url: None, []
     )
@@ -187,6 +190,7 @@ async def dashboards(loona_hass):
     from homeassistant.components.lovelace.resources import ResourceStorageCollection, ResourceStorageCollectionWebsocket
     from homeassistant.components.lovelace.const import RESOURCE_CREATE_FIELDS, RESOURCE_UPDATE_FIELDS
 
+    loona_hass.config.components.add("lovelace")
     default = LovelaceStorage(loona_hass, None)
     wall = LovelaceStorage(
         loona_hass, {"id": "wall", "url_path": "wall-panel", "title": "Wall"}

@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 
 from .const import VERSION, DOMAIN, METRIC_SECONDS, PAGE_LOAD_COMMAND, PAGE_LOAD_LIMIT
-from .dashboard import dashboard_objects
+from .dashboard import dashboard_objects, dashboard_titles
 from homeassistant.util import dt as dt_util
 from .runtime import LoonaRuntime
 
@@ -70,10 +70,9 @@ def websocket_page_load(hass: HomeAssistant, connection: websocket_api.ActiveCon
     if initial is not None:
         rows = runtime.live_statistics.page_loads
         rows.pop(path, None)
-        rows[path] = {"dashboard": path, "title": (board.config or {}).get("title", "Overview"),
+        rows[path] = {"dashboard": path, "title": dashboard_titles(hass).get(path, path),
                       "at": dt_util.utcnow().isoformat(), "entities": initial,
-                      "resources": runtime.adapter.resource_counts(connection) if runtime.adapter else None,
-                      "shared_scope": True}
+                      "resources": runtime.adapter.resource_counts(connection) if runtime.adapter else None}
         while len(rows) > PAGE_LOAD_LIMIT:
             rows.pop(next(iter(rows)))
     connection.send_result(msg["id"], None)

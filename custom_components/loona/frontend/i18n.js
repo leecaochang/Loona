@@ -1,5 +1,10 @@
 /* Shared English/Simplified Chinese messages for Loona cards. */
 const chinese = {
+  "Loading optimizations are unavailable in this browser": "此浏览器无法使用加载优化",
+  "Graphs and animations use normal Home Assistant behavior. Other Loona filters remain available.": "图表和动画使用 Home Assistant 的标准行为。Loona 的其他筛选功能仍然可用。",
+  "Graph loading": "图表正在加载",
+  "Resource scan is incomplete": "资源扫描不完整",
+  "Home Assistant is loading all registered files. Check the Home Assistant log for the failed dashboard or resource load, then rescan. Loona retries automatically.": "Home Assistant 正在加载全部已注册的文件。请在 Home Assistant 日志中检查仪表盘或资源加载失败的原因，然后重新扫描。Loona 会自动重试。",
   "Dashboards": "仪表盘",
   "Apply filtering to": "筛选哪些账户",
   "Accounts": "账户",
@@ -30,7 +35,7 @@ const chinese = {
   "Filtered / tracked update feeds": "已筛选 / 跟踪的更新订阅",
   "Entities currently included": "当前包含的实体",
   "Latest page loads": "最近页面加载",
-  "Each dashboard's latest browser reload. Entity counts include all selected dashboards. File counts cover registered card files, not Home Assistant's own files or files loaded separately.": "每个仪表盘最近一次浏览器刷新的记录。实体计数包含所有所选仪表盘。文件计数只包含已注册的卡片文件，不包括 Home Assistant 自身文件或单独加载的文件。",
+  "Initial snapshots are filtered when startup dashboard detection succeeds. Startup fallback retains full data. File counts cover registered Lovelace files for the whole page session.": "启动时成功识别仪表盘后，初始实体快照会经过筛选。启动回退会保留完整数据。文件计数涵盖整个页面会话中已注册的 Lovelace 文件。",
   "Could not load statistics. Check that Loona is running, then press Refresh.": "无法加载统计。请确认 Loona 正在运行，再点击“刷新”。",
   "Unable to load statistics": "无法加载统计",
   "Could not reset statistics. Try Reset live statistics on the Loona device page.": "无法重置统计。请尝试 Loona 设备页面上的“重置实时统计”按钮。",
@@ -41,6 +46,10 @@ const chinese = {
   "Measured over the last {seconds} seconds.": "统计时段为最近 {seconds} 秒。",
   "Rates update within {seconds} seconds.": "更新速率将在 {seconds} 秒内显示。",
   "Each update is counted once per update feed, so multiple tabs can increase totals. These numbers do not measure loading speed or network traffic.": "每次更新按更新订阅分别计数，因此打开多个标签页可能增加总数。这些数字不代表加载速度或网络流量。",
+  "Sign in as an administrator to view Loona statistics.": "请使用管理员账户登录以查看 Loona 统计。",
+  "1 entity": "1 个实体",
+  "Loona dashboard": "Loona 仪表盘",
+  "Loona dashboard cards": "Loona 仪表盘卡片",
   "{count} entities": "{count} 个实体",
   "Since {time}": "开始于 {time}",
   "Entities sent: {sent} / {available}": "已发送实体：{sent} / {available}",
@@ -67,11 +76,11 @@ const chinese = {
   "Show more": "显示更多",
   "Unavailable": "不可用",
   "optional": "可选",
-  "Not used in selected dashboards": "所选仪表盘未使用",
+  "Not used in configured dashboards": "已配置仪表盘未使用",
   "Usage unknown": "用途不确定",
   "Files kept automatically ({count})": "自动保留的文件（{count}）",
   "These files are needed by your dashboards or shared styling.": "这些文件用于仪表盘卡片或共享样式。",
-  "Checked files load; unchecked files are skipped when Resource filtering is on. Save, then reload the browser page.": "开启资源筛选时，勾选的文件会加载，未勾选的文件会跳过。保存后，请刷新浏览器页面。",
+  "Known unused bundles can be skipped for the whole page session. Unknown modules always load. Save, then reload.": "已知未使用的文件可在整个页面会话中跳过。用途不确定的模块始终加载。保存后请刷新。",
   "Refresh is unavailable while you have unsaved changes.": "有未保存的修改时无法刷新。",
   "Change filters, dashboards and accounts": "修改筛选、仪表盘和账户",
   "Pause repeating animations while loading, then resume them automatically.": "加载期间暂停循环动画，随后自动恢复。",
@@ -89,19 +98,19 @@ const chinese = {
   "Excluded": "排除",
   "Entities": "实体",
   "Entity types": "实体类型",
-  "Entities or patterns": "实体或匹配规则",
+  "Entities or domain.*": "实体或 domain.*",
   "{count} selected": "已选择 {count} 项",
   "Loona finds dashboard entities automatically. Use these rules to add anything it missed or exclude entities you do not need.": "Loona 会自动查找仪表盘使用的实体。可用这些规则补充遗漏的实体，或排除不需要的实体。",
   "Add entities to the automatic dashboard list.": "在自动发现的仪表盘实体列表中添加实体。",
-  "Exclusions override inclusions and may leave cards without data. Loona's own controls and statistics stay included.": "排除规则优先于包含规则，可能导致卡片缺少数据。Loona 自身的控制和统计实体始终保留。",
-  "Turn off to restore standard dashboard behavior immediately.": "关闭后，仪表盘立即恢复标准行为。",
+  "Exclusions override inclusions and may leave cards without data. App status entities stay included.": "排除规则优先于包含规则，可能导致卡片缺少数据。应用状态实体仍会保留。",
+  "Turn off to restore full entity and registry feeds. Reload to restore skipped card files.": "关闭后恢复完整实体与注册表订阅。刷新页面以恢复跳过的卡片文件。",
   "Automatically find the entities used by your selected dashboards.": "自动查找所选仪表盘使用的实体。",
-  "Reduce the entity and device information sent to dashboards, including names, icons and areas.": "减少发送给仪表盘的实体和设备信息，包括名称、图标和区域等。",
-  "Load required files and any additional files selected under Cards. Refresh the browser after changes.": "加载必需的文件和在“卡片”中勾选的其他文件。修改后请刷新浏览器。",
+  "Keep registry rows related to the included entities and dashboard targets.": "保留与所包含实体及仪表盘目标相关的注册表条目。",
+  "Skip known unused card bundles. Keep unknown and shared modules. Reload after changes.": "跳过已知未使用的卡片文件，保留不确定用途及共享的模块。修改后请刷新。",
   "Delay off-screen graphs until the dashboard has loaded. Scrolling to a graph loads it immediately.": "等仪表盘加载完成后再加载屏幕外的图表。滚动到图表时立即加载。",
   "Choose which dashboards you want to filter.": "选择需要筛选的仪表盘。",
   "Choose which accounts receive filtered data while viewing selected dashboards.": "选择哪些账户在查看所选仪表盘时接收筛选后的数据。",
-  "Filtering applies only to selected accounts viewing selected dashboards.": "仅当所选账户查看所选仪表盘时应用筛选。",
+  "Entity and registry feeds follow the selected dashboard scope, including its dialogs.": "实体和注册表订阅遵循所选仪表盘范围，包括在仪表盘中打开的对话框。",
   "Version: {version}": "版本：{version}",
   "Warnings and checks ({count})": "警告与检查（{count}）",
   "No warnings": "没有警告",
@@ -109,13 +118,15 @@ const chinese = {
   "Check": "检查",
   "Affected items ({count})": "相关项目（{count}）",
   "Entity filtering is unavailable": "实体筛选无法使用",
-  "Home Assistant is handling entity updates normally. Check Loona diagnostics and the supported Home Assistant versions, then reload Loona and your browser.": "Home Assistant 正在正常处理实体更新。请查看 Loona 诊断信息和支持的 Home Assistant 版本，然后重新加载 Loona 并刷新浏览器。",
+  "Home Assistant is handling entity updates normally. Check Loona diagnostics for the failed capability probe, then reload Loona and your browser.": "Home Assistant 正在正常处理实体更新。请在 Loona 诊断信息中查看未通过的兼容性检测，然后重新加载 Loona 并刷新浏览器。",
   "Dashboard detection is unavailable": "无法识别当前仪表盘",
+  "Initial load filtering is limited": "首次加载筛选受限",
+  "Some pages start with full data. Loona filters after dashboard detection. Check diagnostics for the failed startup probe.": "部分页面启动时会接收完整数据。识别当前仪表盘后 Loona 会开始筛选。请查看诊断信息中未通过的启动检测。",
   "Loona cannot identify the active dashboard, so filtering is bypassed. Reload Loona and refresh the browser. If this continues, check diagnostics.": "Loona 无法识别当前仪表盘，因此已跳过筛选。请重新加载 Loona 并刷新浏览器。如果问题持续，请查看诊断信息。",
   "Registry filtering is unavailable": "注册表筛选无法使用",
   "Home Assistant is sending normal entity and device information. Check Loona diagnostics for a compatibility problem, then reload Loona.": "Home Assistant 正在发送正常的实体和设备信息。请查看 Loona 诊断信息中的兼容性问题，然后重新加载 Loona。",
   "Loading optimizations are unavailable": "加载优化无法使用",
-  "Graphs and animations use normal Home Assistant behavior. Check the supported Home Assistant versions and Loona diagnostics.": "图表和动画使用 Home Assistant 的标准行为。请检查支持的 Home Assistant 版本和 Loona 诊断信息。",
+  "Graphs and animations use normal Home Assistant behavior. Check Loona diagnostics for the failed capability probe.": "图表和动画使用 Home Assistant 的标准行为。请在 Loona 诊断信息中查看未通过的兼容性检测。",
   "Resource filtering is unavailable": "资源筛选无法使用",
   "Home Assistant is loading its normal card files. Check Loona diagnostics, then reload Loona and the browser.": "Home Assistant 正在正常加载卡片文件。请查看 Loona 诊断信息，然后重新加载 Loona 并刷新浏览器。",
   "The Loona dashboard could not be created": "无法创建 Loona 仪表盘",
@@ -127,13 +138,13 @@ const chinese = {
   "Excluded entities are used by cards": "排除的实体正在被卡片使用",
   "These exclusions may leave cards without data. Remove the matching exclusions under Entity rules, or keep them if intentional.": "这些排除规则可能导致卡片缺少数据。可在“实体规则”中移除对应的排除项，或在确实需要时保留。",
   "Custom cards may use additional entities": "自定义卡片可能使用其他实体",
-  "Loona cannot fully inspect every custom card. If card data is missing, add the needed entities under Entity rules. No action is needed if the cards work.": "Loona 无法完整分析所有自定义卡片。如果卡片缺少数据，请在“实体规则”中添加所需实体。卡片正常工作时无需操作。",
+  "Loona cannot fully inspect every custom card. If card data is missing, add the needed entities under Entity rules.": "Loona 无法完整分析所有自定义卡片。如果卡片缺少数据，请在“实体规则”中添加所需实体。",
   "Some card files could not be identified": "无法识别部分卡片文件",
-  "Check the required files under Cards if a card or icon is missing. You can turn off Resource filtering and refresh the browser to compare. No action is needed if everything works.": "如果卡片或图标缺失，请在“卡片”中检查所需文件。可以关闭资源筛选并刷新浏览器进行比较。一切正常时无需操作。",
+  "Check the required files under Cards if a card or icon is missing. You can turn off Resource filtering and refresh the browser to compare.": "如果卡片或图标缺失，请在“卡片”中检查所需文件。可以关闭资源筛选并刷新浏览器进行比较。",
   "Templates may load additional files": "模板可能加载其他文件",
-  "Template-driven cards can need files Loona cannot detect. If something is missing, select its file under Cards and refresh the browser. No action is needed if everything works.": "由模板控制的卡片可能需要 Loona 无法识别的文件。如果内容缺失，请在“卡片”中选择对应文件并刷新浏览器。一切正常时无需操作。",
+  "Resource filtering is bypassed while templates or strategies can generate additional cards.": "模板或策略可能生成更多卡片时，资源筛选会跳过筛选并加载全部文件。",
   "Unchecked files have unknown usage": "未勾选文件的用途不确定",
-  "These files are skipped by Resource filtering. If a card, icon or helper is missing, select the needed files under Cards and refresh the browser. No action is needed if everything works.": "资源筛选会跳过这些文件。如果卡片、图标或辅助功能缺失，请在“卡片”中勾选所需文件并刷新浏览器。一切正常时无需操作。",
+  "These files are skipped by Resource filtering. If a card, icon or helper is missing, select the needed files under Cards and refresh the browser.": "资源筛选会跳过这些文件。如果卡片、图标或辅助功能缺失，请在“卡片”中勾选所需文件并刷新浏览器。",
   "Saved card files are no longer registered": "已保存的卡片文件不再注册",
   "Remove unavailable saved files under Cards, or restore their Home Assistant resource registrations if you still need them.": "请在“卡片”中移除不可用的已保存文件；如果仍需使用，请恢复它们在 Home Assistant 中的资源注册。"
 };
@@ -141,7 +152,9 @@ export function language(hass) {
   return String(hass?.language || hass?.locale?.language || hass?.config?.language || "en");
 }
 export function text(hass, key, values = {}) {
-  const message = language(hass).toLowerCase().startsWith("zh") ? chinese[key] || key : key;
+  const locale = language(hass).toLowerCase();
+  const simplified = locale.startsWith("zh") && !/^zh-(hant|tw|hk|mo)/.test(locale);
+  const message = simplified ? chinese[key] || key : key;
   return message.replace(/\{(\w+)\}/g, (_, name) => String(values[name] ?? ""));
 }
 export function translate(root, hass) {
@@ -152,9 +165,14 @@ export function translate(root, hass) {
 }
 
 const notices = {
+  "bootstrap_compatibility": ["Initial load filtering is limited", "Some pages start with full data. Loona filters after dashboard detection. Check diagnostics for the failed startup probe."],
+  "graph_frontend_compatibility": [
+    "Loading optimizations are unavailable in this browser",
+    "Graphs and animations use normal Home Assistant behavior. Other Loona filters remain available."
+  ],
   "entity_compatibility": [
     "Entity filtering is unavailable",
-    "Home Assistant is handling entity updates normally. Check Loona diagnostics and the supported Home Assistant versions, then reload Loona and your browser."
+    "Home Assistant is handling entity updates normally. Check Loona diagnostics for the failed capability probe, then reload Loona and your browser."
   ],
   "panel_compatibility": [
     "Dashboard detection is unavailable",
@@ -166,7 +184,7 @@ const notices = {
   ],
   "graph_compatibility": [
     "Loading optimizations are unavailable",
-    "Graphs and animations use normal Home Assistant behavior. Check the supported Home Assistant versions and Loona diagnostics."
+    "Graphs and animations use normal Home Assistant behavior. Check Loona diagnostics for the failed capability probe."
   ],
   "resource_compatibility": [
     "Resource filtering is unavailable",
@@ -180,6 +198,10 @@ const notices = {
     "Dashboard scan is incomplete",
     "Entity and registry filtering are paused. Check the selected dashboards and accounts, save automatically generated dashboards, and rescan. Unsupported templates, strategies or auto-entities rules may need changes. Filtering resumes after a complete scan."
   ],
+  "resource_scan": [
+    "Resource scan is incomplete",
+    "Home Assistant is loading all registered files. Check the Home Assistant log for the failed dashboard or resource load, then rescan. Loona retries automatically."
+  ],
   "missing_entities": [
     "Referenced entities were not found",
     "Check these IDs for typos or deleted entities. Temporary entities may return later. Missing references alone do not pause filtering."
@@ -190,19 +212,19 @@ const notices = {
   ],
   "unknown_cards": [
     "Custom cards may use additional entities",
-    "Loona cannot fully inspect every custom card. If card data is missing, add the needed entities under Entity rules. No action is needed if the cards work."
+    "Loona cannot fully inspect every custom card. If card data is missing, add the needed entities under Entity rules."
   ],
   "unmatched_resources": [
     "Some card files could not be identified",
-    "Check the required files under Cards if a card or icon is missing. You can turn off Resource filtering and refresh the browser to compare. No action is needed if everything works."
+    "Check the required files under Cards if a card or icon is missing. You can turn off Resource filtering and refresh the browser to compare."
   ],
   "dynamic_resources": [
     "Templates may load additional files",
-    "Template-driven cards can need files Loona cannot detect. If something is missing, select its file under Cards and refresh the browser. No action is needed if everything works."
+    "Resource filtering is bypassed while templates or strategies can generate additional cards."
   ],
   "unchecked_resources": [
     "Unchecked files have unknown usage",
-    "These files are skipped by Resource filtering. If a card, icon or helper is missing, select the needed files under Cards and refresh the browser. No action is needed if everything works."
+    "These files are skipped by Resource filtering. If a card, icon or helper is missing, select the needed files under Cards and refresh the browser."
   ],
   "stale_resources": [
     "Saved card files are no longer registered",
@@ -211,6 +233,9 @@ const notices = {
 };
 
 export function renderNotices(root, hass, items) {
+  if (window.__loonaGraphCapability?.status === "unavailable" && window.__loonaGraphCapability.enabled) {
+    items = [...items, { code: "graph_frontend_compatibility", severity: "warning" }];
+  }
   const open = root.querySelector("details")?.open;
   root.replaceChildren();
   if (!items.length) {
@@ -234,4 +259,32 @@ export function renderNotices(root, hass, items) {
     list.append(row);
   }
   section.append(list); root.append(section);
+}
+
+export function setText(element, value) {
+  if (element.textContent !== value) element.textContent = value;
+}
+export function formatNumber(hass, value, options = {}) {
+  const format = hass?.locale?.number_format;
+  const locales = {comma_decimal:"en-US", decimal_comma:"de-DE", space_comma:"fr-FR", quote_decimal:"de-CH"};
+  const locale = locales[format] || (format === "system" ? undefined : language(hass));
+  return Number(value).toLocaleString(locale, {...options, ...(format === "none" ? {useGrouping:false} : {})});
+}
+export function formatDateTime(hass, value) {
+  const locale = hass?.locale || {};
+  const date = new Date(value);
+  const zone = locale.time_zone === "server" && hass?.config?.time_zone ? {timeZone:hass.config.time_zone} : {};
+  const formatter = new Intl.DateTimeFormat(locale.date_format === "system" ? undefined : language(hass), {year:"numeric", month:"numeric", day:"numeric", ...zone});
+  let day = formatter.format(date);
+  const order = {DMY:["day","month","year"], MDY:["month","day","year"], YMD:["year","month","day"]}[locale.date_format];
+  if (order) {
+    const parts = formatter.formatToParts(date);
+    const separator = parts.find(part => part.type === "literal")?.value || "/";
+    const last = parts[parts.length - 1];
+    const suffix = last?.type === "literal" && !(language(hass) === "bg" && locale.date_format === "YMD") ? last.value : "";
+    day = order.map(type => parts.find(part => part.type === type)?.value).join(separator) + suffix;
+  }
+  const options = {hour:locale.time_format === "24" ? "2-digit" : "numeric", minute:"2-digit", second:"2-digit", ...zone};
+  if (locale.time_format === "12" || locale.time_format === "24") options.hourCycle = locale.time_format === "12" ? "h12" : "h23";
+  return `${day}, ${date.toLocaleTimeString(language(hass), options)}`;
 }

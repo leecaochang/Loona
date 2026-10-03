@@ -30,6 +30,8 @@ class DiscoveryResult:
     warnings: tuple[str, ...]
     targets: dict[str, frozenset[str]] = field(default_factory=dict)
 
+    unknown_cards: bool = False
+
     @property
     def complete(self) -> bool:
         """Only a scan without unsafe dynamic constructs is trustworthy."""
@@ -62,6 +64,7 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
     reasons: dict[str, set[str]] = {}
     problems: set[str] = set()
     warnings: set[str] = set()
+    unknown_cards = False
     targets: dict[str, set[str]] = {key: set() for key in TARGET_KEYS}
 
     def add(
@@ -136,6 +139,7 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
         entity_id: str | None = None,
         dependency_value: bool = False,
     ) -> None:
+        nonlocal unknown_cards
         if isinstance(node, list):
             for index, item in enumerate(node):
                 walk(
@@ -165,6 +169,7 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
         if node_type == "custom:auto-entities":
             auto_entities(node, location)
         elif isinstance(node_type, str) and node_type.startswith("custom:"):
+            unknown_cards = True
             warnings.add(f"{location}: custom card may need extra entities")
         for key, value in node.items():
             path = f"{location}.{key}"
@@ -197,4 +202,5 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
         tuple(sorted(problems)),
         tuple(sorted(warnings)),
         {key: frozenset(values) for key, values in targets.items()},
+        unknown_cards,
     )

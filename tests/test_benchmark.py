@@ -22,6 +22,7 @@ from homeassistant.helpers import (
 )
 
 from custom_components.loona.const import VERSION
+from custom_components.loona.panels import PanelContext
 from custom_components.loona.registry import RegistryAdapter, registry_scope
 from custom_components.loona.websocket import ScopePolicy, SubscriptionAdapter
 
@@ -136,9 +137,12 @@ async def test_native_performance_comparison(loona_hass, make_entry, make_user):
     policy = ScopePolicy(frozenset(ids[:retained]), all_users=True)
     scope = registry_scope(hass, policy.entity_ids, [])
     user = make_user(admin=True)
-    entities_adapter = SubscriptionAdapter(hass, replace(policy, enabled=False))
+    panel = PanelContext(hass, lambda connection: entities_adapter.refresh_connection(connection))
+    panel.install()
+    panel.set_dashboards(frozenset({"wall-panel"}))
+    entities_adapter = SubscriptionAdapter(hass, replace(policy, enabled=False), dashboard_active=panel.active)
     registry_adapter = RegistryAdapter(
-        hass, replace(policy, enabled=False), scope, lambda error: errors.append(error)
+        hass, replace(policy, enabled=False), scope, lambda error: errors.append(error), dashboard_active=panel.active
     )
     errors = []
     captures = []
@@ -156,6 +160,8 @@ async def test_native_performance_comparison(loona_hass, make_entry, make_user):
                 captures.append(capture)
                 # The stock client reserves protocol IDs 1 and 2 before subscribing.
                 capture.connection.last_id = 2
+                capture.request("loona/subscribe_panel", dashboard="wall-panel")
+                capture.take()
                 duration = capture.request("subscribe_entities")
                 packets = capture.take()
                 summary = summarize_events(packets)
@@ -172,6 +178,8 @@ async def test_native_performance_comparison(loona_hass, make_entry, make_user):
             }
             capture = Capture(hass, user)
             captures.append(capture)
+            capture.request("loona/subscribe_panel", dashboard="wall-panel")
+            capture.take()
             for command in COMMANDS:
                 timings = []
                 for sample in range(samples + 1):
@@ -186,6 +194,8 @@ async def test_native_performance_comparison(loona_hass, make_entry, make_user):
                         if command.endswith("list_for_display")
                         else result
                     )
+                    if command.startswith("config/entity_registry/"):
+                        assert len(rows) == (retained if filtered else count)
                     if sample:
                         timings.append(duration)
                 report[label]["registries"][command] = {
@@ -197,6 +207,8 @@ async def test_native_performance_comparison(loona_hass, make_entry, make_user):
             capture = Capture(hass, user)
             captures.append(capture)
             capture.connection.last_id = 2
+            capture.request("loona/subscribe_panel", dashboard="wall-panel")
+            capture.take()
             # An explicit empty list requests the native full stream in this release.
             capture.request(
                 "subscribe_entities", **({} if filtered else {"entity_ids": []})
@@ -225,6 +237,30 @@ async def test_native_performance_comparison(loona_hass, make_entry, make_user):
             assert (
                 report[label]["updates"]["logical_events"] == case["expected_changes"]
             )
+        # If the optional startup hook fails, the late reporter retains this fallback.
+        bootstrap = Capture(hass, user)
+        captures.append(bootstrap)
+        bootstrap.request("subscribe_entities")
+        native_initial = bootstrap.take()
+        bootstrap.request("loona/subscribe_panel", dashboard="wall-panel")
+        narrowed = bootstrap.take()
+        bootstrap_report = {
+            "initial_entities": count,
+            "scoped_entities_after_report": retained,
+            "removed_ids": count - retained,
+            "native_initial_json_bytes": sum(map(len, native_initial)),
+            "late_report_json_bytes": sum(map(len, native_initial + narrowed)),
+        }
+        assert summarize_events(native_initial)["entity_records"] == count
+        assert bootstrap_report["late_report_json_bytes"] > bootstrap_report["native_initial_json_bytes"]
+        early = Capture(hass, user)
+        captures.append(early)
+        early.request("loona/subscribe_panel", dashboard="wall-panel")
+        early.request("subscribe_entities")
+        early_packets = early.take()
+        assert summarize_events(early_packets)["entity_records"] == retained
+        assert not any(json.loads(packet).get("event", {}).get("r") for packet in early_packets)
+        bootstrap_report["context_first_json_bytes"] = sum(map(len, early_packets))
         assert not errors
         client = subprocess.run(
             ["node", str(Path(__file__).with_name("client_benchmark.mjs"))],
@@ -253,6 +289,7 @@ async def test_native_performance_comparison(loona_hass, make_entry, make_user):
                 "rendering_measured": False,
             },
             "measurements": report,
+            "bootstrap": bootstrap_report,
         }
         output = os.environ.get("LOONA_BENCHMARK_OUTPUT")
         if output:
@@ -264,3 +301,4 @@ async def test_native_performance_comparison(loona_hass, make_entry, make_user):
             capture.connection.async_handle_close()
         registry_adapter.uninstall()
         entities_adapter.uninstall()
+        panel.uninstall()

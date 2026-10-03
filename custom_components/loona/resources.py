@@ -2,22 +2,22 @@
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from inspect import isawaitable, unwrap
 from typing import Any, cast
 from urllib.parse import urlsplit
 
-import voluptuous as vol
-
-from homeassistant import const as ha_const
 from homeassistant.components import websocket_api
 from homeassistant.components.lovelace import const as lovelace_const
 from homeassistant.components.lovelace import resources as native_resources
-from homeassistant.components.lovelace.websocket import websocket_lovelace_resources
+from homeassistant.components.lovelace import websocket as native_websocket
 from homeassistant.core import HomeAssistant, callback
 
-from .compatibility import CompatibilityError, HandlerEntry, HandlerTable
+from .compatibility import (
+    CompatibilityError, probe_error, HandlerEntry, HandlerTable, ProbeConnection, check_baseline, inspect_native_command,
+)
 from .const import (
-    BUNDLED_CARD_TYPES, RESOURCE_CARDS, RESOURCE_COMMANDS, RESOURCE_COMMAND_PROFILES, RESOURCE_CONFIG_KEYS,
-    RESOURCE_CORE_VERSIONS, RESOURCE_SHARED, RESOURCE_SHARED_PATHS,
+    BUNDLED_CARD_TYPES, RESOURCE_CARDS, RESOURCE_COMMANDS,
+    RESOURCE_SHARED, RESOURCE_SHARED_PATHS, RESOURCE_NATIVE_STRATEGIES,
 )
 from .websocket import ScopePolicy
 
@@ -28,14 +28,12 @@ class ResourceDependencies:
 
     custom_types: frozenset[str] = frozenset()
     dynamic: bool = False
-    configuration_keys: frozenset[str] = frozenset()
 
 
 def resource_dependencies(configs: Iterable[dict[str, Any]]) -> ResourceDependencies:
     """Read configuration only; never execute or fetch arbitrary module code."""
     types: set[str] = set()
     dynamic = False
-    configuration_keys: set[str] = set()
 
     def walk(node: Any) -> None:
         nonlocal dynamic
@@ -50,16 +48,16 @@ def resource_dependencies(configs: Iterable[dict[str, Any]]) -> ResourceDependen
                     if any(marker in value for marker in ("{{", "{%", "[[[")):
                         dynamic = True
                 if key == "strategy":
-                    dynamic = True
+                    if not isinstance(value, dict) or value.get("type") not in RESOURCE_NATIVE_STRATEGIES:
+                        dynamic = True
                 walk(value)
         elif isinstance(node, str) and any(marker in node for marker in ("{{", "{%", "[[[")):
             # Templates can generate card configurations as well as values.
             dynamic = True
 
     for config in configs:
-        configuration_keys.update(key for key in RESOURCE_CONFIG_KEYS if isinstance(config.get(key), dict))
         walk(config)
-    return ResourceDependencies(frozenset(types), dynamic, frozenset(configuration_keys))
+    return ResourceDependencies(frozenset(types), dynamic)
 
 
 def matches(card_type: str, declarations: tuple[str, ...]) -> bool:
@@ -85,7 +83,7 @@ def resource_report(
         required = {card for card in dependencies.custom_types if matches(card, declarations)}
         # Custom filenames/remotely hosted bundles are unclassified, even if a
         # basename happens to match a supported package.
-        local = url.startswith(("/local/", "/hacsfiles/")) and not url.startswith("//")
+        local = url.startswith(("/local/", "/hacsfiles/"))
         if not local or kind not in {"module", "js"}:
             required = set()
         if kind == "css":
@@ -94,33 +92,41 @@ def resource_report(
               and parsed.path in RESOURCE_SHARED_PATHS):
             status, reason = "required", RESOURCE_SHARED_PATHS[parsed.path]
         elif local and kind in {"module", "js"} and filename in RESOURCE_SHARED:
-            status, reason = "required", "Shared native-card and theme styling"
-        elif local and kind in {"module", "js"} and filename in RESOURCE_CONFIG_KEYS.values():
-            keys = sorted(key for key in dependencies.configuration_keys if RESOURCE_CONFIG_KEYS[key] == filename)
-            if keys:
-                status, reason = "required", "Dashboard configuration: " + ", ".join(keys)
-            else:
-                status, reason = "unclassified", "Browser settings or URL options may require this helper"
+            status, reason = "required", "Shared frontend helper"
         elif required:
             status, reason = "required", "Custom types: " + ", ".join(sorted(required))
         elif local and kind in {"module", "js"} and declarations:
-            status, reason = "unused", "No matching custom type in selected dashboards"
+            status, reason = "unused", "No matching custom type in configured dashboards"
         else:
-            status, reason = "unclassified", "No verified dependency mapping; omitted when enabled"
+            status, reason = "unclassified", "No verified dependency mapping; retained"
         if local and kind in {"module", "js"}:
             found.update(required)
         report_rows.append({
             **row, "status": status, "reason": reason,
-            "forwarded": status == "required" or url in exceptions,
+            "forwarded": dependencies.dynamic or status != "unused" or url in exceptions,
         })
+    unresolved = dependencies.custom_types - found
+    if unresolved:
+        for item in report_rows:
+            item["forwarded"] = True
     return {
         "resources": report_rows,
         "counts": {status: sum(row["status"] == status for row in report_rows)
                    for status in ("required", "unused", "unclassified")},
-        "unresolved_custom_types": sorted(dependencies.custom_types - found),
+        "unresolved_custom_types": sorted(unresolved),
         "dynamic_configuration": dependencies.dynamic,
         "stale_exceptions": sorted(exceptions - {row["url"] for row in rows}),
     }
+
+
+def validate_resource_rows(rows: Any) -> list[dict[str, Any]]:
+    """Validate the native list both during probing and on each response."""
+    if not isinstance(rows, list) or any(
+        not isinstance(row, dict) or not isinstance(row.get("url"), str)
+        or row.get("type") not in {"module", "js", "css", "html"} for row in rows
+    ):
+        raise CompatibilityError("Native resource list shape changed")
+    return rows
 
 
 async def async_resource_rows(hass: HomeAssistant) -> list[dict[str, Any]]:
@@ -134,14 +140,9 @@ async def async_resource_rows(hass: HomeAssistant) -> list[dict[str, Any]]:
             await resources.async_load()
             resources.loaded = True
         rows = resources.async_items()
-        if not isinstance(rows, list) or any(
-            not isinstance(row, dict) or not isinstance(row.get("url"), str)
-            or row.get("type") not in {"module", "js", "css", "html"}
-            for row in rows
-        ):
-            raise CompatibilityError("Native resource list shape changed")
+        validate_resource_rows(rows)
     except Exception as err:
-        raise CompatibilityError("Native resource collection could not be read") from err
+        raise probe_error("Native resource collection could not be read", err) from err
     return cast(list[dict[str, Any]], rows)
 
 
@@ -163,12 +164,7 @@ class _ResourceConnection:
         try:
             self.adapter.check_ownership()
             if self.adapter.targets_connection(self.connection):
-                if not isinstance(result, list) or any(
-                    not isinstance(row, dict) or not isinstance(row.get("url"), str)
-                    or row.get("type") not in {"module", "js", "css", "html"}
-                    for row in result
-                ):
-                    raise CompatibilityError("Native resource list shape changed")
+                validate_resource_rows(result)
                 report = self.adapter.report(result)
                 available = len(result)
                 result = [row for row, item in zip(result, report["resources"], strict=True)
@@ -212,35 +208,51 @@ class ResourceAdapter:
         if self._table is not None:
             self.check_ownership()
             return
-        if ha_const.__version__ not in RESOURCE_CORE_VERSIONS:
-            raise CompatibilityError("Unsupported resource Core version")
+        table, originals = self._inspect_commands()
+        self._table = table
+        self._originals = originals
+        commands = originals
+        self._owned = {name: (self._list, table[name][1]) for name in commands}
+        table.update(self._owned)
+
+    def _inspect_commands(self) -> tuple[HandlerTable, dict[str, HandlerEntry]]:
+        """Discover installed aliases and validate all before replacing any."""
+        check_baseline()
         table = self.hass.data.get(websocket_api.DOMAIN)
         if not isinstance(table, dict):
             raise CompatibilityError("Native resource commands are unavailable")
         storage_type = getattr(native_resources, "ResourceStorageCollectionWebsocket", None)
-        storage_handler = getattr(storage_type, "ws_list_item", None)
-        commands = RESOURCE_COMMAND_PROFILES[ha_const.__version__]
-        if any(name in table for name in RESOURCE_COMMANDS if name not in commands):
-            raise CompatibilityError("Unexpected resource command for this Core version")
+        candidates = (
+            getattr(storage_type, "ws_list_item", None),
+            getattr(native_websocket, "websocket_lovelace_resources", None),
+        )
+        commands = tuple(name for name in RESOURCE_COMMANDS if name in table)
+        if not commands:
+            raise CompatibilityError("Native resource list commands are unavailable")
         for name in commands:
-            entry = table.get(name)
-            if (not isinstance(entry, tuple) or len(entry) != 2
-                or entry[0] not in (storage_handler, websocket_lovelace_resources)
-                or not (isinstance(entry[1], vol.Schema)
-                        or entry[1] is False and getattr(entry[0], "_ws_schema", None) is False)):
+            entry = table[name]
+            native = entry[0] if isinstance(entry, tuple) and len(entry) == 2 else None
+            if native not in candidates or native is None:
                 raise CompatibilityError(f"Unrecognized native resource command: {name}")
-            # Older no-argument native commands use False for BASE schema only.
-            if entry[1] is False:
-                continue
+            inspect_native_command(self.hass, name, native, require_schema_identity=False)
+        return cast(HandlerTable, table), {name: table[name] for name in commands}
+
+    async def async_probe(self) -> None:
+        """Read each native list result without sending to a browser or editing storage."""
+        _, originals = self._inspect_commands()
+        for name, (native, _) in originals.items():
+            connection = ProbeConnection(self.hass)
             try:
-                if entry[1]({"id": 1, "type": name}) != {"id": 1, "type": name}:
-                    raise ValueError("Unexpected schema defaults")
-            except (vol.Invalid, ValueError) as err:
-                raise CompatibilityError("Native resource schema changed") from err
-        self._table = cast(HandlerTable, table)
-        self._originals = {name: table[name] for name in commands}
-        self._owned = {name: (self._list, table[name][1]) for name in commands}
-        table.update(self._owned)
+                result = unwrap(native)(
+                    self.hass, cast(websocket_api.ActiveConnection, connection), {"id": 1, "type": name}
+                )
+                if isawaitable(result):
+                    await result
+                validate_resource_rows(connection.result())
+            except Exception as err:
+                raise probe_error(f"Native resource behavior probe failed: {name}", err) from err
+            finally:
+                connection.close()
 
     def check_ownership(self) -> None:
         if self._table is None or any(self._table.get(name) is not entry for name, entry in self._owned.items()):

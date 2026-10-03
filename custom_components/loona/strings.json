@@ -32,9 +32,7 @@
     "error": {
       "no_dashboards": "Select at least one dashboard.",
       "no_accounts": "Select at least one active account.",
-      "invalid_selection": "Some choices are no longer available or were selected twice. Choose from the current list.",
-      "invalid_pattern": "Choose an entity type such as light, or a pattern such as sensor.room_*. Patterns cannot contain spaces or unpaired brackets.",
-      "not_loaded": "Loona is not running. Reload the integration, then try again."
+      "invalid_selection": "Some choices are no longer available or were selected twice. Choose from the current list."
     },
     "abort": {
       "already_configured": "Only one Loona integration can be configured."
@@ -49,7 +47,8 @@
           "targets": "Accounts",
           "filters": "Filters and performance",
           "rules": "Entity rules",
-          "resource_preview": "Cards"
+          "resource_preview": "Cards",
+          "cards": "Loona dashboard"
         }
       },
       "dashboards": {
@@ -80,7 +79,7 @@
       },
       "rules": {
         "title": "Entity rules",
-        "description": "Add entities Loona missed under Included. Include whole entity types or patterns such as sensor.* when needed. Exclusions always override inclusions. Loona keeps its own controls and statistics.",
+        "description": "Add entities Loona missed under Included. Include whole entity types or enter known entity IDs and domain rules such as sensor.*. Exclusions override inclusions. Person, update and zone entities used by the Home Assistant interface are always kept.",
         "data": {
           "extra_entities": "Included: entities",
           "include_domains": "Included: entity types",
@@ -90,10 +89,17 @@
       },
       "resource_preview": {
         "title": "Cards",
-        "description": "{required_start}Files kept automatically ({required_count}){required_summary_end}\n\nThese files are needed by your dashboards or shared styling.\n\n{required}\n\n{required_end}\n\nCard types Loona cannot match to a file ({unresolved_count}): {unresolved}\n\nSaved files no longer registered ({stale_count}): {stale}\n\nWith Resource filtering on, checked files below also load. Unchecked files are skipped. New optional files start unchecked. Turn on Enabled as well. With Resource filtering off, all registered files load.\n\nTemplates may need files Loona cannot detect. If a card or icon is missing, check its file or turn off Resource filtering. Uncheck missing saved files to remove them from your choices. If the switch is absent, this feature is unavailable on your installation. Save, then reload the browser page; files already loaded remain until you reload.",
+        "description": "{required_start}Files kept automatically ({required_count}){required_summary_end}\n\nThese files support configured dashboards, global helpers, or have usage Loona cannot safely classify.\n\n{required}\n\nCard types without a matched file ({unresolved_count}): {unresolved}\n\nSaved files no longer registered ({stale_count}): {stale}\n\nWith Resource filtering on, checked files below also load. Only known unused card files can be skipped. Unknown files are kept; dynamic configurations and incomplete scans keep all files.\n\nSelect optional files needed by popups or other features. Uncheck unavailable saved files to remove them. Save, then reload the browser page. Already loaded files remain until reload. If Resource filtering is unavailable, check diagnostics.",
         "data": {
           "resource_filtering": "Resource filtering",
           "always_forward_resources": "Additional files to load"
+        }
+      },
+      "cards": {
+        "title": "Add dashboard cards",
+        "description": "Choose either card, both, or leave both unchecked. Selected cards will be added to an administrator-only Loona dashboard. You can also add the bundled cards to your own dashboards later.",
+        "data": {
+          "dashboard_cards": "Dashboard cards"
         }
       }
     },
@@ -101,7 +107,6 @@
       "no_dashboards": "Select at least one dashboard.",
       "no_accounts": "Select at least one active account.",
       "invalid_selection": "Some choices are no longer available or were selected twice. Choose from the current list.",
-      "invalid_pattern": "Choose an entity type such as light, or a pattern such as sensor.room_*. Patterns cannot contain spaces or unpaired brackets.",
       "not_loaded": "Loona is not running. Reload the integration, then try again."
     },
     "abort": {

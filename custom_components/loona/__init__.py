@@ -5,23 +5,25 @@ from homeassistant.core import HomeAssistant
 from homeassistant.components import websocket_api
 
 from .compatibility import CompatibilityError
-from .const import DOMAIN, STATISTICS_COMMAND, PAGE_LOAD_COMMAND, SETTINGS_COMMAND, SETTINGS_SAVE_COMMAND
+from .bootstrap import async_install as async_install_bootstrap
+from .const import DOMAIN, STATISTICS_COMMAND, PAGE_LOAD_COMMAND, SETTINGS_COMMAND, SETTINGS_SAVE_COMMAND, SETTINGS_CHOICES_COMMAND
 from .graph_loading import async_register_frontend
 from .panels import async_register_frontend as async_register_panel_frontend
 from .runtime import LoonaConfigEntry, LoonaRuntime
 from .preview import websocket_statistics, websocket_page_load
-from .settings import websocket_settings, websocket_save_settings
+from .recorder import async_clear_owned_statistics
+from .settings import websocket_settings, websocket_save_settings, websocket_settings_choices
 from .statistics_card import StatisticsCard, StatisticsCardError
 
 _PLATFORMS = (Platform.SWITCH, Platform.SENSOR, Platform.BINARY_SENSOR, Platform.BUTTON)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: LoonaConfigEntry) -> bool:
-    """Dependencies guarantee native commands exist before hook installation."""
+    """Install filtering adapters, native entities and frontend assets."""
     runtime = LoonaRuntime(hass, entry)
     entry.runtime_data = runtime
     table = hass.data[websocket_api.DOMAIN]
-    if any(name in table for name in (STATISTICS_COMMAND, PAGE_LOAD_COMMAND, SETTINGS_COMMAND, SETTINGS_SAVE_COMMAND)):
+    if any(name in table for name in (STATISTICS_COMMAND, PAGE_LOAD_COMMAND, SETTINGS_COMMAND, SETTINGS_SAVE_COMMAND, SETTINGS_CHOICES_COMMAND)):
         raise CompatibilityError("Another handler owns Loona statistics")
     try:
         await runtime.async_start()
@@ -31,6 +33,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: LoonaConfigEntry) -> boo
             except CompatibilityError as err:
                 runtime.panel_compatibility_problem = str(err)
                 runtime._update_issues()
+            else:
+                try:
+                    bootstrap = await async_install_bootstrap(hass, runtime.bootstrap_policy)
+                    runtime._unsubscribers.append(bootstrap.remove)
+                    def refresh_bootstrap() -> None:
+                        try:
+                            bootstrap.refresh()
+                        except CompatibilityError as err:
+                            runtime.bootstrap_compatibility_problem = str(err)
+                            runtime._update_issues()
+                    runtime._unsubscribers.append(runtime.async_add_listener(refresh_bootstrap))
+                    if not bootstrap.root_supported:
+                        runtime.bootstrap_compatibility_problem = "Native root routing is unfamiliar; named dashboard URLs still support initial filtering"
+                        runtime._update_issues()
+                except CompatibilityError as err:
+                    runtime.bootstrap_compatibility_problem = str(err)
+                    runtime._update_issues()
         # The bundled route must exist before Core freezes its HTTP router.
         # Dashboard creation follows native platform and scope setup.
         if hasattr(hass, "http"):
@@ -58,7 +77,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: LoonaConfigEntry) -> boo
     websocket_api.async_register_command(hass, websocket_page_load)
     websocket_api.async_register_command(hass, websocket_settings)
     websocket_api.async_register_command(hass, websocket_save_settings)
-    owned = {name: table[name] for name in (STATISTICS_COMMAND, PAGE_LOAD_COMMAND, SETTINGS_COMMAND, SETTINGS_SAVE_COMMAND)}
+    websocket_api.async_register_command(hass, websocket_settings_choices)
+    owned = {name: table[name] for name in (STATISTICS_COMMAND, PAGE_LOAD_COMMAND, SETTINGS_COMMAND, SETTINGS_SAVE_COMMAND, SETTINGS_CHOICES_COMMAND)}
     def remove_command() -> None:
         for name, command in owned.items():
             if table.get(name) is command:
@@ -86,13 +106,30 @@ async def async_unload_entry(hass: HomeAssistant, entry: LoonaConfigEntry) -> bo
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: LoonaConfigEntry) -> None:
-    """Remove Loona's own control storage when the entry is deleted."""
+    """Remove owned settings, the unedited dashboard and Recorder statistics."""
     from homeassistant.helpers.storage import Store
 
-    await Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.controls").async_remove()
-    card = StatisticsCard(hass, entry.entry_id)
+    runtime = getattr(entry, "runtime_data", None)
+    store = runtime._store if isinstance(runtime, LoonaRuntime) else Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.controls")
+    card = runtime.statistics_card if isinstance(runtime, LoonaRuntime) else StatisticsCard(hass, entry.entry_id)
+    await store.async_remove()
     try:
         await card.set_enabled(False)
     except StatisticsCardError:
         # Removing an integration must preserve edited or unverifiable boards.
+        pass
+    finally:
         await card.store.async_remove()
+    await async_clear_owned_statistics(hass, entry.entry_id)
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: LoonaConfigEntry) -> bool:
+    """Preserve existing choices and opt older installations out of new cards."""
+    if entry.version > 2:
+        return False
+    if entry.version < 2:
+        from .const import CONF_DASHBOARD_CARDS
+        hass.config_entries.async_update_entry(
+            entry, data={CONF_DASHBOARD_CARDS: [], **entry.data}, version=2
+        )
+    return True

@@ -4,9 +4,6 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any, cast
 
-import voluptuous as vol
-
-from homeassistant import const as ha_const
 from homeassistant.components import websocket_api
 from homeassistant.components.config import (
     area_registry,
@@ -24,39 +21,41 @@ from homeassistant.helpers import (
 )
 from homeassistant.util.json import json_loads_object
 
-from .compatibility import CompatibilityError, HandlerEntry, HandlerTable
-from .const import REGISTRY_CORE_VERSIONS
+from .compatibility import (
+    CompatibilityError, probe_error, HandlerEntry, HandlerTable, ProbeConnection,
+    inspect_native_command, probe_subscription, probe_sync,
+)
 from .dependencies import DiscoveryResult
 from .websocket import ScopePolicy
 
 _LISTS = {
     "config/entity_registry/list": (
-        entity_registry.websocket_list_entities,
+        entity_registry, "websocket_list_entities",
         "entity_id",
         "entities",
     ),
     "config/entity_registry/list_for_display": (
-        entity_registry.websocket_list_entities_for_display,
+        entity_registry, "websocket_list_entities_for_display",
         "ei",
         "entities",
     ),
     "config/device_registry/list": (
-        device_registry.websocket_list_devices,
+        device_registry, "websocket_list_devices",
         "id",
         "devices",
     ),
     "config/area_registry/list": (
-        area_registry.websocket_list_areas,
+        area_registry, "websocket_list_areas",
         "area_id",
         "areas",
     ),
     "config/floor_registry/list": (
-        floor_registry.websocket_list_floors,
+        floor_registry, "websocket_list_floors",
         "floor_id",
         "floors",
     ),
     "config/label_registry/list": (
-        label_registry.websocket_list_labels,
+        label_registry, "websocket_list_labels",
         "label_id",
         "labels",
     ),
@@ -146,6 +145,20 @@ def registry_scope(
     )
 
 
+def validate_registry_rows(name: str, result: Any) -> list[dict[str, Any]]:
+    """Share startup and per-response validation, including native display rows."""
+    _, _, key, _ = _LISTS[name]
+    display = name.endswith("list_for_display")
+    rows = result["entities"] if display else result
+    if not isinstance(rows, list) or any(
+        not isinstance(row, dict) or not isinstance(row.get(key), str) for row in rows
+    ):
+        raise ValueError("Unrecognized registry list rows")
+    if display and not isinstance(result.get("entity_categories"), dict):
+        raise ValueError("Unrecognized entity category envelope")
+    return rows
+
+
 class _ListConnection:
     """A single-call facade, including native handlers sending cached bytes."""
 
@@ -182,17 +195,10 @@ class _ListConnection:
             ):
                 self.connection.send_message(payload)
                 return
-            _, key, kind = _LISTS[self.request["type"]]
+            _, _, key, kind = _LISTS[self.request["type"]]
             result = message["result"]
             display = self.request["type"].endswith("list_for_display")
-            rows = result["entities"] if display else result
-            if not isinstance(rows, list) or any(
-                not isinstance(row, dict) or not isinstance(row.get(key), str)
-                for row in rows
-            ):
-                raise ValueError("Unrecognized registry list rows")
-            if display and not isinstance(result.get("entity_categories"), dict):
-                raise ValueError("Unrecognized entity category envelope")
+            rows = validate_registry_rows(self.request["type"], result)
             ids = getattr(self.adapter.scope, kind)
             filtered = [row for row in rows if row[key] in ids]
             message["result"] = (
@@ -234,27 +240,26 @@ class RegistryAdapter:
         if self._table is not None:
             self.check_ownership()
             return
-        if ha_const.__version__ not in REGISTRY_CORE_VERSIONS:
-            raise CompatibilityError(
-                f"Unsupported registry Core version: {ha_const.__version__}"
-            )
-        table = self.hass.data.get(websocket_api.DOMAIN)
-        if not isinstance(table, dict):
-            raise CompatibilityError("Registry websocket commands are not registered")
-        expected = {name: values[0] for name, values in _LISTS.items()}
-        expected["subscribe_events"] = commands.handle_subscribe_events
+        expected = {name: getattr(values[0], values[1], None) for name, values in _LISTS.items()}
+        expected["subscribe_events"] = getattr(commands, "handle_subscribe_events", None)
         for name, native in expected.items():
-            entry = table.get(name)
-            if (
-                not isinstance(entry, tuple)
-                or len(entry) != 2
-                or entry[0] is not native
-                or entry[1] is not getattr(native, "_ws_schema", None)
-                or not (entry[1] is False or isinstance(entry[1], vol.Schema))
-            ):
-                raise CompatibilityError(
-                    f"Unrecognized native registry command: {name}"
-                )
+            arguments = {"event_type": er.EVENT_ENTITY_REGISTRY_UPDATED} if name == "subscribe_events" else {}
+            table, _ = inspect_native_command(self.hass, name, native, arguments)
+            connection = ProbeConnection(self.hass)
+            try:
+                request = {"id": 1, "type": name, **arguments}
+                if name == "subscribe_events":
+                    listener = probe_subscription(self.hass, native, request, connection)
+                    listener(Event(er.EVENT_ENTITY_REGISTRY_UPDATED, {"action": "update"}))
+                    if connection.packets[-1].get("event", {}).get("event_type") != er.EVENT_ENTITY_REGISTRY_UPDATED:
+                        raise CompatibilityError("Native registry event envelope changed")
+                else:
+                    probe_sync(self.hass, native, request, connection)
+                    validate_registry_rows(name, connection.result())
+            except Exception as err:
+                raise probe_error(f"Native registry behavior probe failed: {name}", err) from err
+            finally:
+                connection.close()
         self._table = cast(HandlerTable, table)
         self._originals = {name: table[name] for name in expected}
         for name in expected:

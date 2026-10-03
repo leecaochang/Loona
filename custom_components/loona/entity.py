@@ -16,7 +16,7 @@ class LoonaEntity(Entity):
     _attr_should_poll = False
 
     def __init__(
-        self, runtime: LoonaRuntime, key: str, name: str, dashboard: str | None = None
+        self, runtime: LoonaRuntime, key: str, dashboard: str | None = None
     ) -> None:
         self.runtime = runtime
         self.dashboard = dashboard

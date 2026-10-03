@@ -24,8 +24,7 @@ class LiveStatistics:
         self._previous_forwarded = self._previous_avoided = 0
         self._sample_time = monotonic()
         self.reset_at = dt_util.utcnow()
-        if hasattr(self, "page_loads"):
-            self.page_loads.clear()
+        self.page_loads.clear()
 
     def record(self, forwarded: bool) -> None:
         """One entity change for one ordinary, selected-account subscription."""

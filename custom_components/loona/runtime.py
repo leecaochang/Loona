@@ -27,6 +27,7 @@ from homeassistant.helpers import (
     floor_registry as fr,
     issue_registry as ir,
     label_registry as lr,
+    translation,
 )
 from homeassistant.helpers.event import async_call_later, async_track_time_interval
 from homeassistant.helpers.storage import Store
@@ -36,10 +37,8 @@ from .compatibility import CompatibilityError
 from .const import (
     CONF_DASHBOARDS,
     CONF_DASHBOARD_CARDS,
-    DASHBOARD_CARDS,
     CONF_ALWAYS_FORWARD,
     CONTROL_RESOURCES,
-    RESOURCE_CORE_VERSIONS,
     CONF_EXCLUDE_GLOBS,
     CONF_EXTRA_ENTITIES,
     CONF_INCLUDE_DOMAINS,
@@ -50,8 +49,6 @@ from .const import (
     CONTROL_ENTITIES,
     CONTROL_GRAPHS,
     CONTROL_MOTION,
-    REGISTRY_CORE_VERSIONS,
-    FRONTEND_CORE_VERSIONS,
     CONTROL_MASTER,
     CONTROL_REGISTRIES,
     DOMAIN,
@@ -98,6 +95,7 @@ class LoonaRuntime:
         self.warnings: tuple[str, ...] = ()
         self.entity_compatibility_problem: str | None = None
         self.panel_compatibility_problem: str | None = None
+        self.bootstrap_compatibility_problem: str | None = None
         self.registry_compatibility_problem: str | None = None
         self.last_scan: datetime | None = None
         self.scan_duration = 0.0
@@ -114,6 +112,7 @@ class LoonaRuntime:
         self.resource_complete = False
         self.resource_adapter: ResourceAdapter | None = None
         self.resource_compatibility_problem: str | None = None
+        self.resource_scan_problem: str | None = None
         self.resource_preview: dict[str, Any] = {}
         self.device_id: str | None = None
         self.dashboard_devices: dict[str, str] = {}
@@ -128,6 +127,9 @@ class LoonaRuntime:
         self._revision = 0
         self._force = False
         self._stopped = False
+        self._reported_problems: dict[str, str] = {}
+        self._failed_dashboards: set[str] = set()
+        self.unknown_cards = False
 
     @property
     def settings(self) -> dict[str, Any]:
@@ -147,6 +149,7 @@ class LoonaRuntime:
         return (
             self.entity_compatibility_problem
             or self.panel_compatibility_problem
+            or self.bootstrap_compatibility_problem
             or self.registry_compatibility_problem
             or self.graph_compatibility_problem
             or self.resource_compatibility_problem
@@ -221,30 +224,27 @@ class LoonaRuntime:
             self.entity_compatibility_problem = str(err)
         else:
             self.adapter = adapter
-        if ha_const.__version__ in REGISTRY_CORE_VERSIONS:
-            registry_adapter = RegistryAdapter(
+        registry_adapter = RegistryAdapter(
                 self.hass,
                 self._policy(CONTROL_REGISTRIES),
                 self.registry_scope,
                 self._registry_failed,
                 self.panel_context.active,
             )
-            try:
-                registry_adapter.install()
-            except CompatibilityError as err:
-                self.registry_compatibility_problem = str(err)
-            else:
-                self.registry_adapter = registry_adapter
-        if ha_const.__version__ in FRONTEND_CORE_VERSIONS:
-            graph_adapter = GraphLoadingAdapter(self)
-            try:
-                graph_adapter.install()
-            except CompatibilityError as err:
-                self.graph_compatibility_problem = str(err)
-            else:
-                self.graph_adapter = graph_adapter
-        if (ha_const.__version__ in RESOURCE_CORE_VERSIONS
-            and self.resource_compatibility_problem is None):
+        try:
+            registry_adapter.install()
+        except CompatibilityError as err:
+            self.registry_compatibility_problem = str(err)
+        else:
+            self.registry_adapter = registry_adapter
+        graph_adapter = GraphLoadingAdapter(self)
+        try:
+            graph_adapter.install()
+        except CompatibilityError as err:
+            self.graph_compatibility_problem = str(err)
+        else:
+            self.graph_adapter = graph_adapter
+        if self.resource_compatibility_problem is None:
             resource_adapter = ResourceAdapter(
                 self.hass, self._policy(CONTROL_RESOURCES), self.resource_report,
                 self._resources_failed,
@@ -252,6 +252,8 @@ class LoonaRuntime:
                 self.panel_context.active,
             )
             try:
+                if self.resource_scan_problem is None:
+                    await resource_adapter.async_probe()
                 resource_adapter.install()
             except CompatibilityError as err:
                 self.resource_compatibility_problem = str(err)
@@ -261,14 +263,14 @@ class LoonaRuntime:
 
     async def async_update_statistics_card(self) -> None:
         """Ensure automatic presentation independently of the filtering adapters."""
-        if self.statistics_card.enabled:
-            return
         try:
-            await self.statistics_card.set_enabled(True, tuple(self.settings.get(CONF_DASHBOARD_CARDS, DASHBOARD_CARDS)))
+            await self.statistics_card.set_enabled(True, tuple(self.settings.get(CONF_DASHBOARD_CARDS, ())))
         except StatisticsCardError as err:
             self.statistics_card_problem = str(err)
         else:
             self.statistics_card_problem = None
+            if self.statistics_card.opted_out:
+                self.hass.config_entries.async_update_entry(self.entry, options={**self.entry.options, CONF_DASHBOARD_CARDS: []})
         self._update_issues()
         self.notify()
 
@@ -278,6 +280,13 @@ class LoonaRuntime:
             rows, self.resource_dependencies,
             self._policy_settings.get(CONF_ALWAYS_FORWARD, ()),
         )
+        # Modules are global for the page, including extra_module_url helpers.
+        from homeassistant.components import frontend
+        manager = self.hass.data.get(frontend.DATA_EXTRA_MODULE_URL)
+        extra = manager.urls if manager else ()
+        for row in self.resource_preview["resources"]:
+            if row["url"] in extra:
+                row.update(status="required", forwarded=True, reason="Shared frontend module")
         self._update_issues()
         return self.resource_preview
 
@@ -363,6 +372,7 @@ class LoonaRuntime:
     async def _scan_loop(self) -> None:
         """Discard a candidate if configuration changed during a native load."""
         while not self._stopped:
+            await translation.async_get_translations(self.hass, self.hass.config.language, "dashboard", {"onboarding"})
             revision, force = self._revision, self._force
             self._force = False
             started = perf_counter()
@@ -379,9 +389,13 @@ class LoonaRuntime:
                     config = await load_dashboard(self.hass, key, force=force)
                     configs.append(config)
                     result = discover(config, context)
+                    self._failed_dashboards.discard(key)
                 except Exception as err:
                     # Failed boards are retained as incomplete, never silently dropped.
-                    _LOGGER.debug("Dashboard load failed (%s)", type(err).__name__)
+                    if key not in self._failed_dashboards:
+                        _LOGGER.warning("Dashboard load failed (%s); filtering is bypassed", type(err).__name__)
+                        _LOGGER.debug("Dashboard load failure details", exc_info=True)
+                        self._failed_dashboards.add(key)
                     result = DiscoveryResult(
                         frozenset(),
                         {},
@@ -422,9 +436,12 @@ class LoonaRuntime:
             if not reasons:
                 problems.append("The dashboard scope is empty")
             self.live_statistics.ignored = protected_entities(self.hass, self.entry.entry_id)
-            for entity_id in self.live_statistics.ignored:
-                reasons.setdefault(entity_id, set()).add("Loona control or statistic")
-                excluded.pop(entity_id, None)
+            # The app's sidebar, avatar and maps share the dashboard connection.
+            for entity_id in context.entity_ids:
+                if entity_id.split(".", 1)[0] in {"person", "update", "zone"}:
+                    reasons.setdefault(entity_id, set()).add("Home Assistant app context")
+                    excluded.pop(entity_id, None)
+            valid_targets = True
             if settings.get(CONF_TARGET_MODE) != TARGET_ALL:
                 users = {
                     user.id
@@ -433,7 +450,23 @@ class LoonaRuntime:
                 }
                 targets = set(settings.get(CONF_USER_IDS, ()))
                 if not targets or not targets <= users:
+                    valid_targets = False
                     problems.append("Select current active accounts in Loona options")
+            # Lovelace loads modules once per page, so retain dependencies of
+            # unselected dashboards too. A failed load keeps the full file list.
+            resource_configs = list(configs)
+            resources_complete = bool(results) and len(configs) == len(results)
+            resource_scan_problem = None
+            for key in dashboard_titles(self.hass):
+                if key in results:
+                    continue
+                try:
+                    from .dashboard import load_resource_dashboard
+                    resource_configs.append(await load_resource_dashboard(self.hass, key, force=force))
+                except Exception as err:
+                    resources_complete = False
+                    resource_scan_problem = f"A native dashboard could not be loaded ({type(err).__name__})"
+                    _LOGGER.debug("Resource dependency scan failed; all files are retained", exc_info=err)
             resource_error = None
             try:
                 resource_rows = await async_resource_rows(self.hass)
@@ -451,14 +484,11 @@ class LoonaRuntime:
             self.reasons = {key: tuple(sorted(value)) for key, value in reasons.items()}
             self.excluded_reasons = excluded
             self.entity_ids = frozenset(reasons)
-            if ha_const.__version__ in REGISTRY_CORE_VERSIONS:
-                self.registry_scope = registry_scope(
-                    self.hass, self.entity_ids, results.values()
-                )
-            self.resource_dependencies = resource_dependencies(configs)
-            self.resource_complete = bool(results) and len(configs) == len(results) and not any(
-                "Select current active accounts" in problem for problem in problems
-            )
+            self.registry_scope = registry_scope(self.hass, self.entity_ids, results.values())
+            self.resource_dependencies = resource_dependencies(resource_configs)
+            self.resource_scan_problem = resource_scan_problem
+            self.resource_complete = resources_complete and valid_targets and not self.resource_dependencies.dynamic
+            self.unknown_cards = any(result.unknown_cards for result in results.values())
             self._policy_settings = settings
             self.problems, self.warnings = (
                 tuple(sorted(set(problems))),
@@ -470,11 +500,11 @@ class LoonaRuntime:
             self.resource_preview = {}
             if resource_rows is not None:
                 self.resource_report(resource_rows)
-            elif resource_error and ha_const.__version__ in RESOURCE_CORE_VERSIONS:
-                if self.resource_adapter is not None:
-                    self.resource_adapter.fail(resource_error)
-                else:
-                    self.resource_compatibility_problem = str(resource_error)
+            elif resource_error:
+                # A temporary native load error must not retire a valid adapter.
+                self.resource_complete = False
+                self.resource_scan_problem = str(resource_error)
+                _LOGGER.debug("Resource preview unavailable; will retry on the next scan", exc_info=resource_error)
             self._sync_devices()
             self._apply_policy()
             self._update_issues()
@@ -513,12 +543,28 @@ class LoonaRuntime:
             complete=self.resource_complete if control == CONTROL_RESOURCES else not self.problems,
         )
 
+    def bootstrap_policy(self) -> dict[str, Any]:
+        """Delay startup only where an available filter can reduce initial data."""
+        from .bootstrap import route_key
+
+        useful = any(adapter is not None and (policy := self._policy(control)).enabled
+                     and policy.complete and bool(policy.entity_ids)
+                     for control, adapter in ((CONTROL_ENTITIES, self.adapter),
+                                              (CONTROL_REGISTRIES, self.registry_adapter),
+                                              (CONTROL_RESOURCES, self.resource_adapter)))
+        paths = self._policy_settings.get(CONF_DASHBOARDS, ())
+        return {"enabled": useful and bool(paths), "routes": sorted(route_key(path) for path in paths)}
+
     @callback
     def _panel_changed(self, connection: websocket_api.ActiveConnection) -> None:
         """Restore native data before a non-dashboard panel's next request."""
         if self.adapter is not None:
             try:
                 self.adapter.refresh_connection(connection)
+                if (self.panel_context.active(connection)
+                        and self.adapter.policy.scope_for(connection.user.id) is not None
+                        and self.adapter.needs_resubscribe(connection)):
+                    self.panel_context.request_resubscribe(connection)
             except CompatibilityError as err:
                 self.entity_compatibility_problem = str(err)
                 self.adapter.uninstall()
@@ -567,7 +613,7 @@ class LoonaRuntime:
 
     @property
     def available_controls(self) -> frozenset[str]:
-        """Offer controls only for adapters admitted and installed on this Core."""
+        """Offer controls only for adapters whose capability probes passed."""
         controls = {CONTROL_MASTER}
         if self.adapter is not None:
             controls.add(CONTROL_ENTITIES)
@@ -601,9 +647,21 @@ class LoonaRuntime:
 
     @callback
     def _update_issues(self) -> None:
-        """Retire previously created Repairs; notices now belong to Loona."""
+        """Retire legacy Repairs and log changes in feature availability."""
         for key in ("compatibility", "scope", "exclusion", "resources"):
             ir.async_delete_issue(self.hass, DOMAIN, f"{self.entry.entry_id}_{key}")
+        for feature in ("entity", "panel", "bootstrap", "registry", "graph", "resource", "statistics_card", "resource_scan"):
+            attribute = feature + "_problem" if feature in {"statistics_card", "resource_scan"} else feature + "_compatibility_problem"
+            problem = getattr(self, attribute)
+            if feature == "resource_scan" and not (self.controls[CONTROL_MASTER] and self.controls[CONTROL_RESOURCES]):
+                problem = None
+            previous = self._reported_problems.get(feature)
+            if problem and problem != previous:
+                _LOGGER.warning("Loona %s unavailable on Core %s: %s", feature, ha_const.__version__, problem)
+                self._reported_problems[feature] = problem
+            elif not problem and previous:
+                _LOGGER.info("Loona %s recovered", feature)
+                self._reported_problems.pop(feature, None)
 
     def notice_report(self) -> list[dict[str, Any]]:
         """Describe detected conditions without publishing HA notifications."""
@@ -613,7 +671,7 @@ class LoonaRuntime:
             if active:
                 notices.append({"code": code, "severity": severity, "items": sorted(set(items))})
 
-        for feature in ("entity", "panel", "registry", "graph", "resource"):
+        for feature in ("entity", "panel", "bootstrap", "registry", "graph", "resource"):
             add(feature + "_compatibility", getattr(self, feature + "_compatibility_problem"))
         add("card_installation", self.statistics_card_problem)
         filtering = self.controls[CONTROL_MASTER] and (
@@ -625,8 +683,9 @@ class LoonaRuntime:
         excluded = set(self.excluded_reasons) & set().union(
             *(result.entity_ids for result in self.dashboards.values()))
         add("excluded_dependencies", filtering and excluded, items=excluded)
-        add("unknown_cards", filtering and any("custom card may need" in item for item in self.warnings), severity="info")
+        add("unknown_cards", filtering and self.unknown_cards, severity="info")
         if self.controls[CONTROL_MASTER] and self.controls[CONTROL_RESOURCES]:
+            add("resource_scan", self.resource_scan_problem)
             report = self.resource_preview
             add("unmatched_resources", report.get("unresolved_custom_types"), severity="info",
                 items=report.get("unresolved_custom_types", ()))
@@ -689,8 +748,7 @@ class LoonaRuntime:
         self.panel_context.uninstall()
         self._listeners.clear()
         self.statistics_card.unload()
-        for key in ("compatibility", "scope", "exclusion", "resources"):
-            ir.async_delete_issue(self.hass, DOMAIN, f"{self.entry.entry_id}_{key}")
+        self._update_issues()
 
 
 if TYPE_CHECKING:

@@ -99,6 +99,7 @@ async def test_optional_dashboard_failure_keeps_filtering_alive(preview_runtime,
     def fail_collection():
         raise OSError('Native collection storage is unavailable')
 
+    runtime.hass.config_entries.async_update_entry(runtime.entry, options={"dashboard_cards": ["statistics"]})
     monkeypatch.setattr(runtime.statistics_card, 'collection', fail_collection)
     await runtime.async_update_statistics_card()
     assert runtime.statistics_card_problem == 'Native statistics dashboard operation failed'

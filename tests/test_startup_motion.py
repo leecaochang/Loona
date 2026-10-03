@@ -51,12 +51,15 @@ async def test_native_browser_startup_motion(tmp_path):
         )
         try:
             port_file = profile / "DevToolsActivePort"
+            port_lines = []
             for _ in range(100):
                 if port_file.exists():
-                    break
+                    port_lines = port_file.read_text().splitlines()
+                    if len(port_lines) >= 2 and port_lines[0].isdigit():
+                        break
                 await asyncio.sleep(0.1)
-            assert port_file.exists(), (tmp_path / "browser.log").read_text()
-            port = int(port_file.read_text().splitlines()[0])
+            assert len(port_lines) >= 2 and port_lines[0].isdigit(), (tmp_path / "browser.log").read_text()
+            port = int(port_lines[0])
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
                 async with session.get(f"http://127.0.0.1:{port}/json/list") as response:
                     tabs = await response.json()

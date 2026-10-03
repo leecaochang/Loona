@@ -1,0 +1,33 @@
+# Development dependencies
+venv/
+.venv/
+.compat-venv/
+node_modules/
+
+# Generated artifacts
+__pycache__/
+.pytest_cache/
+.coverage
+htmlcov/
+.DS_Store
+*.log
+
+# Local configuration
+*.toml
+!pyproject.toml
+/scripts/*
+
+# Internal instructions and records
+SPEC.md
+CLAUDE.md
+AGENTS.md
+PRODUCT.md
+DESIGN.md
+docs-internal/
+
+# Local tools
+.claude/
+.agents/
+.codex/
+/.impeccable/
+/.codegraph/

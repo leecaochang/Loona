@@ -32,9 +32,11 @@ for (const [label, packets] of Object.entries(cases)) {
       setupRetry: 0,
       createSocket: async () => { throw new Error("Unexpected reconnect"); },
     });
+    const subscriptionId = JSON.parse(packets.initial.find(packet => JSON.parse(packet).type === "event")).id;
+    connection.commandId = subscriptionId - 1;
     let current;
     const stop = subscribeEntities(connection, (states) => { current = states; });
-    assert.deepEqual(socket.sent, [{ type: "subscribe_entities", id: 3 }]);
+    assert.deepEqual(socket.sent, [{ type: "subscribe_entities", id: subscriptionId }]);
     let started = performance.now();
     for (const packet of packets.initial) socket.deliver(packet);
     const initialMs = performance.now() - started;

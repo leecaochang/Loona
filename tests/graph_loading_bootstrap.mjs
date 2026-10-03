@@ -27,6 +27,15 @@ class ReadyCard extends HTMLElement {
   _updateElement() {}
   _setElementVisibility() {}
 }
+if (process.argv[2] === "missing-container") {
+  const policy = { version: "0.9.2", enabled: true, dashboards: ["wall-panel"], quiet_ms: 10,
+    poll_ms: 10, probe_ms: 20, trace_limit: 10, profiles: {}, motion: { enabled: false } };
+  window.loonaProbeFrontend({ connection: {}, config: { loona_graph_loading: policy } });
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.equal(window.__loonaGraphCapability.status, "unavailable");
+  assert.equal(customElements.get("loona-graph-placeholder"), undefined);
+
+}
 customElements.define("hui-card", ReadyCard);
 await Promise.resolve();
 await Promise.resolve();
@@ -37,5 +46,6 @@ assert.equal(Object.getPrototypeOf(placeholder), HTMLElement,
 assert.notEqual(nativeRegistry.get("loona-graph-placeholder"), placeholder,
   "Exercise the scoped registry rather than the old native registry");
 assert.ok(window.loonaGraphLoadingReport().hook_installed);
+assert.equal(window.__loonaGraphCapability.status, "available");
 console.log("Home Assistant registry replacement regression passed");
 window.happyDOM.abort();

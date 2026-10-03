@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import logging
 from typing import Any
 
 import voluptuous as vol
@@ -16,9 +17,31 @@ from .const import (
     CONF_TARGET_MODE, CONF_USER_IDS, DOMAIN, TARGET_SELECTED, CONTROL_RESOURCES, CONTROL_DEFAULTS,
     VERSION,
     SETTINGS_COMMAND, SETTINGS_SAVE_COMMAND, SETTINGS_GROUPS, SETTINGS_CHOICE_PAGE, SETTINGS_EMPTY_DEFAULTS,
+    SETTINGS_CHOICES_COMMAND, CONF_DASHBOARD_CARDS, DASHBOARD_CARDS,
 )
 from .dashboard import dashboard_titles
 from .runtime import LoonaRuntime
+
+_LOGGER = logging.getLogger(__name__)
+_PAGED_CHOICES = frozenset({"extra_entities", "include_globs", "exclude_globs"})
+
+
+def entity_choices(runtime: LoonaRuntime, key: str, query: str = "", offset: int = 0) -> dict[str, Any]:
+    """Search authoritative entity/rule choices with bounded response size."""
+    rules = entity_rule_choices(runtime.hass, runtime.settings)
+    registry = er.async_get(runtime.hass)
+    saved = set(runtime.settings.get(key, ()))
+    available = known_entities(runtime)
+    def row(value: str) -> dict[str, Any]:
+        entry = registry.entities.get(value)
+        return {"value": value, "label": (entry.name or entry.original_name or value) if entry else value,
+                "unavailable": value not in available if key == CONF_EXTRA_ENTITIES else False}
+    query = query.casefold()
+    matching = [value for value in rules[key] if value not in saved
+                and query in (value + " " + row(value)["label"]).casefold()]
+    return {"choices": [row(value) for value in matching[offset:offset + SETTINGS_CHOICE_PAGE]],
+            "selected": [row(value) for value in sorted(saved)],
+            "more": offset + SETTINGS_CHOICE_PAGE < len(matching)}
 
 
 def revision(runtime: LoonaRuntime) -> str:
@@ -48,9 +71,7 @@ async def settings_report(runtime: LoonaRuntime) -> dict[str, Any]:
         resource_available = False
         resources = {"resources": [], "stale_exceptions": list(settings.get(CONF_ALWAYS_FORWARD, []))}
     registry = er.async_get(runtime.hass)
-    available_entities = known_entities(runtime)
-    entities = available_entities | set(settings.get(CONF_EXTRA_ENTITIES, []))
-    return {
+    result: dict[str, Any] = {
         "version": VERSION,
         "notices": runtime.notice_report(),
         "revision": _revision(settings, controls),
@@ -61,22 +82,21 @@ async def settings_report(runtime: LoonaRuntime) -> dict[str, Any]:
             "targets": {CONF_TARGET_MODE: settings.get(CONF_TARGET_MODE, TARGET_SELECTED), CONF_USER_IDS: list(settings.get(CONF_USER_IDS, []))},
             "rules": {key: list(settings.get(key, [])) for key in rules},
             "resources": {CONF_ALWAYS_FORWARD: list(settings.get(CONF_ALWAYS_FORWARD, []))},
+            "cards": {CONF_DASHBOARD_CARDS: list(settings.get(CONF_DASHBOARD_CARDS, []))},
         },
         "choices": {
             CONF_DASHBOARDS: [{"value": key, "label": titles.get(key, key), "unavailable": key not in titles}
                                 for key in sorted(titles.keys() | set(settings.get(CONF_DASHBOARDS, [])))],
             CONF_USER_IDS: [{"value": key, "label": accounts.get(key, key), "unavailable": key not in accounts}
                            for key in sorted(accounts.keys() | set(settings.get(CONF_USER_IDS, [])))],
-            CONF_EXTRA_ENTITIES: [{"value": key, "label": (registry.entities[key].name or registry.entities[key].original_name or key)
-                                   if key in registry.entities else key, "unavailable": key not in available_entities}
-                                 for key in sorted(entities)],
             **{key: [{"value": value, "label": value} for value in values]
-               for key, values in rules.items() if key != CONF_EXTRA_ENTITIES},
+               for key, values in rules.items() if key not in _PAGED_CHOICES},
             CONF_ALWAYS_FORWARD: [{"value": row["url"], "label": row["url"], "status": row["status"]}
-                                  for row in resources["resources"] if row["status"] != "required"]
+                                  for row in resources["resources"] if row["status"] == "unused" or row["url"] in settings.get(CONF_ALWAYS_FORWARD, []) and row["status"] != "required"]
                 + [{"value": url, "label": url, "unavailable": True} for url in resources["stale_exceptions"]],
+            CONF_DASHBOARD_CARDS: [{"value": key, "label": key} for key in DASHBOARD_CARDS],
         },
-        "required_resources": [row["url"] for row in resources["resources"] if row["status"] == "required"],
+        "required_resources": [row["url"] for row in resources["resources"] if row["status"] != "unused"],
         "resources_editable": resource_available and CONTROL_RESOURCES in runtime.available_controls,
         "entry_id": runtime.entry.entry_id,
         "action_entities": {key: next((item.entity_id for item in registry.entities.values()
@@ -84,6 +104,31 @@ async def settings_report(runtime: LoonaRuntime) -> dict[str, Any]:
             and item.domain == "button" and item.unique_id.endswith(":" + key)), None)
             for key in ("rescan", "reset_live_statistics")},
     }
+    result["paged_choices"] = {}
+    for key in _PAGED_CHOICES:
+        page = entity_choices(runtime, key)
+        result["choices"][key] = page["selected"] + page["choices"]
+        result["paged_choices"][key] = page["more"]
+    for key in (CONF_DASHBOARDS, CONF_USER_IDS):
+        result["choices"][key].sort(key=lambda item: (item["label"].casefold(), item["value"]))
+    return result
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({
+    vol.Required("type"): SETTINGS_CHOICES_COMMAND,
+    vol.Required("key"): vol.In(_PAGED_CHOICES),
+    vol.Optional("query", default=""): vol.All(str, vol.Length(max=160)),
+    vol.Optional("offset", default=0): vol.All(int, vol.Range(min=0, max=1000000)),
+})
+@websocket_api.async_response
+async def websocket_settings_choices(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Return a page of choices only to administrators."""
+    runtime = hass.data.get(DOMAIN)
+    if runtime is None:
+        connection.send_error(msg["id"], "not_loaded", "Loona is not loaded")
+        return
+    connection.send_result(msg["id"], entity_choices(runtime, msg["key"], msg["query"], msg["offset"]))
 
 
 @websocket_api.require_admin
@@ -98,6 +143,7 @@ async def websocket_settings(hass: HomeAssistant, connection: websocket_api.Acti
     try:
         result = await settings_report(runtime)
     except Exception:
+        _LOGGER.exception("Loona settings read failed")
         connection.send_error(msg["id"], "unavailable", "Settings are unavailable")
         return
     connection.send_result(msg["id"], result)
@@ -136,6 +182,8 @@ async def websocket_save_settings(hass: HomeAssistant, connection: websocket_api
                     raise ValueError(error)
             else:
                 choices = entity_rule_choices(hass, runtime.settings)
+                if group == "cards":
+                    choices = {CONF_DASHBOARD_CARDS: list(DASHBOARD_CARDS)}
                 if group == "resources":
                     if CONTROL_RESOURCES not in runtime.available_controls:
                         raise ValueError("unsupported")
@@ -161,8 +209,11 @@ async def websocket_save_settings(hass: HomeAssistant, connection: websocket_api
                     options.pop(key, None)
             hass.config_entries.async_update_entry(runtime.entry, options=options)
             await runtime.async_scan()
+            if group == "cards":
+                await runtime.async_update_statistics_card()
         connection.send_result(msg["id"], await settings_report(runtime))
     except ValueError as err:
         connection.send_error(msg["id"], str(err), "Choose valid values from the current lists")
     except Exception:
+        _LOGGER.exception("Loona settings save failed")
         connection.send_error(msg["id"], "save_failed", "Settings could not be saved; refresh and check current values")

@@ -4,12 +4,14 @@ from collections import defaultdict
 from typing import Any
 
 from homeassistant.components.lovelace import const as lovelace_const
-from homeassistant.components.lovelace.dashboard import LovelaceConfig
+from homeassistant.components.lovelace.dashboard import LovelaceConfig, LovelaceStorage
+from homeassistant.components.lovelace.const import ConfigNotFound
 from homeassistant.core import HomeAssistant, valid_entity_id
 from homeassistant.helpers import (
     area_registry as ar,
     device_registry as dr,
     entity_registry as er,
+    translation,
 )
 
 from .const import DEFAULT_DASHBOARD, DOMAIN, TARGET_KEYS
@@ -31,9 +33,11 @@ def dashboard_objects(hass: HomeAssistant) -> dict[str, LovelaceConfig]:
 
 def dashboard_titles(hass: HomeAssistant) -> dict[str, str]:
     """Use stable URL paths as values and refresh mutable labels."""
+    labels = translation.async_get_cached_translations(hass, hass.config.language, "dashboard", "onboarding")
+    overview = labels.get("component.onboarding.dashboard.overview.title", "Overview")
     return {
         key: (dashboard.config or {}).get(
-            "title", "Overview" if key == DEFAULT_DASHBOARD else key
+            "title", overview if key == DEFAULT_DASHBOARD else key
         )
         for key, dashboard in dashboard_objects(hass).items()
     }
@@ -50,6 +54,18 @@ async def load_dashboard(
     if not isinstance(result, dict):
         raise ValueError("Dashboard configuration is not a mapping")
     return result
+
+
+async def load_resource_dashboard(hass: HomeAssistant, key: str, *, force: bool = False) -> dict[str, Any]:
+    """An unsaved native Overview needs no registered custom card resources."""
+    try:
+        return await load_dashboard(hass, key, force=force)
+    except ConfigNotFound:
+        dashboard = dashboard_objects(hass).get(key)
+        if (key == DEFAULT_DASHBOARD and type(dashboard) is LovelaceStorage
+                and dashboard.config is None and not getattr(hass.config, "recovery_mode", False)):
+            return {"strategy": {"type": "original-states"}}
+        raise
 
 
 def discovery_context(hass: HomeAssistant) -> DiscoveryContext:
@@ -70,10 +86,10 @@ def discovery_context(hass: HomeAssistant) -> DiscoveryContext:
     targets: dict[str, dict[str, set[str]]] = {
         key: defaultdict(set) for key in TARGET_KEYS
     }
+    area_helper = getattr(er, "async_get_effective_area_id", None)
     for entry in entities.entities.values():
         if entry.device_id:
             targets["device_id"][entry.device_id].add(entry.entity_id)
-        area_helper = getattr(er, "async_get_effective_area_id", None)
         device = devices.async_get(entry.device_id) if entry.device_id else None
         area_id = (
             area_helper(hass, entry) if area_helper is not None
@@ -104,7 +120,7 @@ def discovery_context(hass: HomeAssistant) -> DiscoveryContext:
 
 
 def protected_entities(hass: HomeAssistant, entry_id: str) -> frozenset[str]:
-    """Loona controls and telemetry always survive advanced exclusions."""
+    """Identify Loona telemetry for exclusion from live update counters."""
     return frozenset(
         entry.entity_id
         for entry in er.async_get(hass).entities.values()

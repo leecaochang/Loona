@@ -1,7 +1,6 @@
 """Check native setup selectors, stale values, and preservation of options."""
 
 import pytest
-import voluptuous as vol
 
 from homeassistant.data_entry_flow import AbortFlow
 from homeassistant.helpers import entity_registry as er
@@ -101,6 +100,7 @@ async def test_options_preserve_unrelated_fields_and_stale_labels(
         "filters",
         "rules",
         "resource_preview",
+        "cards",
     }
     result = await flow.async_step_dashboards()
     selector = next(iter(result["data_schema"].schema.values()))
@@ -154,13 +154,13 @@ async def test_rules_select_known_entities_domains_and_preserve_saved_patterns(
     form = await flow.async_step_rules()
     selectors = {str(key.schema): value for key, value in form["data_schema"].schema.items()}
     assert selectors["include_domains"].config["options"] == ["light", "retired", "sensor"]
-    assert {"sensor.room_temperature", registered.entity_id, "sensor.*", "light.*",
+    assert {"sensor.*", "light.*",
             "sensor.room_*", "sensor.removed"} <= set(selectors["include_globs"].config["options"])
     assert "light.old_*" in selectors["exclude_globs"].config["options"]
     assert "light.old_*" not in selectors["include_globs"].config["options"]
-    assert all(not value.config["custom_value"] for value in selectors.values())
-    with pytest.raises(vol.Invalid):
-        form["data_schema"]({"include_globs": ["sensor.invented"]})
+    assert selectors["extra_entities"].selector_type == "entity"
+    assert selectors["include_globs"].config["custom_value"]
+    assert (await flow.async_step_rules({"include_globs": ["sensor.invented"]}))["errors"] == {"base": "invalid_selection"}
     values = form["data_schema"]({"include_domains": ["retired", "light"],
         "include_globs": ["sensor.room_*", registered.entity_id],
         "exclude_globs": ["sensor.*"]})

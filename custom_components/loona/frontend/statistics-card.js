@@ -1,5 +1,5 @@
 /* Native-themed live filtering statistics. */
-import { language, text, translate, renderNotices } from "./i18n.js?v=0.9.0";
+import { language, text, translate, renderNotices, setText, formatNumber, formatDateTime } from "./i18n.js?v=0.9.2";
 
 const command = "loona/statistics";
 const elementName = "loona-statistics-card";
@@ -15,7 +15,7 @@ function install() {
   // Wait for HA bootstrap to install its current HTMLElement/registry pair.
   const app = document.querySelector("home-assistant");
   if (!app?.hass) {
-    window.setTimeout(install, 100);
+    window.setTimeout(install, 1000);
     return;
   }
   if (customElements.get(elementName)) return;
@@ -52,7 +52,7 @@ function install() {
           dd small { display:block; font-size:12px; margin-top:4px; font-weight:400; color:var(--secondary-text-color); }
           .facts { display:grid; grid-template-columns:1fr auto; gap:8px 16px; margin:20px 0;
             font-size:14px; font-variant-numeric:tabular-nums; }
-          .facts dd { margin:0; font-size:14px; text-align:right; }
+          .facts dd { margin:0; font-size:14px; text-align:end; }
           .facts dt { color:var(--primary-text-color); }
           .actions { display:flex; justify-content:space-between; align-items:center; gap:12px;
             border-top:1px solid var(--divider-color); padding-top:12px; }
@@ -95,7 +95,7 @@ function install() {
             <p data-i18n="An update feed receives live entity changes; one tab can have more than one. The entity reduction estimate compares included entities with all current entities, even when filtering is off.">An update feed receives live entity changes; one tab can have more than one. The entity reduction estimate compares included entities with all current entities, even when filtering is off.</p>
             <div class="actions"><p id="reset-time"></p><button id="reset" data-i18n="Reset live statistics">Reset live statistics</button></div>
             <details id="loads"><summary><span data-i18n="Latest page loads">Latest page loads</span> <span id="load-count"></span></summary>
-              <p data-i18n="Each dashboard's latest browser reload. Entity counts include all selected dashboards. File counts cover registered card files, not Home Assistant's own files or files loaded separately.">Each dashboard's latest browser reload. Entity counts include all selected dashboards. File counts cover registered card files, not Home Assistant's own files or files loaded separately.</p>
+              <p data-i18n="Initial snapshots are filtered when startup dashboard detection succeeds. Startup fallback retains full data. File counts cover registered Lovelace files for the whole page session.">Initial snapshots are filtered when startup dashboard detection succeeds. Startup fallback retains full data. File counts cover registered Lovelace files for the whole page session.</p>
               <ul id="load-rows" class="rows"></ul>
             </details>
           </div>
@@ -156,10 +156,13 @@ function install() {
         const interval = (this._data?.interval_seconds || 30) * 1000;
         if (!document.hidden && this._visible && Date.now() - this._lastRequest >= interval && !this._loading) this._fetch();
       }, 1000);
+      this._capabilityListener = () => { if (this._data) renderNotices(this._get("notices"), this._hass, this._data.notices || []); };
+      window.addEventListener("loona-capabilities", this._capabilityListener);
       this._resetListener = () => this._fetch(); window.addEventListener("loona-statistics-reset", this._resetListener);
       if (this._hass) this._fetch();
     }
     disconnectedCallback() {
+      window.removeEventListener("loona-capabilities", this._capabilityListener);
       window.removeEventListener("loona-statistics-reset", this._resetListener);
       window.clearInterval(this._timer);
       this._observer?.disconnect();
@@ -212,27 +215,27 @@ function install() {
       const metrics = data.metrics;
       this._get("version").textContent = text(this._hass, "Version: {version}", {version:data.version});
       renderNotices(this._get("notices"), this._hass, data.notices || []);
-      const format = (value) => Number(value).toLocaleString(language(this._hass), { maximumFractionDigits: 1 });
+      const format = (value) => formatNumber(this._hass, value, { maximumFractionDigits: 1 });
       this._get("content").hidden = false;
-      this._get("state").textContent = data.compatibility_problem ? text(this._hass, "A feature is unavailable. Check Loona diagnostics.")
+      setText(this._get("state"), data.compatibility_problem ? text(this._hass, "A feature is unavailable. Check Loona diagnostics.")
         : !data.complete ? text(this._hass, "Dashboard scan incomplete. All entities are being sent.")
         : !data.controls.enabled || !data.controls.entity_filtering ? text(this._hass, "Entity filtering is disabled")
-        : metrics.filtered_subscriptions ? text(this._hass, "Entity filtering is active") : text(this._hass, "No filtered update feed yet. Open a dashboard with a selected account.");
+        : metrics.filtered_subscriptions ? text(this._hass, "Entity filtering is active") : text(this._hass, "No filtered update feed yet. Open a dashboard with a selected account."));
       for (const [id, key] of [["forwarded", "forwarded_rate"], ["avoided", "avoided_rate"], ["reduction", "update_reduction"],
-        ["forwarded-total", "forwarded_updates"], ["avoided-total", "avoided_updates"]]) this._get(id).textContent = key.endsWith("_rate") ? Number(metrics[key]).toLocaleString(language(this._hass), {minimumFractionDigits:1, maximumFractionDigits:1}) : format(metrics[key]);
+        ["forwarded-total", "forwarded_updates"], ["avoided-total", "avoided_updates"]]) this._get(id).textContent = key.endsWith("_rate") ? formatNumber(this._hass, metrics[key], {minimumFractionDigits:1, maximumFractionDigits:1}) : format(metrics[key]);
       this._get("interval").textContent = (data.sample_seconds
         ? text(this._hass, "Measured over the last {seconds} seconds.", { seconds: format(data.sample_seconds) })
         : text(this._hass, "Rates update within {seconds} seconds.", { seconds: format(data.interval_seconds) }))
         + " " + text(this._hass, "Each update is counted once per update feed, so multiple tabs can increase totals. These numbers do not measure loading speed or network traffic.");
       this._get("subscriptions").textContent = format(metrics.filtered_subscriptions) + " / " + format(metrics.managed_subscriptions);
-      this._get("scope").textContent = text(this._hass, "{count} entities", { count: format(metrics.current_scope) });
-      this._get("estimate").textContent = format(metrics.reduction_estimate) + "%";
-      this._get("reset-time").textContent = text(this._hass, "Since {time}", { time: new Date(data.reset_at).toLocaleString(language(this._hass)) });
+      this._get("scope").textContent = text(this._hass, metrics.current_scope === 1 ? "1 entity" : "{count} entities", { count: format(metrics.current_scope) });
+      this._get("estimate").textContent = formatNumber(this._hass, metrics.reduction_estimate / 100, {style:"percent",maximumFractionDigits:1});
+      this._get("reset-time").textContent = text(this._hass, "Since {time}", { time: formatDateTime(this._hass, data.reset_at) });
       this._get("reset").disabled = !data.reset_entity || this._resetting;
       this._get("load-count").textContent = "(" + data.page_loads.length + ")";
       this._get("load-rows").replaceChildren(...(data.page_loads.length ? data.page_loads.map(row => {
         const item = node("li"); item.append(node("strong", row.title));
-        item.append(node("p", new Date(row.at).toLocaleString(language(this._hass))));
+        item.append(node("p", formatDateTime(this._hass, row.at)));
         item.append(node("p", text(this._hass, "Entities sent: {sent} / {available}", row.entities)));
         item.append(node("p", row.resources ? text(this._hass, "Card files sent: {sent} / {available}", row.resources) : text(this._hass, "No card file count was recorded for this load.")));
         return item;

@@ -1,16 +1,19 @@
 """Delegate entity subscriptions and reconcile scope changes without reconnects.
 
-Delegate to the native synchronous handler on admitted Core releases. Preparing,
+Delegate to the native synchronous handler after its capability probe passes. Preparing,
 publishing, and retiring subscriptions stay in one event-loop turn without awaits.
 """
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, cast
+from weakref import WeakSet
 
 from homeassistant.components import websocket_api
 from homeassistant.auth.permissions.const import POLICY_READ
 from homeassistant.components.websocket_api import messages
+from homeassistant.components.websocket_api import commands
 from homeassistant.const import EVENT_STATE_CHANGED
 from homeassistant.core import (
     Event,
@@ -133,6 +136,7 @@ class SubscriptionAdapter:
         self._original: HandlerEntry | None = None
         self._owned_entry: HandlerEntry | None = None
         self._records: dict[SubscriptionKey, _Subscription] = {}
+        self._explicit_subscriptions: WeakSet[Any] = WeakSet()
         self._unsubscribe_lifecycle: Callable[[], None] | None = None
 
     @property
@@ -172,10 +176,14 @@ class SubscriptionAdapter:
         """Count eligible logical changes and track new IDs for bypassed clients."""
         entity_id = event.data["entity_id"]
         for record in self._records.values():
-            if event.data["old_state"] is None and record.scope is None:
+            user = record.connection.user
+            permissions = user.permissions
+            readable = (user.is_admin or permissions.access_all_entities(POLICY_READ)
+                        or permissions.check_entity(entity_id, POLICY_READ))
+            if (event.data["old_state"] is None and readable
+                and (record.scope is None or entity_id in record.scope)):
                 record.possible_ids.add(entity_id)
             statistics = self.statistics
-            user = record.connection.user
             if (statistics is None or entity_id in statistics.ignored
                 or not record.relay.active
                 or record.connection.subscriptions.get(record.request["id"]) is not record.owned_unsubscribe
@@ -200,6 +208,10 @@ class SubscriptionAdapter:
             any(msg.get(key, {}).values()) for key in ("include", "exclude")
         ):
             self._original[0](hass, connection, msg)
+            # Explicit full feeds have the same native callback as early feeds.
+            # Remember requests seen here without retaining their connections.
+            if isinstance(remove := connection.subscriptions.get(msg["id"]), partial):
+                self._explicit_subscriptions.add(remove)
             return
         candidate = self._prepare(
             connection, msg, self._scope_for(self.policy, connection), initial=True
@@ -228,9 +240,12 @@ class SubscriptionAdapter:
         effective = dict(request)
         if scope is not None:
             effective["entity_ids"] = sorted(scope)
-        possible_ids = set(
-            scope if scope is not None else self.hass.states.async_entity_ids()
-        )
+        user = connection.user
+        permissions = user.permissions
+        allowed = {entity_id for entity_id in self.hass.states.async_entity_ids()
+                   if user.is_admin or permissions.access_all_entities(POLICY_READ)
+                   or permissions.check_entity(entity_id, POLICY_READ)}
+        possible_ids = allowed if scope is None else allowed & scope
         try:
             self._original[0](
                 self.hass, cast(websocket_api.ActiveConnection, relay), effective
@@ -249,11 +264,6 @@ class SubscriptionAdapter:
                 connection.subscriptions[msg_id] = previous_callback
         counts = None
         if initial and self.statistics is not None:
-            user = connection.user
-            permissions = user.permissions
-            allowed = {entity_id for entity_id in self.hass.states.async_entity_ids()
-                       if user.is_admin or permissions.access_all_entities(POLICY_READ)
-                       or permissions.check_entity(entity_id, POLICY_READ)}
             counts = {"available": len(allowed), "sent": len(allowed if scope is None else allowed & scope)}
         return _Subscription(
             connection, dict(request), scope, relay, native_unsubscribe, possible_ids,
@@ -290,8 +300,9 @@ class SubscriptionAdapter:
         else:
             connection.subscriptions[msg_id] = candidate.native_unsubscribe
             self._records.pop(key, None)
-        if previous is not None and previous.possible_ids:
-            connection.send_event(msg_id, {"r": sorted(previous.possible_ids)})
+        removed = previous.possible_ids - candidate.possible_ids if previous else set()
+        if removed:
+            connection.send_event(msg_id, {"r": sorted(removed)})
         candidate.relay.flush()
 
     def _stage_changes(
@@ -344,6 +355,37 @@ class SubscriptionAdapter:
         for previous, candidate in staged:
             self._publish(candidate, previous=previous, managed=True)
 
+    def needs_resubscribe(self, connection: websocket_api.ActiveConnection) -> bool:
+        """Detect early native feeds without guessing their original request scope."""
+        forward = getattr(commands, "_forward_entity_changes", None)
+        if forward is None:
+            return False
+        for msg_id, remove in tuple(connection.subscriptions.items()):
+            if ((connection, msg_id) in self._records or not isinstance(remove, partial)
+                or remove in self._explicit_subscriptions
+                or remove.func != self.hass.bus._async_remove_listener
+                or len(remove.args) != 2 or remove.args[0] != EVENT_STATE_CHANGED):
+                continue
+            job, event_filter = remove.args[1]
+            listener = job.target
+            if (event_filter is not None or not isinstance(listener, partial)
+                or listener.func is not forward):
+                continue
+            sender = listener.args[0]
+            relay = getattr(sender, "__self__", None)
+            if (sender != connection.send_message
+                and not (type(relay) is _SubscriptionRelay and relay.connection is connection
+                         and relay.active and sender == relay.send_message)):
+                continue
+            if (len(listener.args) == 5 and listener.args[1] is None
+                and listener.args[2] is None and listener.args[3] is connection.user
+                and listener.args[4] == str(msg_id).encode()):
+                return True
+            if (len(listener.args) == 4 and listener.args[1] == set()
+                and listener.args[2] is connection.user and listener.args[3] == str(msg_id).encode()):
+                return True
+        return False
+
     def initial_counts(self, connection: websocket_api.ActiveConnection) -> dict[str, int] | None:
         """Return the latest ordinary initial snapshot for this exact socket."""
         return next((record.initial_counts for record in reversed(tuple(self._records.values()))
@@ -377,4 +419,5 @@ class SubscriptionAdapter:
         assert self._unsubscribe_lifecycle is not None
         self._unsubscribe_lifecycle()
         self._unsubscribe_lifecycle = None
+        self._explicit_subscriptions.clear()
         self._table = self._original = self._owned_entry = None
