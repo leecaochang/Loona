@@ -75,7 +75,8 @@
           "visible_first_graphs": "Delay graph loading",
           "pause_animations_during_loading": "Pause animations during loading",
           "resource_filtering": "Resource filtering",
-          "delay_card_resources": "Delay card files"
+          "delay_card_resources": "Delay card files",
+          "current_dashboard_updates": "Current dashboard updates"
         }
       },
       "rules": {
@@ -137,6 +138,9 @@
       },
       "delay_card_resources": {
         "name": "Delay card files"
+      },
+      "current_dashboard_updates": {
+        "name": "Current dashboard updates"
       }
     },
     "button": {

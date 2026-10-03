@@ -42,7 +42,7 @@ const context = vm.createContext({
   customElements: { get: () => App },
 });
 const source = readFileSync(new URL("../custom_components/loona/frontend/panel-context.js", import.meta.url), "utf8")
-  .replace('import "./resource-loading.js?v=0.9.4";', readFileSync(new URL("../custom_components/loona/frontend/resource-loading.js", import.meta.url), "utf8"))
+  .replace('import "./resource-loading.js?v=0.9.5";', readFileSync(new URL("../custom_components/loona/frontend/resource-loading.js", import.meta.url), "utf8"))
   .replaceAll("import.meta.url", JSON.stringify("http://test/loona/panel-context.js?poll=100"));
 vm.runInContext(source, context);
 const socket = new Socket();
@@ -87,6 +87,28 @@ location.pathname = "/wall-panel/other-view";
 await connection.sendMessagePromise({ type: "config/entity_registry/list" });
 assert.equal(socket.sent.at(-2).type, "loona/panel");
 assert.equal(socket.sent.at(-2).dashboard, "wall-panel");
+
+// Native dialogs and editor queries temporarily restore fresh union delivery.
+assert.equal(socket.sent[0].live_dashboard, true);
+listeners.get("hass-more-info")({detail:{entityId:"sensor.other"}});
+await new Promise(setImmediate);
+assert.equal(socket.sent.at(-1).expanded, true);
+const opened = socket.sent.length;
+listeners.get("show-dialog")({detail:{dialogTag:"ha-dialog-quick-bar"}});
+listeners.get("dialog-closed")({detail:{dialog:"ha-more-info-dialog"}});
+assert.equal(socket.sent.length, opened, "Another open native dialog keeps union delivery");
+window.history = {state:{opensDialog:true}};
+listeners.get("dialog-closed")({detail:{dialog:"ha-dialog-quick-bar"}});
+await new Promise(setImmediate);
+assert.equal(socket.sent.at(-1).expanded, false, "Native back-navigation markers do not mean a dialog is open");
+location.search = "?edit=1";
+listeners.get("location-changed")();
+await new Promise(setImmediate);
+assert.equal(socket.sent.at(-1).expanded, true);
+location.search = "";
+listeners.get("location-changed")();
+await new Promise(setImmediate);
+assert.equal(socket.sent.at(-1).expanded, false);
 
 // Native reconnect replays the original context message after offline navigation.
 let rawCalls = 0;

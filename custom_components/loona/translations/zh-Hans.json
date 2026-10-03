@@ -75,7 +75,8 @@
           "visible_first_graphs": "延迟加载图表",
           "pause_animations_during_loading": "加载期间暂停动画",
           "resource_filtering": "资源筛选",
-          "delay_card_resources": "延迟加载卡片文件"
+          "delay_card_resources": "延迟加载卡片文件",
+          "current_dashboard_updates": "当前仪表盘更新"
         }
       },
       "rules": {
@@ -137,6 +138,9 @@
       },
       "delay_card_resources": {
         "name": "延迟加载卡片文件"
+      },
+      "current_dashboard_updates": {
+        "name": "当前仪表盘更新"
       }
     },
     "button": {

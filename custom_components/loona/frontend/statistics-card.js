@@ -1,5 +1,5 @@
 /* Native-themed live filtering statistics. */
-import { language, text, translate, renderNotices, setText, formatNumber, formatDateTime } from "./i18n.js?v=0.9.4";
+import { language, text, translate, renderNotices, setText, formatNumber, formatDateTime } from "./i18n.js?v=0.9.5";
 
 const command = "loona/statistics";
 const elementName = "loona-statistics-card";

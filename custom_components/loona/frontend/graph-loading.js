@@ -1,11 +1,11 @@
-import { StartupMotion } from "./startup-motion.js?v=0.9.4";
-import { text } from "./i18n.js?v=0.9.4";
+import { StartupMotion } from "./startup-motion.js?v=0.9.5";
+import { text } from "./i18n.js?v=0.9.5";
 
 // Probe the native card container before enabling optional graph scheduling.
 // Dashboard configuration and loaded card elements remain native.
 if (!window[Symbol.for("loona.graph-loading")]) {
   window[Symbol.for("loona.graph-loading")] = true;
-  const moduleVersion = "0.9.4";
+  const moduleVersion = "0.9.5";
   const motion = new StartupMotion(moduleVersion);
   const capability = window.__loonaGraphCapability = { status: "pending", enabled: false };
   let probeTimer;

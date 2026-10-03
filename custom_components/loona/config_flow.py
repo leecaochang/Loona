@@ -14,6 +14,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er, selector
 
 from .const import (
+    CONTROL_DASHBOARD_LIVE,
     CONF_DASHBOARDS,
     CONF_DASHBOARD_CARDS,
     DASHBOARD_CARDS,
@@ -338,7 +339,7 @@ class LoonaOptionsFlow(OptionsFlow):
                 {
                     vol.Required(key, default=runtime.controls[key]): selector.BooleanSelector()
                     for key in (
-                        CONTROL_ENTITIES, CONTROL_REGISTRIES, CONTROL_RESOURCES, CONTROL_RESOURCE_DELAY, CONTROL_GRAPHS, CONTROL_MOTION
+                        CONTROL_ENTITIES, CONTROL_DASHBOARD_LIVE, CONTROL_REGISTRIES, CONTROL_RESOURCES, CONTROL_RESOURCE_DELAY, CONTROL_GRAPHS, CONTROL_MOTION
                     )
                     if runtime is not None and key in runtime.available_controls
                 }

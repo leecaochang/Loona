@@ -1,5 +1,5 @@
 /* Report dashboard context and recover when Core reconnects before Loona. */
-import "./resource-loading.js?v=0.9.4";
+import "./resource-loading.js?v=0.9.5";
 
 if (!window.__loonaPanelContext) {
   window.__loonaPanelContext = true;
@@ -9,6 +9,7 @@ if (!window.__loonaPanelContext) {
   const prototypes = new WeakSet();
   const subscriptionKinds = new WeakMap();
   const subscriptionCallbacks = new WeakMap();
+  const dialogs = new Set();
   const pollMs = Number(new URL(import.meta.url).searchParams.get("poll"));
   let rootDashboard = null;
 
@@ -18,6 +19,12 @@ if (!window.__loonaPanelContext) {
       const app = document.querySelector("home-assistant");
       return path || (app && app.hass && app.hass.panelUrl) || rootDashboard;
     } catch { return null; }
+  }
+
+  function panelReport() {
+    return {dashboard:dashboard(), live_dashboard:true,
+      expanded:Boolean(dialogs.size || window.history?.state?.dialog
+        || /[?&]edit(?:=|&|$)/.test(location.search || ""))};
   }
 
   function attach(connection) {
@@ -48,7 +55,9 @@ if (!window.__loonaPanelContext) {
       if (!connection.connected || state.pending || state.disabled) return;
       const generation = state.generation;
       state.pending = true;
-      state.dashboard = dashboard();
+      const current = panelReport();
+      state.dashboard = current.dashboard;
+      state.context = JSON.stringify(current);
       // Own reconnect recovery so a startup unknown_command can be retried.
       state.ready = Promise.resolve(nativeSubscribe.call(connection, (value) => {
         if (value?.resources) state.resources.policy(value.resources);
@@ -58,7 +67,7 @@ if (!window.__loonaPanelContext) {
           state.recoverySocket = connection.socket;
           connection.reconnect();
         }
-      }, { type: "loona/subscribe_panel", dashboard: state.dashboard }, { resubscribe: false }))
+      }, { type: "loona/subscribe_panel", ...current }, { resubscribe: false }))
         .then((remove) => {
           if (generation !== state.generation) return false;
           unsubscribe = remove;
@@ -81,13 +90,15 @@ if (!window.__loonaPanelContext) {
         state.prefetch = undefined;
       }
       if (!state.subscribed) { subscribe(); return; }
-      const current = dashboard();
-      if (state.dashboard === current) return;
+      const current = panelReport();
+      const context = JSON.stringify(current);
+      if (state.context === context) return;
       state.prefetch = undefined;
-      state.dashboard = current;
-      nativePromise.call(connection, { type: "loona/panel", dashboard: current })
+      state.dashboard = current.dashboard;
+      state.context = context;
+      nativePromise.call(connection, { type: "loona/panel", ...current })
         .catch((error) => {
-          state.dashboard = undefined;
+          state.dashboard = state.context = undefined;
           if (error && (error.code === "unknown_command" || error.code === "not_subscribed")) {
             state.subscribed = false;
             if (unsubscribe) Promise.resolve(unsubscribe()).catch(() => {});
@@ -242,6 +253,16 @@ if (!window.__loonaPanelContext) {
 
   window.addEventListener("location-changed", update, true);
   window.addEventListener("popstate", update, true);
+  window.addEventListener("hass-more-info", event => {
+    if (event.detail?.entityId) { dialogs.add("ha-more-info-dialog"); update(); }
+  }, true);
+  window.addEventListener("show-dialog", event => {
+    const tag = event.detail?.dialogTag;
+    if (typeof tag === "string" && tag.length <= 100) { dialogs.add(tag); update(); }
+  }, true);
+  window.addEventListener("dialog-closed", event => {
+    if (dialogs.delete(event.detail?.dialog)) update();
+  }, true);
   update();
   if (Number.isFinite(pollMs) && pollMs > 0) window.setInterval(update, pollMs);
 }

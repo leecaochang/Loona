@@ -27,6 +27,8 @@ const chinese = {
   "Loona settings": "Loona 设置",
   "Filters and performance": "筛选与性能",
   "Entity filtering": "实体筛选",
+  "Current dashboard updates": "当前仪表盘更新",
+  "Keep this dashboard and Entity rules live. Other dashboard values stay cached until navigation, dialogs or editing. Requires Entity filtering.": "实时更新当前仪表盘和实体规则中的实体。其他仪表盘的数据保留缓存，并在导航、打开对话框或编辑时刷新。需要启用实体筛选。",
   "Registry filtering": "注册表筛选",
   "Pause animations during loading": "加载期间暂停动画",
   "Resource filtering": "资源筛选",

@@ -11,7 +11,7 @@ PANEL_POLL_MS: Final = 2000
 BOOTSTRAP_TIMEOUT_MS: Final = 2000
 RECORDER_CLEANUP_SECONDS: Final = 15
 MIN_CORE_VERSION: Final = "2024.6.0"
-VERSION: Final = "0.9.4"
+VERSION: Final = "0.9.5"
 CONF_DASHBOARD_CARDS: Final = "dashboard_cards"
 DASHBOARD_CARDS: Final = ("statistics", "settings")
 CONF_DASHBOARDS: Final = "dashboards"
@@ -29,6 +29,7 @@ DEFAULT_DASHBOARD: Final = "lovelace"
 RESOURCE_NATIVE_STRATEGIES: Final = frozenset({"map", "iframe", "original-states", "areas", "area", "areas-overview", "home", "home-overview", "home-area", "home-media-players", "home-other-devices"})
 CONTROL_MASTER: Final = "enabled"
 CONTROL_ENTITIES: Final = "entity_filtering"
+CONTROL_DASHBOARD_LIVE: Final = "current_dashboard_updates"
 CONTROL_REGISTRIES: Final = "registry_filtering"
 CONTROL_RESOURCES: Final = "resource_filtering"
 CONTROL_RESOURCE_DELAY: Final = "delay_card_resources"
@@ -122,6 +123,7 @@ GRAPH_PROFILES: Final = {
 CONTROL_DEFAULTS: Final = {
     CONTROL_MASTER: True,
     CONTROL_ENTITIES: True,
+    CONTROL_DASHBOARD_LIVE: False,
     CONTROL_REGISTRIES: False,
     CONTROL_RESOURCES: False,
     CONTROL_RESOURCE_DELAY: False,

@@ -45,6 +45,7 @@ Use the **Loona settings** card or the integration's **Configure** menu. The Loo
 | --- | --- |
 | Enabled | Master switch, on by default. Turning it off restores managed live entity feeds and native registry responses. |
 | Entity filtering | On by default. Keeps entities discovered in selected dashboards and added by Entity rules. |
+| Current dashboard updates | Off by default. Keeps the current dashboard, Entity rules and interface entities live while retaining the other selected dashboards' cached values. Requires Entity filtering. |
 | Registry filtering | Off by default. Narrows native entity, device, area, floor and label lists. |
 | Resource filtering | Off by default. Skips recognized card bundles unused by all configured dashboards. A browser reload is required to change loaded files. |
 | Delay graph loading | Off by default. Defers eligible off-screen graphs until visible work settles. Scrolling to one loads it immediately. |
@@ -64,6 +65,10 @@ Each browser connection reports its current panel. Entity and registry filtering
 The entity scope is the union of selected dashboard dependencies and your Entity rules. Add individual entities, whole domains, known entity IDs or domain patterns such as `sensor.*`. Previously saved custom patterns remain available for removal or reuse. Exclusions override ordinary inclusions, while interface entities remain protected. The settings card searches large entity lists on the server rather than downloading the full catalog.
 
 Quick-bar search, dialogs, dashboard editors and service selectors opened within a selected dashboard still see its scoped data. Add entities they need under Entity rules, or disable filtering while using broader selectors. Loona cannot infer every dependency of a custom card or popup.
+
+**Current dashboard updates** is a separate experimental control. The first snapshot still contains the selected-dashboard union. Ongoing updates then cover the current dashboard, including all its views, plus explicit Entity rules and protected interface entities. Other selected-dashboard values remain cached and can become stale. Navigating to another selected dashboard refreshes its current values without removing the retained union. Native dialogs, including more-info, and dashboard editing refresh the union and temporarily keep it live. Closing them resumes dashboard delivery. A deleted inactive entity is reconciled when the subscription next changes. Initial payload and included-entity counts still describe the union; live counters reflect the narrower delivery.
+
+This control uses the existing complete-scan requirement and native read permissions. Older reporters keep union delivery until the browser refreshes. Disabling it refreshes union values; disabling Entity filtering or Enabled, leaving selected dashboards or unloading Loona restores native behavior. Custom popups or cards that read entities from other dashboards may not report native dialog events; add those entities under Entity rules to keep them live, or leave this control off. No entity outside the existing permitted scope is added by opening a dialog. Raw event subscriptions and explicit native scopes retain their behavior and can still deliver unrelated updates. Validate on your device before relying on the control; it does not reduce every source of browser CPU work.
 
 One incomplete selected dashboard pauses entity and registry filtering for the whole union. This avoids dropping data whose dependencies cannot be determined. Save automatically generated dashboards and check unsupported templates, strategies or dynamic auto-entities rules. Missing but valid entity references alone do not cause bypass.
 

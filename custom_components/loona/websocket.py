@@ -111,6 +111,7 @@ class _Subscription:
     connection: websocket_api.ActiveConnection
     request: dict[str, Any]
     scope: frozenset[str] | None
+    retained_scope: frozenset[str] | None
     relay: _SubscriptionRelay
     native_unsubscribe: Callable[[], Any]
     possible_ids: set[str]
@@ -127,11 +128,12 @@ class _Subscription:
 class SubscriptionAdapter:
     """Own one command replacement and its tracked unscoped subscriptions."""
 
-    def __init__(self, hass: HomeAssistant, policy: ScopePolicy, statistics: LiveStatistics | None = None, dashboard_active: Callable[[websocket_api.ActiveConnection], bool] | None = None) -> None:
+    def __init__(self, hass: HomeAssistant, policy: ScopePolicy, statistics: LiveStatistics | None = None, dashboard_active: Callable[[websocket_api.ActiveConnection], bool] | None = None, delivery_scope: Callable[[websocket_api.ActiveConnection, frozenset[str]], frozenset[str]] | None = None) -> None:
         self.hass = hass
         self.policy = policy
         self.statistics = statistics
         self.dashboard_active = dashboard_active
+        self.delivery_scope = delivery_scope
         self._table: HandlerTable | None = None
         self._original: HandlerEntry | None = None
         self._owned_entry: HandlerEntry | None = None
@@ -181,7 +183,7 @@ class SubscriptionAdapter:
             readable = (user.is_admin or permissions.access_all_entities(POLICY_READ)
                         or permissions.check_entity(entity_id, POLICY_READ))
             if (event.data["old_state"] is None and readable
-                and (record.scope is None or entity_id in record.scope)):
+                and (record.retained_scope is None or entity_id in record.retained_scope)):
                 record.possible_ids.add(entity_id)
             statistics = self.statistics
             if (statistics is None or entity_id in statistics.ignored
@@ -213,9 +215,8 @@ class SubscriptionAdapter:
             if isinstance(remove := connection.subscriptions.get(msg["id"]), partial):
                 self._explicit_subscriptions.add(remove)
             return
-        candidate = self._prepare(
-            connection, msg, self._scope_for(self.policy, connection), initial=True
-        )
+        retained = self._scope_for(self.policy, connection)
+        candidate = self._prepare(connection, msg, self._delivery_for(connection, retained), retained, initial=True)
         self._publish(candidate, previous=None, managed=True)
 
     def _scope_for(self, policy: ScopePolicy, connection: websocket_api.ActiveConnection) -> frozenset[str] | None:
@@ -224,19 +225,35 @@ class SubscriptionAdapter:
             return None
         return policy.scope_for(connection.user.id)
 
+    def _delivery_for(self, connection: websocket_api.ActiveConnection, retained: frozenset[str] | None) -> frozenset[str] | None:
+        """Only narrow an already eligible union; empty native scopes mean full."""
+        if retained is None or self.delivery_scope is None:
+            return retained
+        delivery = self.delivery_scope(connection, retained) & retained
+        return delivery or retained
+
     def _prepare(
         self,
         connection: websocket_api.ActiveConnection,
         request: dict[str, Any],
         scope: frozenset[str] | None,
+        retained_scope: frozenset[str] | None,
         *,
         initial: bool = False,
+        refresh_retained: bool = False,
     ) -> _Subscription:
         """Stage Core's listener and snapshot; roll back on handler failure."""
         assert self._original is not None
         msg_id = request["id"]
         previous_callback = connection.subscriptions.get(msg_id)
-        relay = _SubscriptionRelay(connection, acknowledge=initial)
+        seed = None
+        if scope != retained_scope and (initial or refresh_retained):
+            # Use Core itself for the permission-safe union snapshot. Its
+            # temporary listener is retired before staging the live listener,
+            # all in the same synchronous event-loop turn.
+            seed = self._prepare(connection, request, retained_scope, retained_scope, initial=initial)
+            seed.stop()
+        relay = _SubscriptionRelay(connection, acknowledge=initial and seed is None)
         effective = dict(request)
         if scope is not None:
             effective["entity_ids"] = sorted(scope)
@@ -245,7 +262,7 @@ class SubscriptionAdapter:
         allowed = {entity_id for entity_id in self.hass.states.async_entity_ids()
                    if user.is_admin or permissions.access_all_entities(POLICY_READ)
                    or permissions.check_entity(entity_id, POLICY_READ)}
-        possible_ids = allowed if scope is None else allowed & scope
+        possible_ids = allowed if retained_scope is None else allowed & retained_scope
         try:
             self._original[0](
                 self.hass, cast(websocket_api.ActiveConnection, relay), effective
@@ -263,10 +280,12 @@ class SubscriptionAdapter:
             else:
                 connection.subscriptions[msg_id] = previous_callback
         counts = None
+        if seed is not None:
+            relay.buffer = seed.relay.buffer
         if initial and self.statistics is not None:
-            counts = {"available": len(allowed), "sent": len(allowed if scope is None else allowed & scope)}
+            counts = {"available": len(allowed), "sent": len(possible_ids)}
         return _Subscription(
-            connection, dict(request), scope, relay, native_unsubscribe, possible_ids,
+            connection, dict(request), scope, retained_scope, relay, native_unsubscribe, possible_ids,
             counts,
         )
 
@@ -324,12 +343,14 @@ class SubscriptionAdapter:
                     raise CompatibilityError(
                         "Another owner replaced a managed listener"
                     )
-                scope = (
+                retained = (
                     None if unloading else self._scope_for(policy, previous.connection)
                 )
-                if unloading or scope != previous.scope:
+                scope = self._delivery_for(previous.connection, retained)
+                if unloading or scope != previous.scope or retained != previous.retained_scope:
                     candidate = self._prepare(
-                        previous.connection, previous.request, scope
+                        previous.connection, previous.request, scope, retained,
+                        refresh_retained=retained != previous.retained_scope,
                     )
                     staged.append((previous, candidate))
         except Exception:

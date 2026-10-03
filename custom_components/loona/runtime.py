@@ -36,6 +36,7 @@ from homeassistant.util import dt as dt_util
 
 from .compatibility import CompatibilityError
 from .const import (
+    CONTROL_DASHBOARD_LIVE,
     CONF_DASHBOARDS,
     CONF_DASHBOARD_CARDS,
     CONF_ALWAYS_FORWARD,
@@ -93,6 +94,7 @@ class LoonaRuntime:
         self._policy_settings = self.settings
         self.controls = dict(CONTROL_DEFAULTS)
         self.entity_ids: frozenset[str] = frozenset()
+        self.dashboard_live_entities: dict[str, frozenset[str]] = {}
         self.reasons: dict[str, tuple[str, ...]] = {}
         self.excluded_reasons: dict[str, tuple[str, ...]] = {}
         self.dashboards: dict[str, DiscoveryResult] = {}
@@ -228,7 +230,7 @@ class LoonaRuntime:
             )
         )
         await self.async_scan()
-        adapter = SubscriptionAdapter(self.hass, self._policy(), self.live_statistics, self.panel_context.active)
+        adapter = SubscriptionAdapter(self.hass, self._policy(), self.live_statistics, self.panel_context.active, self._delivery_scope)
         try:
             adapter.install()
         except CompatibilityError as err:
@@ -534,6 +536,10 @@ class LoonaRuntime:
             self.reasons = {key: tuple(sorted(value)) for key, value in reasons.items()}
             self.excluded_reasons = excluded
             self.entity_ids = frozenset(reasons)
+            pinned = {entity_id for entity_id, locations in reasons.items()
+                      if locations & {"extra entity", "include rule", "Home Assistant app context"}}
+            self.dashboard_live_entities = {key: frozenset((result.entity_ids | pinned) & self.entity_ids)
+                                           for key, result in results.items() if result.complete}
             self.registry_scope = registry_scope(self.hass, self.entity_ids, results.values())
             self.resource_dependencies = resource_dependencies(resource_configs)
             self.dashboard_resources = dashboard_resources
@@ -593,6 +599,13 @@ class LoonaRuntime:
             enabled=self.controls[CONTROL_MASTER] and self.controls[control],
             complete=self.resource_complete if control == CONTROL_RESOURCES else not self.problems,
         )
+
+    def _delivery_scope(self, connection: websocket_api.ActiveConnection, retained: frozenset[str]) -> frozenset[str]:
+        """Keep all views and explicit rules live; dialogs refresh the union."""
+        if not self.controls[CONTROL_DASHBOARD_LIVE]:
+            return retained
+        dashboard = self.panel_context.delivery_dashboard(connection)
+        return self.dashboard_live_entities.get(dashboard or "", retained)
 
     def bootstrap_policy(self) -> dict[str, Any]:
         """Delay startup only where an available filter can reduce initial data."""
@@ -670,6 +683,8 @@ class LoonaRuntime:
         controls = {CONTROL_MASTER}
         if self.adapter is not None:
             controls.add(CONTROL_ENTITIES)
+            if self.panel_compatibility_problem is None:
+                controls.add(CONTROL_DASHBOARD_LIVE)
         if self.registry_adapter is not None:
             controls.add(CONTROL_REGISTRIES)
         if self.resource_adapter is not None:

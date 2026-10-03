@@ -23,7 +23,7 @@ async def test_unlisted_core_with_capabilities_enables_all_features(loona_hass, 
         assert runtime.compatibility_problem is None
         assert runtime.available_controls == {
             "enabled", "entity_filtering", "registry_filtering", "resource_filtering",
-            "delay_card_resources",
+            "delay_card_resources", "current_dashboard_updates",
             "visible_first_graphs", "pause_animations_during_loading",
         }
     finally:
