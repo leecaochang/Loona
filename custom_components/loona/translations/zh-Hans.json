@@ -4,14 +4,14 @@
     "step": {
       "user": {
         "title": "选择仪表盘",
-        "description": "选择需要筛选的仪表盘。自动生成的仪表盘需要先保存，再选择。",
+        "description": "选择 Loona 要筛选的仪表盘。Home Assistant 自动生成的仪表盘需要先保存，才能选择。",
         "data": {
           "dashboards": "仪表盘"
         }
       },
       "targets": {
         "title": "选择账户",
-        "description": "选择指定账户或所有账户。仅当这些账户查看所选仪表盘时应用筛选。Home Assistant 的权限设置仍然有效。",
+        "description": "选择哪些账户接收筛选后的数据。仅在这些账户查看你所选的仪表盘时生效。Loona 不会改变任何人的查看权限。",
         "data": {
           "target_mode": "筛选哪些账户",
           "user_ids": "账户"
@@ -19,23 +19,23 @@
       },
       "cards": {
         "title": "添加仪表盘卡片",
-        "description": "可选择任一卡片、两张卡片，或都不选择。所选卡片将添加到仅管理员可见的 Loona 仪表盘。以后也可以将内置卡片添加到自己的仪表盘。",
+        "description": "Loona 自带两张卡片：设置卡片和统计卡片。勾选需要的卡片，Loona 会将它们放到仅管理员可见的新仪表盘上。以后也可以把它们添加到你自己的仪表盘。",
         "data": {
           "dashboard_cards": "仪表盘卡片"
         }
       },
       "finish": {
         "title": "完成设置",
-        "description": "**完成设置后，请刷新浏览器。** 浏览器加载 Loona 卡片文件后，才能查看新卡片。"
+        "description": "**完成后请刷新浏览器。** 浏览器重新加载后，才会显示新卡片。"
       }
     },
     "error": {
       "no_dashboards": "请至少选择一个仪表盘。",
       "no_accounts": "请至少选择一个有效账户。",
-      "invalid_selection": "部分选项已失效或被重复选择。请从当前列表中重新选择。"
+      "invalid_selection": "部分选项已不可用，或被重复选择。请从列表中重新选择。"
     },
     "abort": {
-      "already_configured": "只能配置一个 Loona 集成。"
+      "already_configured": "Loona 已经设置过了，只能添加一个。"
     }
   },
   "options": {
@@ -47,7 +47,7 @@
           "targets": "账户",
           "filters": "筛选与性能",
           "rules": "实体规则",
-          "resource_preview": "卡片",
+          "resource_preview": "卡片文件",
           "cards": "Loona 仪表盘",
           "idle": "空闲时间设置"
         }
@@ -61,7 +61,7 @@
       },
       "targets": {
         "title": "选择账户",
-        "description": "选择指定账户或所有账户。仅当这些账户查看所选仪表盘时应用筛选。Home Assistant 的权限设置仍然有效。",
+        "description": "选择哪些账户接收筛选后的数据。仅在这些账户查看你所选的仪表盘时生效。Loona 不会改变任何人的查看权限。",
         "data": {
           "target_mode": "筛选哪些账户",
           "user_ids": "账户"
@@ -69,23 +69,23 @@
       },
       "filters": {
         "title": "筛选与性能",
-        "description": "按需开启或关闭功能。实体筛选会自动查找所需实体。注册表筛选会减少实体和设备详情。延迟加载图表会让屏幕外的图表稍后加载，滚动到它们时立即加载。暂停的动画会自动恢复。资源筛选会加载必需的文件和在“卡片”中勾选的文件。修改资源设置后，请刷新浏览器。 延迟加载卡片文件优先加载当前标签页和共享文件；无法确定标签页时使用整个仪表盘。启用后请刷新页面。 空闲模式暂停实体更新，交互时立即恢复；屏幕外动画暂停仅影响循环动画。预加载标签页文件会提前获取并编译模块。",
+        "description": "按需开启功能。更改涉及卡片文件的选项后，请刷新浏览器。\n\n- **实体筛选：** 只发送你的仪表盘用到的实体。\n- **设备与区域筛选：** 以同样方式精简实体、设备和区域列表。\n- **仅实时更新当前标签页：** 页面加载后，只实时更新你正在查看的标签页。需要启用实体筛选。\n- **跳过未使用的卡片文件：** 不加载任何仪表盘都没用到的卡片文件。\n- **优先加载当前标签页：** 先加载当前标签页所需的卡片文件，再加载其余文件。\n- **预加载卡片文件：** 尽早开始下载卡片文件。\n- **延迟加载图表：** 等你滚动到屏幕外的图表时再加载它们。\n- **暂停屏幕外动画** 和 **加载期间暂停动画：** 暂停看不到的循环动画，或在仪表盘加载期间暂停。\n- **空闲模式：** 无操作一段时间后暂停实时更新。需要启用实体筛选。",
         "data": {
           "entity_filtering": "实体筛选",
-          "registry_filtering": "注册表筛选",
+          "registry_filtering": "设备与区域筛选",
           "visible_first_graphs": "延迟加载图表",
           "pause_animations_during_loading": "加载期间暂停动画",
-          "resource_filtering": "资源筛选",
-          "delay_card_resources": "延迟加载卡片文件",
-          "current_dashboard_updates": "当前标签页更新",
-          "preload_card_resources": "预加载标签页卡片文件",
+          "resource_filtering": "跳过未使用的卡片文件",
+          "delay_card_resources": "优先加载当前标签页",
+          "current_dashboard_updates": "仅实时更新当前标签页",
+          "preload_card_resources": "预加载卡片文件",
           "pause_offscreen_animations": "暂停屏幕外动画",
           "idle_updates": "空闲模式"
         }
       },
       "rules": {
         "title": "实体规则",
-        "description": "在“包含”中添加 Loona 未识别的实体。需要时可以包含整个实体类型，或填写已知实体 ID、sensor.* 等类型规则。排除规则优先于包含规则。Home Assistant 界面使用的人员、更新和区域实体始终保留。",
+        "description": "Loona 会自动找出你的仪表盘用到的实体。可以在“包含”中补充它遗漏的实体，或在“排除”中去掉一些实体。可以添加整个实体类型（例如 sensor）、具体的实体 ID，或 sensor.kitchen_* 这样的匹配规则。排除规则优先于包含规则。Home Assistant 需要的人员、更新和区域实体始终保留。",
         "data": {
           "extra_entities": "包含：实体",
           "include_domains": "包含：实体类型",
@@ -94,30 +94,30 @@
         }
       },
       "resource_preview": {
-        "title": "卡片",
-        "description": "{required_start}自动保留的文件（{required_count}）{required_summary_end}\n\n这些文件用于已配置的仪表盘、全局辅助功能，或无法安全识别用途。\n\n{required}\n\n无法匹配文件的卡片类型（{unresolved_count}）：{unresolved}\n\n已保存但不再注册的文件（{stale_count}）：{stale}\n\n启用资源筛选后，下方勾选的文件也会加载。只有已知但未使用的卡片文件可以跳过。未知文件始终保留；动态配置或扫描不完整时保留全部文件。\n\n勾选弹窗等功能所需的可选文件，并取消不再需要的已保存文件。保存后重新加载浏览器页面。已经加载的文件会保留到页面重新加载。如果资源筛选控件不可用，请查看诊断信息。",
+        "title": "卡片文件",
+        "description": "{required_start}始终加载的文件（{required_count}）{required_summary_end}\n\n你的仪表盘或共享样式需要这些文件，或 Loona 无法确定它们是否被使用。\n\n{required}\n\n找不到对应文件的卡片类型（{unresolved_count}）：{unresolved}\n\n已保存但已不存在的文件（{stale_count}）：{stale}\n\n开启“跳过未使用的卡片文件”后，Loona 会略过任何仪表盘都没用到的文件。无法确定用途的文件始终会加载；如果仪表盘使用了模板，或扫描不完整，则会加载全部文件。\n\n请勾选弹窗或其他功能所需的额外文件，并取消勾选不再需要的已保存文件。保存后请刷新浏览器。已经加载的文件会保留到你刷新页面。如果“跳过未使用的卡片文件”没有生效，请查看诊断信息。",
         "data": {
-          "resource_filtering": "资源筛选",
-          "always_forward_resources": "额外加载的文件"
+          "resource_filtering": "跳过未使用的卡片文件",
+          "always_forward_resources": "额外加载的卡片文件"
         }
       },
       "cards": {
         "title": "添加仪表盘卡片",
-        "description": "可选择任一卡片、两张卡片，或都不选择。所选卡片将添加到仅管理员可见的 Loona 仪表盘。以后也可以将内置卡片添加到自己的仪表盘。",
+        "description": "Loona 自带两张卡片：设置卡片和统计卡片。勾选需要的卡片，Loona 会将它们放到仅管理员可见的新仪表盘上。以后也可以把它们添加到你自己的仪表盘。",
         "data": {
           "dashboard_cards": "仪表盘卡片"
         }
       },
       "confirm_remove_dashboard": {
         "title": "删除 Loona 仪表盘",
-        "description": "删除自动生成的 Loona 仪表盘及其卡片？已编辑的仪表盘会保留。取消此流程可保留当前选择。",
+        "description": "删除 Loona 自动创建的仪表盘及其卡片？你自己编辑过的仪表盘会保留。取消则保持现状。",
         "data": {
           "confirm": "确认删除"
         }
       },
       "idle": {
         "title": "空闲时间设置",
-        "description": "无交互后进入空闲模式。刷新间隔 0 表示暂停到交互时；1 至 60 表示每隔指定秒数刷新，默认为 60 秒。独立时钟、相机及卡片计时器可能继续运行。",
+        "description": "设置仪表盘无操作多久后进入空闲状态，以及空闲期间多久刷新一次。刷新间隔设为 0 表示在有人操作之前不刷新；否则可设为 1 至 60 秒（默认 60 秒）。时钟、摄像头和部分卡片可能仍会自行更新。",
         "data": {
           "idle_after_minutes": "进入空闲前的分钟数",
           "idle_refresh_seconds": "空闲刷新间隔（秒）"
@@ -127,9 +127,9 @@
     "error": {
       "no_dashboards": "请至少选择一个仪表盘。",
       "no_accounts": "请至少选择一个有效账户。",
-      "invalid_selection": "部分选项已失效或被重复选择。请从当前列表中重新选择。",
+      "invalid_selection": "部分选项已不可用，或被重复选择。请从列表中重新选择。",
       "not_loaded": "Loona 尚未运行。请重新加载集成，然后重试。",
-      "confirmation_required": "请确认删除或取消此流程。"
+      "confirmation_required": "请勾选确认框以确认删除，或取消。"
     },
     "abort": {
       "not_loaded": "Loona 尚未运行。请重新加载集成，再打开此页面。",
@@ -145,7 +145,7 @@
         "name": "实体筛选"
       },
       "registry_filtering": {
-        "name": "注册表筛选"
+        "name": "设备与区域筛选"
       },
       "visible_first_graphs": {
         "name": "延迟加载图表"
@@ -154,16 +154,16 @@
         "name": "加载期间暂停动画"
       },
       "resource_filtering": {
-        "name": "资源筛选"
+        "name": "跳过未使用的卡片文件"
       },
       "delay_card_resources": {
-        "name": "延迟加载卡片文件"
+        "name": "优先加载当前标签页"
       },
       "current_dashboard_updates": {
-        "name": "当前标签页更新"
+        "name": "仅实时更新当前标签页"
       },
       "preload_card_resources": {
-        "name": "预加载标签页卡片文件"
+        "name": "预加载卡片文件"
       },
       "pause_offscreen_animations": {
         "name": "暂停屏幕外动画"
@@ -204,13 +204,13 @@
         "name": "包含且可用的实体数"
       },
       "reduction_estimate": {
-        "name": "实体数量减少估算"
+        "name": "估计精简的实体"
       },
       "managed_subscriptions": {
-        "name": "跟踪的更新订阅数"
+        "name": "跟踪的连接"
       },
       "filtered_subscriptions": {
-        "name": "已筛选的更新订阅数"
+        "name": "已筛选的连接"
       },
       "last_scan": {
         "name": "上次成功扫描"
@@ -231,7 +231,7 @@
         "name": "每秒筛掉的实体更新"
       },
       "update_reduction": {
-        "name": "实时更新减少比例"
+        "name": "已筛掉的更新占比"
       },
       "forwarded_updates": {
         "name": "已发送的实体更新"

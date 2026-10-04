@@ -1,5 +1,5 @@
 /* Native-themed live filtering statistics. */
-import { language, text, translate, renderNotices, renderVersion, cardPreferences, saveCardPreferences, setText, formatNumber, formatDateTime, confirmAction, cancelConfirmation, createHelp, closeHelp, helpStyles } from "./i18n.js?v=0.9.9";
+import { language, text, translate, renderNotices, renderVersion, markHtml, markStyles, hideBrokenMark, icon, buttonStyles, cardPreferences, saveCardPreferences, setText, formatNumber, formatDateTime, confirmAction, cancelConfirmation, createHelp, closeHelp, helpStyles } from "./i18n.js?v=0.9.9";
 
 const cardVersion = "0.9.9";
 const command = "loona/statistics";
@@ -18,69 +18,216 @@ function svg(tag, attributes = {}) {
   return element;
 }
 function chartText(x,y,size,attributes={}) { return svg("text",{x,y,"font-size":size,fill:"var(--primary-text-color)",...attributes}); }
-function rateChart(root,hass,label,value,history,key,max) {
-  if (!root.firstElementChild) {
-    const plot=svg("svg",{viewBox:"0 0 120 160",role:"img","data-chart":key});
-    plot.append(chartText(6,18,14,{"data-part":"label"}),chartText(6,50,26,{"data-part":"value"}),chartText(6,72,14,{"data-part":"unit"}));
-    plot.append(svg("line",{x1:6,x2:114,y1:128,y2:128,stroke:"var(--divider-color)"}));
-    plot.append(svg("polyline",{fill:"none",stroke:"var(--primary-color)","stroke-width":2,"data-part":"line"}));
-    plot.append(svg("circle",{r:2.5,fill:"var(--primary-color)","data-part":"latest"}));
-    plot.append(chartText(6,150,13.5,{"data-part":"history",fill:"var(--secondary-text-color)"})); root.append(plot);
-  }
-  const plot=root.firstElementChild;
-  const formatted=formatNumber(hass,value,{minimumFractionDigits:1,maximumFractionDigits:1});
-  plot.querySelector('[data-part="label"]').textContent=text(hass,label);
-  const number=plot.querySelector('[data-part="value"]'); number.textContent=formatted;
-  number.setAttribute("font-size",String(Math.min(26,104/(Math.max(1,formatted.length)*.62))));
-  plot.querySelector('[data-part="unit"]').textContent=text(hass,"updates/s");
-  const start=history.length ? Date.parse(history[0].at)-1000*history[0].seconds : 0;
-  const end=history.length ? Date.parse(history[history.length-1].at) : 0;
-  const span=Math.max(1,end-start);
-  const points=history.map(row=>[6+108*(Date.parse(row.at)-start)/span,128-44*Math.max(0,row[key])/max]);
-  plot.querySelector('[data-part="line"]').setAttribute("points",points.map(([x,y])=>`${x.toFixed(2)},${y.toFixed(2)}`).join(" "));
-  const dot=plot.querySelector('[data-part="latest"]'); dot.hidden=!points.length; dot.style.display=points.length ? "" : "none";
-  if (points.length) { dot.setAttribute("cx",String(points[points.length-1][0])); dot.setAttribute("cy",String(points[points.length-1][1])); }
-  const caption=history.length ? text(hass,"{minutes} min history",{minutes:formatNumber(hass,span/60000,{maximumFractionDigits:1})}) : text(hass,"No history yet");
-  plot.querySelector('[data-part="history"]').textContent=caption;
-  plot.setAttribute("aria-label",text(hass,"{label}: {rate} updates/s. {history}",{label:text(hass,label),rate:formatted,history:caption}));
+
+// Charts stay bound to the active theme: solid primary is "sent", dashed secondary text is "filtered".
+const SENT="var(--primary-color)", FILTERED="var(--secondary-text-color)";
+let chartSequence=0;
+const reducedMotion=()=>window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches===true;
+// One authored moment: values ease out exponentially from their previous reading.
+function tween(owner,from,to,apply,duration=800) {
+  window.cancelAnimationFrame?.(owner.__frame); window.clearTimeout(owner.__settle);
+  if (!window.requestAnimationFrame || reducedMotion() || from===to) { apply(to); return; }
+  // Frames pause in hidden documents; the timer still lands the exact value.
+  owner.__settle=window.setTimeout(()=>{ window.cancelAnimationFrame?.(owner.__frame); apply(to); },duration+250);
+  let start;
+  const step=now=>{
+    start??=now;
+    const t=Math.min(1,Math.max(0,(now-start)/duration));
+    apply(from+(to-from)*(t===1 ? 1 : 1-2**(-10*t)));
+    if (t<1) owner.__frame=window.requestAnimationFrame(step);
+  };
+  owner.__frame=window.requestAnimationFrame(step);
 }
-function ringChart(root,hass,label,value,full,hasUpdates) {
+const fixed=value=>Number(value.toFixed(2));
+// Charts draw 1:1 in CSS pixels so labels keep their real size at any card width.
+function chartWidth(root) {
+  const width=Math.max(120,Math.round(root.clientWidth||320));
+  if (root.firstElementChild && root.firstElementChild.__width!==width) root.replaceChildren();
+  return width;
+}
+
+// Lit area equals fraction f of the disc: a left half-disc, widened or narrowed by a half-ellipse terminator.
+function phasePath(cx,cy,r,f) {
+  if (!(f>0.0005)) return "";
+  const k=r*Math.abs(1-2*Math.min(1,f)), top=`${cx} ${cy-r}`, bottom=`${cx} ${cy+r}`;
+  return `M${top}A${r} ${r} 0 0 0 ${bottom}A${fixed(k)} ${r} 0 0 ${f>0.5 ? 0 : 1} ${top}Z`;
+}
+// Labels sit under the chart; wrap onto a second line when the estimated text width exceeds the chart.
+function setLabel(chart,value,width) {
+  const wide=[...value].reduce((sum,character)=>sum+(character.charCodeAt(0)>0x2e7f ? 12.5 : 6.6),0);
+  let lines=[value];
+  if (wide>width-8) {
+    const spaces=[...value].flatMap((character,index)=>character===" " ? [index] : []), middle=value.length/2;
+    const at=spaces.length ? spaces.reduce((best,index)=>Math.abs(index-middle)<Math.abs(best-middle) ? index : best) : Math.ceil(middle);
+    lines=[value.slice(0,at),value.slice(spaces.length ? at+1 : at)];
+  }
+  const label=chart.querySelector('[data-part="label"]'), x=label.getAttribute("x");
+  label.replaceChildren(...lines.map((line,index)=>{ const row=svg("tspan",{x,dy:index ? 14 : 0}); row.textContent=line; return row; }));
+}
+// The lit side of the moon is the percentage; the dark side is the remainder.
+function moonChart(root,hass,label,percent,hasUpdates) {
   if (!root.firstElementChild) {
-    const chart=svg("svg",{viewBox:full ? "0 0 120 160" : "0 0 100 100",role:"img","data-chart":"ring"});
-    if (full) chart.append(chartText(60,18,14,{"text-anchor":"middle","data-part":"label"}));
-    const cx=full ? 60 : 50, cy=full ? 88 : 50;
-    chart.append(svg("circle",{cx,cy,r:34,fill:"none",stroke:"var(--divider-color)","stroke-width":12}));
-    chart.append(svg("circle",{cx,cy,r:34,fill:"none",stroke:"var(--primary-color)","stroke-width":12,pathLength:100,transform:`rotate(-90 ${cx} ${cy})`,"data-part":"ring"}));
-    chart.append(chartText(cx,cy+7,22,{"text-anchor":"middle","data-part":"value"}));
-    if (full) chart.append(chartText(60,150,13.5,{"text-anchor":"middle","data-part":"empty",fill:"var(--secondary-text-color)"})); root.append(chart);
+    const id=++chartSequence, r=46, cx=60, cy=56;
+    const chart=svg("svg",{viewBox:"0 0 120 170",role:"img","data-chart":"moon"});
+    const defs=svg("defs"), gradient=svg("radialGradient",{id:`loona-moon-${id}`,cx:"38%",cy:"34%",r:"75%"}), halo=svg("radialGradient",{id:`loona-halo-${id}`});
+    halo.append(svg("stop",{offset:0,style:"stop-color:var(--primary-color);stop-opacity:.2"}),svg("stop",{offset:1,style:"stop-color:var(--primary-color);stop-opacity:0"})); defs.append(halo);
+    gradient.append(svg("stop",{offset:0,style:"stop-color:color-mix(in srgb,var(--primary-color) 62%,#fff)"}),svg("stop",{offset:1,style:"stop-color:var(--primary-color)"}));
+    defs.append(gradient); chart.append(defs);
+    chart.append(svg("circle",{cx,cy,r:r*1.45,fill:`url(#loona-halo-${id})`}));
+    chart.append(svg("circle",{cx,cy,r,"data-part":"shadow",style:"fill:color-mix(in srgb,var(--primary-color) 9%,var(--secondary-background-color));stroke:var(--divider-color);stroke-width:1.25"}));
+    chart.append(svg("path",{"data-part":"lit",fill:`url(#loona-moon-${id})`}));
+    for (const [dx,dy,size] of [[-.34,-.26,.2],[.22,.3,.15],[.3,-.4,.1],[-.2,.42,.09]]) {
+      chart.append(svg("circle",{cx:fixed(cx+dx*r),cy:fixed(cy+dy*r),r:fixed(size*r),style:"fill:var(--primary-text-color);opacity:.07"}));
+    }
+    chart.append(chartText(60,130,22,{"text-anchor":"middle","data-part":"value","font-weight":600}),chartText(60,150,12.5,{"text-anchor":"middle","data-part":"label",fill:"var(--secondary-text-color)"}));
+    chart.__geometry={cx,cy,r}; root.append(chart);
   }
-  const chart=root.firstElementChild, percentage=Math.min(100,Math.max(0,Number(value)||0));
-  const formatted=formatNumber(hass,percentage/100,{style:"percent",maximumFractionDigits:1});
-  chart.querySelector('[data-part="ring"]').setAttribute("stroke-dasharray",`${percentage} ${100-percentage}`);
+  const chart=root.firstElementChild, {cx,cy,r}=chart.__geometry, value=Math.min(100,Math.max(0,Number(percent)||0));
+  const formatted=formatNumber(hass,value/100,{style:"percent",maximumFractionDigits:1});
+  const lit=hasUpdates ? value/100 : 0, lightPath=chart.querySelector('[data-part="lit"]');
+  chart.setAttribute("data-lit",String(fixed(lit)));
+  tween(chart,chart.__lit ?? 0,lit,fraction=>{ chart.__lit=fraction; lightPath.setAttribute("d",phasePath(cx,cy,r,fraction)); });
   const number=chart.querySelector('[data-part="value"]'); number.textContent=formatted;
-  number.setAttribute("font-size",String(Math.min(22,58/(Math.max(1,formatted.length)*.62))));
-  if (full) {
-    chart.querySelector('[data-part="label"]').textContent=text(hass,label);
-    chart.querySelector('[data-part="empty"]').textContent=hasUpdates ? "" : text(hass,"No updates");
-  }
+  number.setAttribute("font-size",String(Math.min(22,108/(Math.max(1,formatted.length)*.62))));
+  setLabel(chart,hasUpdates ? text(hass,label) : text(hass,"No updates"),120);
   chart.setAttribute("aria-label",text(hass,label)+": "+formatted+(!hasUpdates ? ". "+text(hass,"No updates") : ""));
 }
+
+// Constellation of update feeds: a lit four-point star per filtered feed, joined in a line; hollow dots are unfiltered.
+const jitter=(index,seed)=>{ const value=Math.sin(index*127.1+seed*311.7)*43758.5453; return value-Math.floor(value)-.5; };
+function starPath(cx,cy,r) {
+  const k=r*.17;
+  return `M${fixed(cx)} ${fixed(cy-r)}Q${fixed(cx+k)} ${fixed(cy-k)} ${fixed(cx+r)} ${fixed(cy)}Q${fixed(cx+k)} ${fixed(cy+k)} ${fixed(cx)} ${fixed(cy+r)}Q${fixed(cx-k)} ${fixed(cy+k)} ${fixed(cx-r)} ${fixed(cy)}Q${fixed(cx-k)} ${fixed(cy-k)} ${fixed(cx)} ${fixed(cy-r)}Z`;
+}
 function feedChart(root,hass,filtered,total) {
+  const width=chartWidth(root);
   if (!root.firstElementChild) {
-    const chart=svg("svg",{viewBox:"0 0 320 78",role:"img","data-chart":"feeds"});
-    chart.append(chartText(0,18,14,{"data-part":"label"}));
-    chart.append(svg("rect",{x:0,y:30,width:320,height:40,fill:"var(--secondary-background-color)"}));
-    chart.append(svg("rect",{x:0,y:30,height:40,fill:"var(--primary-color)","data-part":"bar"}));
-    chart.append(svg("rect",{x:123,y:37,width:74,height:26,fill:"var(--card-background-color)"}));
-    chart.append(chartText(160,56,18,{"text-anchor":"middle","data-part":"value"})); root.append(chart);
+    const chart=svg("svg",{viewBox:`0 0 ${width} 170`,role:"img","data-chart":"feeds"});
+    chart.append(svg("path",{"data-part":"links",fill:"none",style:"stroke:var(--primary-color);stroke-opacity:.45;stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round"}),svg("g",{"data-part":"stars"}),
+      chartText(width/2,130,22,{"data-part":"value","text-anchor":"middle","font-weight":600}),chartText(width/2,150,12.5,{"data-part":"label","text-anchor":"middle",fill:"var(--secondary-text-color)"}));
+    chart.__width=width; root.append(chart);
   }
-  const chart=root.firstElementChild, count=Math.min(Math.max(0,Number(total)||0),Math.max(0,Number(filtered)||0));
-  chart.querySelector('[data-part="label"]').textContent=text(hass,"Filtered update feeds");
-  chart.querySelector('[data-part="bar"]').setAttribute("width",String(total ? 320*count/total : 0));
-  const formatted=formatNumber(hass,count)+" / "+formatNumber(hass,total);
-  const number=chart.querySelector('[data-part="value"]'); number.textContent=formatted;
-  number.setAttribute("font-size",String(Math.min(18,66/(Math.max(1,formatted.length)*.62))));
-  chart.setAttribute("aria-label",text(hass,"{filtered} of {total} update feeds filtered",{filtered:formatNumber(hass,count),total:formatNumber(hass,total)}));
+  const chart=root.firstElementChild, all=Math.max(0,Math.floor(Number(total)||0)), count=Math.min(all,Math.max(0,Math.floor(Number(filtered)||0)));
+  setLabel(chart,text(hass,"Filtered connections"),width);
+  chart.querySelector('[data-part="value"]').textContent=formatNumber(hass,count)+" / "+formatNumber(hass,all);
+  // Beyond 48 stars the sky samples proportionally; the exact counts stay in the text.
+  const shown=Math.min(all,48), lit=all>48 ? (count>0 ? Math.max(1,Math.round(48*count/all)) : 0) : count;
+  const area={x:10,y:6,w:width-20,h:98};
+  let columns=1, size=0;
+  for (let candidate=1;candidate<=Math.max(1,shown);candidate++) {
+    const fit=Math.min(area.w/candidate,area.h/Math.ceil(shown/candidate));
+    if (fit>size+.01) { size=fit; columns=candidate; }
+  }
+  size=Math.min(size,40);
+  const rows=Math.ceil(shown/columns), top=area.y+(area.h-rows*size)/2, stars=[], centers=[];
+  for (let index=0;index<shown;index++) {
+    const row=Math.floor(index/columns), inRow=Math.min(columns,shown-row*columns), column=row%2 ? inRow-1-index%columns : index%columns;
+    const cx=(width-columns*size)/2+((columns-inRow)/2+column+.5)*size+jitter(index,1)*size*.3, cy=top+(row+.5)*size+jitter(index,2)*size*.3;
+    const isLit=index<lit;
+    let mark;
+    if (isLit) {
+      mark=svg("path",{d:starPath(cx,cy,Math.min(13,Math.max(5,size*.32))),style:"fill:var(--primary-color);transform-box:fill-box;transform-origin:center"});
+      centers.push([cx,cy]);
+    } else {
+      mark=svg("circle",{cx:fixed(cx),cy:fixed(cy),r:fixed(Math.min(5,Math.max(2.5,size*.1))),fill:"none",style:"stroke:var(--secondary-text-color);stroke-opacity:.6;stroke-width:1.25"});
+    }
+    mark.setAttribute("data-feed",""); mark.setAttribute("data-lit",String(isLit)); stars.push(mark);
+  }
+  chart.querySelector('[data-part="stars"]').replaceChildren(...stars);
+  const links=chart.querySelector('[data-part="links"]');
+  links.setAttribute("d",centers.length>1 ? "M"+centers.map(([x,y])=>`${fixed(x)} ${fixed(y)}`).join("L") : "");
+  if (!root.__shown && lit>0 && !reducedMotion()) {
+    root.__shown=true;
+    stars.filter(mark=>mark.dataset.lit==="true").forEach((mark,index)=>mark.animate?.([{opacity:0,transform:"scale(.2)"},{opacity:1,transform:"scale(1)"}],{duration:650,delay:150+index*80,easing:"cubic-bezier(.16,1,.3,1)",fill:"backwards"}));
+    links.animate?.([{opacity:0},{opacity:1}],{duration:700,delay:300,easing:"cubic-bezier(.16,1,.3,1)",fill:"backwards"});
+  }
+  chart.setAttribute("aria-label",text(hass,"{filtered} of {total} live connections filtered",{filtered:formatNumber(hass,count),total:formatNumber(hass,all)}));
+}
+
+// Smooth monotone-ish curve; control points are clamped so the line never dips below the baseline.
+function curve(points) {
+  if (points.length<2) return "";
+  let d=`M${fixed(points[0][0])} ${fixed(points[0][1])}`;
+  for (let index=0;index<points.length-1;index++) {
+    const [p0,p1,p2,p3]=[points[Math.max(0,index-1)],points[index],points[index+1],points[Math.min(points.length-1,index+2)]];
+    const low=Math.min(p1[1],p2[1]), high=Math.max(p1[1],p2[1]);
+    const y1=Math.min(high,Math.max(low,p1[1]+(p2[1]-p0[1])/6)), y2=Math.min(high,Math.max(low,p2[1]-(p3[1]-p1[1])/6));
+    d+=`C${fixed(p1[0]+(p2[0]-p0[0])/6)} ${fixed(y1)} ${fixed(p2[0]-(p3[0]-p1[0])/6)} ${fixed(y2)} ${fixed(p2[0])} ${fixed(p2[1])}`;
+  }
+  return d;
+}
+const STREAM={left:8,top:30,base:108};
+function streamChart(root,hass,history,metrics,max) {
+  const width=chartWidth(root), right=width-8, plotRight=width-52;
+  if (!root.firstElementChild) {
+    const id=++chartSequence, plot=svg("svg",{viewBox:`0 0 ${width} 148`,role:"img","data-chart":"stream"}); plot.__width=width;
+    const defs=svg("defs"), area=svg("linearGradient",{id:`loona-area-${id}`,x1:0,y1:0,x2:0,y2:1});
+    area.append(svg("stop",{offset:0,style:"stop-color:var(--primary-color);stop-opacity:.38"}),svg("stop",{offset:1,style:"stop-color:var(--primary-color);stop-opacity:0"}));
+    const clip=svg("clipPath",{id:`loona-reveal-${id}`}); clip.append(svg("rect",{x:0,y:0,width,height:148,"data-part":"reveal"}));
+    defs.append(area,clip); plot.append(defs);
+    for (const [fraction,part] of [[1,"max"],[.5,"half"],[0,"zero"]]) {
+      const y=STREAM.base-(STREAM.base-STREAM.top)*fraction;
+      plot.append(svg("line",{x1:STREAM.left,x2:plotRight,y1:y,y2:y,style:`stroke:var(--divider-color);stroke-width:1;${fraction ? "stroke-dasharray:2 4" : ""}`}));
+      if (fraction) plot.append(chartText(right,y+4,11,{"data-part":part,"text-anchor":"end",fill:"var(--secondary-text-color)"}));
+    }
+    const series=svg("g",{"clip-path":`url(#loona-reveal-${id})`});
+    series.append(svg("path",{"data-part":"sent-area",style:`fill:url(#loona-area-${id})`}),svg("path",{"data-part":"filtered-area",style:`fill:${FILTERED};opacity:.1`}),
+      svg("path",{"data-part":"filtered-line",fill:"none",style:`stroke:${FILTERED};stroke-width:2;stroke-dasharray:5 4;stroke-linecap:round;stroke-linejoin:round`}),
+      svg("path",{"data-part":"sent-line",fill:"none",style:`stroke:${SENT};stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round`}),
+      svg("circle",{r:3.2,"data-part":"sent-latest",style:`fill:${SENT};stroke:var(--card-background-color);stroke-width:1.5`}),
+      svg("circle",{r:3.2,"data-part":"filtered-latest",style:`fill:${FILTERED};stroke:var(--card-background-color);stroke-width:1.5`}));
+    plot.append(series);
+    plot.append(chartText(STREAM.left,138,12,{"data-part":"history",fill:"var(--secondary-text-color)"}),chartText(plotRight,138,12,{"data-part":"now","text-anchor":"end",fill:"var(--secondary-text-color)"}));
+    const scrub=svg("g",{"data-part":"scrub",style:"display:none;pointer-events:none"});
+    scrub.append(svg("line",{y1:STREAM.top-6,y2:STREAM.base,"data-part":"rule",style:"stroke:var(--primary-text-color);stroke-opacity:.35;stroke-width:1"}),
+      svg("circle",{r:4,"data-part":"scrub-sent",style:`fill:${SENT};stroke:var(--card-background-color);stroke-width:1.5`}),
+      svg("circle",{r:4,"data-part":"scrub-filtered",style:`fill:${FILTERED};stroke:var(--card-background-color);stroke-width:1.5`}),
+      chartText(STREAM.left,13,12.5,{"data-part":"readout","font-weight":600}));
+    plot.append(scrub,svg("rect",{x:0,y:0,width,height:148,fill:"transparent","data-part":"hit"}));
+    const show=event=>{
+      const rows=plot.__rows; if (!rows?.length) return;
+      const box=plot.getBoundingClientRect(), x=(event.clientX-box.left)/Math.max(1,box.width)*width;
+      let best=rows[0]; for (const row of rows) if (Math.abs(row.x-x)<Math.abs(best.x-x)) best=row;
+      const readout=plot.querySelector('[data-part="readout"]'), place=(part,y)=>{ const dot=plot.querySelector(`[data-part="${part}"]`); dot.setAttribute("cx",String(fixed(best.x))); dot.setAttribute("cy",String(fixed(y))); };
+      const rule=plot.querySelector('[data-part="rule"]'); rule.setAttribute("x1",String(fixed(best.x))); rule.setAttribute("x2",String(fixed(best.x)));
+      place("scrub-sent",best.sentY); place("scrub-filtered",best.filteredY);
+      readout.textContent=`${best.when} · ${text(hass,"Sent")} ${best.sent} · ${text(hass,"Filtered out")} ${best.filtered}`;
+      readout.setAttribute("text-anchor",best.x>width/2 ? "end" : "start"); readout.setAttribute("x",String(best.x>width/2 ? right : STREAM.left));
+      plot.querySelector('[data-part="scrub"]').style.display="";
+    };
+    const hide=()=>{ plot.querySelector('[data-part="scrub"]').style.display="none"; };
+    plot.style.touchAction="pan-y";
+    for (const name of ["pointerdown","pointermove"]) plot.addEventListener(name,show);
+    for (const name of ["pointerleave","pointercancel"]) plot.addEventListener(name,hide);
+    root.append(plot);
+  }
+  const plot=root.firstElementChild, part=name=>plot.querySelector(`[data-part="${name}"]`);
+  const start=history.length ? Date.parse(history[0].at)-1000*history[0].seconds : 0, end=history.length ? Date.parse(history[history.length-1].at) : 0, span=Math.max(1,end-start);
+  const x=row=>STREAM.left+(plotRight-STREAM.left-6)*(Date.parse(row.at)-start)/span;
+  const y=value=>STREAM.base-(STREAM.base-STREAM.top)*Math.max(0,value)/max;
+  const sent=history.map(row=>[x(row),y(row.sent)]), filtered=history.map(row=>[x(row),y(row.filtered)]);
+  const area=points=>points.length>1 ? `${curve(points)}L${fixed(points.at(-1)[0])} ${STREAM.base}L${fixed(points[0][0])} ${STREAM.base}Z` : "";
+  part("sent-line").setAttribute("d",curve(sent)); part("filtered-line").setAttribute("d",curve(filtered));
+  part("sent-area").setAttribute("d",area(sent)); part("filtered-area").setAttribute("d",area(filtered));
+  for (const [name,points,key] of [["sent-latest",sent,"sent"],["filtered-latest",filtered,"filtered"]]) {
+    const dot=part(name); dot.style.display=points.length ? "" : "none";
+    if (points.length) { dot.setAttribute("cx",String(fixed(points.at(-1)[0]))); dot.setAttribute("cy",String(fixed(points.at(-1)[1]))); }
+  }
+  const number=value=>formatNumber(hass,value,{minimumFractionDigits:1,maximumFractionDigits:1});
+  part("max").textContent=number(max); part("half").textContent=number(max/2);
+  plot.__rows=history.map((row,index)=>{
+    const minutes=Math.round((end-Date.parse(row.at))/60000);
+    return {x:sent[index][0],sentY:sent[index][1],filteredY:filtered[index][1],sent:number(row.sent),filtered:number(row.filtered),
+      when:minutes<1 ? text(hass,"Now") : text(hass,"{minutes} min ago",{minutes:formatNumber(hass,minutes)})};
+  });
+  const caption=history.length ? text(hass,"{minutes} min history",{minutes:formatNumber(hass,span/60000,{maximumFractionDigits:1})}) : text(hass,"No history yet");
+  part("history").textContent=caption; part("now").textContent=history.length ? text(hass,"Now") : "";
+  const rates={sent:number(metrics.forwarded_rate),filtered:number(metrics.avoided_rate)}, unit=text(hass,"updates/s");
+  plot.setAttribute("aria-label",`${text(hass,"Sent")}: ${rates.sent} ${unit}. ${text(hass,"Filtered out")}: ${rates.filtered} ${unit}. ${caption}`);
+  if (!root.__revealed && history.length>1) {
+    root.__revealed=true; const reveal=part("reveal");
+    tween(plot,0,width,value=>reveal.setAttribute("width",String(fixed(value))),1100);
+  }
 }
 
 function install() {
@@ -100,7 +247,7 @@ function install() {
       this._visible = true;
       this._lastRequest = 0;
       this.shadowRoot.innerHTML = `
-        <style>${helpStyles}
+        <style>${helpStyles}${markStyles}${buttonStyles}
           :host { user-select:text; -webkit-user-select:text; display:block; color:var(--primary-text-color); }
           ha-card { user-select:text; -webkit-user-select:text; padding:24px; overflow:hidden; }
           header { display:flex; justify-content:space-between; align-items:start; gap:16px; }
@@ -108,97 +255,116 @@ function install() {
           header>button { flex-shrink:0; white-space:nowrap; }
           h2 { margin:0; font-size:20px; line-height:1.4; font-weight:500; }
           p { margin:8px 0 0; font-size:14px; line-height:1.5; color:var(--secondary-text-color); }
-          .state { color:var(--primary-text-color); }
+          .state { display:flex; align-items:flex-start; gap:8px; margin:6px 0 0; color:var(--primary-text-color); font-size:14px; line-height:1.5; }
+          .state::before { content:""; flex-shrink:0; width:9px; height:9px; margin-top:7px; border-radius:50%; background:var(--disabled-text-color); }
+          .state[data-tone="active"]::before { background:var(--primary-color); }
+          .state[data-tone="problem"]::before { background:var(--error-color); }
           button { font:inherit; color:var(--primary-text-color); }
           button { border:0; border-radius:var(--ha-border-radius,8px); min-height:44px;
-            padding:8px 12px; background:transparent; color:var(--primary-color); cursor:pointer; }
+            padding:8px 12px; background:transparent; color:var(--primary-color); cursor:pointer; transition:background-color .15s; }
           button:hover { background:var(--secondary-background-color); }
           button:disabled { color:var(--disabled-text-color); cursor:default; }
           button:focus-visible,summary:focus-visible {
             outline:2px solid var(--primary-color); outline-offset:2px; }
           ::selection { background:var(--primary-color); color:var(--text-primary-color,#fff); }
-          .rates { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:20px 16px;
-            margin:24px 0 0; font-variant-numeric:tabular-nums; }
-          dt { font-size:14px; color:var(--secondary-text-color); line-height:1.5; }
-          dd { margin:6px 0 0; font-size:26px; font-weight:500; line-height:1.2; }
-          dd small { display:block; font-size:12px; margin-top:4px; font-weight:400; color:var(--secondary-text-color); }
-          .facts { display:grid; grid-template-columns:1fr auto; gap:8px 16px; margin:20px 0;
-            font-size:14px; font-variant-numeric:tabular-nums; }
-          .facts dd { margin:0; font-size:14px; text-align:end; }
-          .facts dt { color:var(--primary-text-color); }
+          .hero { position:relative; margin:20px -24px 0; padding:20px 24px 12px; font-variant-numeric:tabular-nums;
+            background:color-mix(in srgb,var(--primary-color) 5%,color-mix(in srgb,var(--secondary-background-color) 55%,var(--card-background-color))); }
+          .hero-top,.totals-visual { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); align-items:start; gap:8px 0; }
+          .hero-top { align-items:center; }
+          .totals-visual { margin:12px 0 0; }
+          .gauge { min-width:0; }
+          .gauge-text .big { margin:0; font-size:40px; line-height:1.1; font-weight:500; color:var(--primary-text-color); }
+          .gauge-text .big span:last-child { font-size:.55em; margin-inline-start:2px; }
+          .gauge-text p { margin:4px 0 0; font-size:13px; line-height:1.4; }
+          .rates { display:grid; gap:14px; margin:0; }
+          .rate dt { display:flex; align-items:center; gap:8px; font-size:13px; line-height:1.5; color:var(--secondary-text-color); }
+          .rate dd { display:flex; align-items:baseline; gap:8px; margin:2px 0 0; font-size:30px; font-weight:500; line-height:1.15; }
+          .rate dd small { font-size:12px; font-weight:400; color:var(--secondary-text-color); }
+          .key { flex-shrink:0; width:22px; height:0; border-top:3px solid var(--primary-color); border-radius:2px; }
+          .rate.filtered .key { border-top:2px dashed var(--secondary-text-color); }
+          .metric-tools { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:8px; }
+          .chart-choice { display:flex; align-items:center; gap:12px; min-height:44px; font-size:14px; cursor:pointer; }
+          .chart-choice input { width:18px; height:18px; accent-color:var(--primary-color); }
+          .chart-choice input:focus-visible { outline:2px solid var(--primary-color); outline-offset:2px; }
+          #interval-note { margin:0; }
+          .metric-chart { min-width:0; }
+          .metric-chart svg { display:block; width:100%; height:auto; font-family:inherit; overflow:visible; }
+          #stream-chart { grid-column:1/-1; margin-top:4px; }
+          #reduction-chart svg,#estimate-chart svg { width:128px; max-width:100%; }
+          .ledger { margin:12px 0 0; font-variant-numeric:tabular-nums; }
+          .row { display:flex; align-items:baseline; gap:8px; padding:5px 0; font-size:14px; line-height:1.5; }
+          .row dt { flex:0 1 auto; min-width:0; color:var(--primary-text-color); }
+          .row .leader { flex:1 1 16px; min-width:16px; align-self:end; margin-bottom:5px; border-bottom:1px dotted var(--secondary-text-color); opacity:.5; }
+          .row dd { flex:none; margin:0; text-align:end; font-weight:500; }
+          .fact-heading { margin:24px 0 0; }
+          .fact-heading h3 { margin:0; font-size:15px; font-weight:500; }
           .actions { display:flex; justify-content:space-between; align-items:center; gap:12px;
-            border-top:1px solid var(--divider-color); padding-top:12px; }
-          .actions p { margin:0; font-size:12px; }
+            border-top:1px solid var(--divider-color); padding-top:12px; margin-top:16px; }
+          .actions p { flex:1; min-width:0; margin:0; font-size:12px; }
           details { margin-top:20px; border-top:1px solid var(--divider-color); padding-top:16px; }
           summary { cursor:pointer; min-height:36px; font-size:15px; line-height:1.5; }
           .rows { margin:0; padding:0; list-style:none; overflow-wrap:anywhere; }
           .rows>li { border-top:1px solid var(--divider-color); padding:12px 0; }
-          .chart-choice { display:flex; align-items:center; gap:12px; min-height:44px; font-size:14px; margin-top:16px; cursor:pointer; }
-          .chart-choice input { width:18px; height:18px; accent-color:var(--primary-color); }
-          .chart-choice input:focus-visible { outline:2px solid var(--primary-color); outline-offset:2px; }
-          .metric-tools { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:12px; }
-          .metric-tools .chart-choice { margin:0; }
-          .rates { margin-top:12px; }
-          .metric-chart svg { display:block; width:100%; height:auto; font-family:inherit; }
-          .metric-chart { min-width:0; }
-          #feeds-chart { grid-column:1/-1; min-width:0; margin:8px 0; }
-          #feeds-chart svg { display:block; width:100%; height:auto; }
-          #estimate-chart { width:88px; }
-          #estimate-chart svg { display:block; width:100%; }
-          .facts { align-items:center; }
-          .fact-heading { margin:20px 0 0; }
-          .fact-heading h3 { margin:0; font-size:15px; font-weight:500; }
           .section-summary { min-height:44px; }
           .section-summary .help { margin-inline-start:auto; }
           .rows small,.notice-items small { display:block; font-size:12px; color:var(--secondary-text-color); overflow-wrap:anywhere; }
-          #version { font-size:12px; }
           .loona-notices ul { list-style:none; padding:0; margin:0; }
           .loona-notices li { padding:16px 0; border-top:1px solid var(--divider-color); }
           .loona-notices li:first-child { border-top:0; }
           .loona-notices h3 { margin:0; font-size:14px; line-height:1.5; }
-          .loona-notices .notice-items { max-height:160px; overflow:auto; overflow-wrap:anywhere; font-size:12px; }
+          .loona-notices .notice-items { max-height:160px; overflow:auto; overflow-wrap:anywhere; font-size:12px; scrollbar-color:var(--divider-color) transparent; }
           #error { color:var(--error-color); overflow-wrap:anywhere; }
           [hidden] { display:none !important; }
-          @media(max-width:480px) { ha-card { padding:16px; } .rates { gap:16px 10px; }
-            dd { font-size:23px; } .actions { align-items:start; }
-            .actions p { max-width:55%; } }
+          @media(max-width:480px) { ha-card { padding:16px; } .hero { margin-inline:-16px; padding-inline:16px; }
+            .rate dd { font-size:26px; } .gauge-text .big { font-size:34px; }
+            .actions { align-items:center; } }
         </style>
         <ha-card>
-          <header><div><h2 data-i18n="Loona statistics">Loona statistics</h2><p class="state" id="state" role="status" data-i18n="Loading statistics...">Loading statistics...</p></div>
-            <button id="refresh" aria-label="Refresh Loona statistics" data-i18n="Refresh">Refresh</button></header>
+          <header><div class="brand">${markHtml}<div class="heading"><h2 data-i18n="Loona statistics">Loona statistics</h2><p id="version"></p><p class="state" id="state" role="status" data-tone="idle" data-i18n="Loading statistics...">Loading statistics...</p></div></div>
+            <button id="refresh" class="btn icon-only" type="button" aria-label="Refresh" title="Refresh">${icon("refresh")}</button></header>
           <p id="error" role="alert" hidden></p>
           <div id="content" hidden>
-            <p id="version"></p><div id="notices"></div>
+            <div id="notices"></div>
+            <div class="hero">
+              <div class="hero-top">
+                <div class="gauge">
+                  <div class="gauge-text metric-text"><p class="big"><span id="reduction">0</span><span>%</span></p><p data-i18n="Updates filtered out">Updates filtered out</p><p><small data-i18n="of all updates">of all updates</small></p></div>
+                  <div id="reduction-chart" class="metric-chart" hidden></div>
+                </div>
+                <dl class="rates">
+                  <div class="rate sent"><dt><i class="key"></i><span data-i18n="Sent">Sent</span></dt><dd><span id="forwarded">0</span><small data-i18n="updates/s">updates/s</small></dd></div>
+                  <div class="rate filtered"><dt><i class="key"></i><span data-i18n="Filtered out">Filtered out</span></dt><dd><span id="avoided">0</span><small data-i18n="updates/s">updates/s</small></dd></div>
+                </dl>
+                <div id="stream-chart" class="metric-chart" hidden></div>
+              </div>
+            </div>
+            <div class="section-heading fact-heading"><h3 data-i18n="Totals and entities">Totals and entities</h3><span id="scope-help"></span></div>
+            <div id="totals-visual" class="totals-visual" hidden><div id="estimate-chart" class="metric-chart"></div><div id="feeds-chart" class="metric-chart"></div></div>
             <div class="metric-tools"><label class="chart-choice"><input id="show-charts" type="checkbox"><span data-i18n="Show statistics charts">Show statistics charts</span></label><span id="rates-help"></span></div>
-            <dl class="rates">
-              <div><dt class="metric-text" data-i18n="Sent">Sent</dt><dd class="metric-text"><span id="forwarded">0</span><small data-i18n="updates/s">updates/s</small></dd><div id="sent-chart" class="metric-chart" hidden></div></div>
-              <div><dt class="metric-text" data-i18n="Filtered out">Filtered out</dt><dd class="metric-text"><span id="avoided">0</span><small data-i18n="updates/s">updates/s</small></dd><div id="filtered-chart" class="metric-chart" hidden></div></div>
-              <div><dt class="metric-text" data-i18n="Updates filtered">Updates filtered</dt><dd class="metric-text"><span id="reduction">0</span>%<small data-i18n="of counted updates">of counted updates</small></dd><div id="reduction-chart" class="metric-chart" hidden></div></div>
+            <dl class="ledger">
+              <div class="row"><dt data-i18n="Updates sent since reset">Updates sent since reset</dt><i class="leader"></i><dd id="forwarded-total"></dd></div>
+              <div class="row"><dt data-i18n="Updates filtered out since reset">Updates filtered out since reset</dt><i class="leader"></i><dd id="avoided-total"></dd></div>
+              <div class="row" id="subscriptions-row"><dt id="subscriptions-label" data-i18n="Connections filtered / total">Connections filtered / total</dt><i class="leader"></i><dd id="subscriptions"></dd></div>
+              <div class="row"><dt data-i18n="Entities currently included">Entities currently included</dt><i class="leader"></i><dd id="scope"></dd></div>
+              <div class="row" id="estimate-row"><dt data-i18n="Estimated entities trimmed">Estimated entities trimmed</dt><i class="leader"></i><dd id="estimate"></dd></div>
             </dl>
-            <div class="section-heading fact-heading"><h3 data-i18n="Totals and entity scope">Totals and entity scope</h3><span id="scope-help"></span></div>
-            <dl class="facts">
-              <dt data-i18n="Updates sent since reset">Updates sent since reset</dt><dd id="forwarded-total"></dd>
-              <dt data-i18n="Updates filtered since reset">Updates filtered since reset</dt><dd id="avoided-total"></dd>
-              <dt id="subscriptions-label" data-i18n="Filtered / tracked update feeds">Filtered / tracked update feeds</dt><dd id="subscriptions"></dd>
-              <div id="feeds-chart" class="metric-chart" hidden></div>
-              <dt data-i18n="Entities currently included">Entities currently included</dt><dd id="scope"></dd>
-              <dt data-i18n="Estimated entity reduction">Estimated entity reduction</dt><dd><span id="estimate"></span><div id="estimate-chart" class="metric-chart" hidden></div></dd>
-            </dl>
-            <div class="actions"><p id="reset-time"></p><button id="reset" data-i18n="Reset live statistics">Reset live statistics</button></div>
-            <details id="loads"><summary class="section-summary"><span data-i18n="Latest page loads">Latest page loads</span> <span id="load-count"></span><span id="loads-help"></span></summary>
+            <div class="actions"><p id="reset-time"></p><span class="action-help"><button id="reset" class="btn small" type="button">${icon("reset")}<span data-i18n="Reset live statistics">Reset live statistics</span></button><span id="reset-help"></span></span></div>
+            <details id="loads"><summary class="section-summary"><span data-i18n="Recent page loads">Recent page loads</span> <span id="load-count"></span><span id="loads-help"></span></summary>
               <ul id="load-rows" class="rows"></ul>
             </details>
-            <details><summary class="section-summary"><span data-i18n="Performance diagnostics">Performance diagnostics</span><span id="performance-help"></span></summary>
+            <details><summary class="section-summary"><span data-i18n="Browser performance">Browser performance</span><span id="performance-help"></span></summary>
               <ul id="performance-rows" class="rows"></ul>
-              <p data-i18n="Busiest tracked entities since reset">Busiest tracked entities since reset</p>
+              <p data-i18n="Entities sending the most updates since reset">Entities sending the most updates since reset</p>
               <ul id="noisy-rows" class="rows"></ul>
             </details>
           </div>
         </ha-card>`;
+      hideBrokenMark(this.shadowRoot);
       this._get("rates-help").append(createHelp(this._hass,"Live updates","","interval"));
-      this._get("scope-help").append(createHelp(this._hass,"Totals and entity scope","An update feed receives live entity changes; one tab can have more than one. The entity reduction estimate compares included entities with all current entities, even when filtering is off."));
-      this._get("loads-help").append(createHelp(this._hass,"Latest page loads","Initial snapshots are filtered when startup dashboard detection succeeds. Startup fallback retains full data. File counts cover registered Lovelace files for the whole page session."));
-      this._get("performance-help").append(createHelp(this._hass,"Performance diagnostics","Measurements belong to this browser and dashboard. Long frames show only part of CPU work; buffered entries precede the measurement window."));
+      this._get("scope-help").append(createHelp(this._hass,"Totals and entities","Each open dashboard tab keeps a live connection to Home Assistant, sometimes more than one. 'Connections filtered / total' shows how many of them Loona is filtering. 'Estimated entities trimmed' compares the entities Loona keeps with all entities in Home Assistant, even when filtering is off."));
+      this._get("loads-help").append(createHelp(this._hass,"Recent page loads","For each dashboard, what was sent the last time its page fully loaded. If Loona recognized the dashboard at startup, only the entities it needs were sent; otherwise everything was. File counts cover the whole page session."));
+      this._get("performance-help").append(createHelp(this._hass,"Browser performance","These readings come from this browser and dashboard only. Slow frames show only part of the work your browser does. Items marked 'before measuring' happened before Loona started watching."));
+      this._get("reset-help").append(createHelp(this._hass,"Reset live statistics","Clears the live counters and page-load records. Your settings and Home Assistant's recorded history aren't touched."));
       this._get("refresh").addEventListener("click", () => this._fetch());
       this._get("reset").addEventListener("click", () => this._reset());
       this._get("show-charts").addEventListener("change", () => {
@@ -210,21 +376,21 @@ function install() {
     setConfig(config) {
       if (config.title !== undefined && typeof config.title !== "string") throw new Error(text(this._hass, "Loona card title must be text"));
       if (config.show_charts !== undefined && typeof config.show_charts !== "boolean") throw new Error("show_charts must be a boolean");
-      this._defaultCharts = config.show_charts === true;
+      this._defaultCharts = config.show_charts !== false;
       this._customTitle = config.title;
       this._localize();
     }
     _localize() {
       translate(this.shadowRoot, this._hass);
       this.shadowRoot.querySelector("h2").textContent = this._customTitle || text(this._hass, "Loona statistics");
-      this._get("refresh").setAttribute("aria-label", text(this._hass, "Refresh"));
+      this._get("refresh").setAttribute("aria-label", text(this._hass, "Refresh")); this._get("refresh").title = text(this._hass, "Refresh");
       if (this._data) this._render(this._data);
       if (this._errorKey) {
         this._get("error").textContent = text(this._hass, this._errorKey);
         if (!this._data) this._get("state").textContent = text(this._hass, "Unable to load statistics");
       }
       const metadata = window.customCards?.find(card => card.type === elementName);
-      if (metadata) { metadata.name = text(this._hass, "Loona statistics"); metadata.description = text(this._hass, "Live filtering statistics and latest page loads"); }
+      if (metadata) { metadata.name = text(this._hass, "Loona statistics"); metadata.description = text(this._hass, "Live filtering statistics and recent page loads"); }
     }
     getCardSize() { return 7; }
     getGridOptions() { return { columns: 12, min_columns: 6 }; }
@@ -261,6 +427,10 @@ function install() {
     connectedCallback() {
       this._observer = new IntersectionObserver(([entry]) => { this._visible = entry.isIntersecting; });
       this._observer.observe(this);
+      if (typeof ResizeObserver==="function") {
+        this._resize = new ResizeObserver(() => { if (this._data && this._chartsEnabled()) this._renderCharts(this._data); });
+        this.shadowRoot.querySelectorAll(".metric-chart").forEach(root=>this._resize.observe(root));
+      }
       this._timer = window.setInterval(() => {
         const interval = (this._data?.interval_seconds || 30) * 1000;
         if (!document.hidden && this._visible && Date.now() - this._lastRequest >= interval && !this._loading) this._fetch();
@@ -278,7 +448,7 @@ function install() {
       window.removeEventListener("loona-card-preferences", this._preferenceListener);
       window.removeEventListener("loona-statistics-reset", this._resetListener);
       window.clearInterval(this._timer);
-      this._observer?.disconnect();
+      this._observer?.disconnect(); this._resize?.disconnect();
       this._sequence++;
       this._loading = false;
     }
@@ -287,7 +457,7 @@ function install() {
       const sequence = ++this._sequence;
       this._loading = true;
       this._lastRequest = Date.now();
-      this._get("refresh").disabled = true;
+      this._get("refresh").disabled = true; this._get("refresh").toggleAttribute("data-busy", true);
       try {
         const withHistory=this._chartsEnabled() && (!this._data || this._data.version===cardVersion);
         let data;
@@ -306,11 +476,11 @@ function install() {
         this._errorKey = "Could not load statistics. Check that Loona is running, then press Refresh.";
         this._get("error").textContent = text(this._hass, this._errorKey);
         this._get("error").hidden = false;
-        if (!this._data) this._get("state").textContent = text(this._hass, 'Unable to load statistics');
+        if (!this._data) { this._get("state").textContent = text(this._hass, 'Unable to load statistics'); this._get("state").dataset.tone = "problem"; }
       } finally {
         if (sequence === this._sequence) {
           this._loading = false;
-          this._get("refresh").disabled = false;
+          this._get("refresh").disabled = false; this._get("refresh").toggleAttribute("data-busy", false);
           if (!this._errorKey && this._data?.version===cardVersion && this._chartsEnabled() && !this._historyRequested) this._fetch();
         }
       }
@@ -319,7 +489,7 @@ function install() {
       if (!this._data?.reset_entity || this._resetting || !this._hass?.user?.is_admin) return;
       const account = this._hass.user.id;
       if (!await confirmAction(this, "Reset live statistics?",
-          "Clear live counters, page-load records and browser measurements? Filtering settings and recorded history are preserved.", "Reset live statistics")) return;
+          "Clear the live counters, page-load records and browser readings? Your settings and recorded history are kept.", "Reset live statistics")) return;
       if (this._hass?.user?.id !== account || !this._hass.user.is_admin || !this.isConnected || this._resetting) return;
       this._resetting = true;
       this._get("reset").disabled = true;
@@ -337,79 +507,83 @@ function install() {
     }
     _chartsEnabled() {
       const preference=cardPreferences(this._hass).charts;
-      return typeof preference==="boolean" ? preference : this._defaultCharts===true;
+      return typeof preference==="boolean" ? preference : this._defaultCharts!==false;
     }
     _renderCharts(data) {
       const enabled=this._chartsEnabled();
       this._get("show-charts").checked=enabled;
       this.shadowRoot.querySelectorAll(".metric-text").forEach(root=>root.hidden=enabled);
-      for (const id of ["subscriptions-label","subscriptions","estimate"]) this._get(id).hidden=enabled;
-      this.shadowRoot.querySelectorAll(".metric-chart").forEach(root=>{ root.hidden=!enabled; if (!enabled) root.replaceChildren(); });
+      for (const id of ["subscriptions-row","estimate-row"]) this._get(id).hidden=enabled;
+      this._get("totals-visual").hidden=!enabled;
+      this.shadowRoot.querySelectorAll(".metric-chart").forEach(root=>{ root.hidden=!enabled; if (!enabled) { root.replaceChildren(); root.__revealed=false; root.__shown=false; } });
       if (!enabled) return;
       const metrics=data.metrics;
       const history=(data.rate_history || []).filter(row=>Number.isFinite(Date.parse(row.at)) && Number.isFinite(row.sent) && Number.isFinite(row.filtered));
       const max=Math.max(1,metrics.forwarded_rate,metrics.avoided_rate,...history.flatMap(row=>[row.sent,row.filtered]));
-      rateChart(this._get("sent-chart"),this._hass,"Sent",metrics.forwarded_rate,history,"sent",max);
-      rateChart(this._get("filtered-chart"),this._hass,"Filtered out",metrics.avoided_rate,history,"filtered",max);
-      ringChart(this._get("reduction-chart"),this._hass,"Updates filtered",metrics.update_reduction,true,metrics.forwarded_rate+metrics.avoided_rate>0);
-      ringChart(this._get("estimate-chart"),this._hass,"Estimated entity reduction",metrics.reduction_estimate,false,true);
+      streamChart(this._get("stream-chart"),this._hass,history,metrics,max);
+      moonChart(this._get("reduction-chart"),this._hass,"Updates filtered out",metrics.update_reduction,metrics.forwarded_rate+metrics.avoided_rate>0);
+      moonChart(this._get("estimate-chart"),this._hass,"Estimated entities trimmed",metrics.reduction_estimate,true);
       feedChart(this._get("feeds-chart"),this._hass,metrics.filtered_subscriptions,metrics.managed_subscriptions);
     }
     _render(data) {
       const metrics = data.metrics;
       renderVersion(this._get("version"), this._hass, data.version, cardVersion);
       renderNotices(this._get("notices"), this._hass, data.notices || [], data.notice_labels);
+      this._get("content").hidden = false;
       this._renderCharts(data);
       const format = (value) => formatNumber(this._hass, value, { maximumFractionDigits: 1 });
-      this._get("content").hidden = false;
-      setText(this._get("state"), data.compatibility_problem ? text(this._hass, "A feature is unavailable. Check Loona diagnostics.")
+      const problem = data.compatibility_problem || !data.complete;
+      const active = !problem && data.controls.enabled && data.controls.entity_filtering && metrics.filtered_subscriptions > 0;
+      this._get("state").dataset.tone = problem ? "problem" : active ? "active" : "idle";
+      setText(this._get("state"), data.compatibility_problem ? text(this._hass, "Some features are unavailable. See Loona's diagnostics.")
         : !data.complete ? text(this._hass, "Dashboard scan incomplete. All entities are being sent.")
         : !data.controls.enabled || !data.controls.entity_filtering ? text(this._hass, "Entity filtering is disabled")
-        : metrics.filtered_subscriptions ? text(this._hass, "Entity filtering is active") : text(this._hass, "No filtered update feed yet. Open a dashboard with a selected account."));
+        : metrics.filtered_subscriptions ? text(this._hass, "Entity filtering is active") : text(this._hass, "Nothing is being filtered yet. Open a selected dashboard with a selected account."));
       for (const [id, key] of [["forwarded", "forwarded_rate"], ["avoided", "avoided_rate"], ["reduction", "update_reduction"],
         ["forwarded-total", "forwarded_updates"], ["avoided-total", "avoided_updates"]]) this._get(id).textContent = key.endsWith("_rate") ? formatNumber(this._hass, metrics[key], {minimumFractionDigits:1, maximumFractionDigits:1}) : format(metrics[key]);
       this._get("interval").textContent = (data.sample_seconds
         ? text(this._hass, "Measured over the last {seconds} seconds.", { seconds: format(data.sample_seconds) })
         : text(this._hass, "Rates update within {seconds} seconds.", { seconds: format(data.interval_seconds) }))
-        + " " + text(this._hass, "Each update is counted once per update feed, so multiple tabs can increase totals. These numbers do not measure loading speed or network traffic.")
-        + " " + text(this._hass,"Charts show up to 15 minutes of completed samples. Rate charts share the same scale and refresh with statistics.");
+        + " " + text(this._hass, "Each update counts once for every live connection, so having several tabs open raises the totals. These numbers aren't a measure of loading speed or network traffic.")
+        + " " + text(this._hass,"Charts show up to 15 minutes of history and refresh along with the statistics. Sent and filtered out share one scale.")
+        + " " + text(this._hass,"On the moons, the lit part shows the percentage and the dark part is the rest.");
       this._get("subscriptions").textContent = format(metrics.filtered_subscriptions) + " / " + format(metrics.managed_subscriptions);
       this._get("scope").textContent = text(this._hass, metrics.current_scope === 1 ? "1 entity" : "{count} entities", { count: format(metrics.current_scope) });
       this._get("estimate").textContent = formatNumber(this._hass, metrics.reduction_estimate / 100, {style:"percent",maximumFractionDigits:1});
-      this._get("reset-time").textContent = text(this._hass, "Since {time}", { time: formatDateTime(this._hass, data.reset_at) });
+      this._get("reset-time").textContent = text(this._hass, "Counting since {time}", { time: formatDateTime(this._hass, data.reset_at) });
       this._get("reset").disabled = !data.reset_entity || this._resetting;
       this._get("load-count").textContent = "(" + data.page_loads.length + ")";
       this._get("load-rows").replaceChildren(...(data.page_loads.length ? data.page_loads.map(row => {
         const item = node("li"); item.append(node("strong", row.title));
         item.append(node("p", formatDateTime(this._hass, row.at)));
-        item.append(node("p", text(this._hass, "Entities sent: {sent} / {available}", row.entities)));
-        item.append(node("p", row.resources ? text(this._hass, "Card files sent: {sent} / {available}", row.resources) : text(this._hass, "No card file count was recorded for this load.")));
+        item.append(node("p", text(this._hass, "Entities sent: {sent} out of {available}", row.entities)));
+        item.append(node("p", row.resources ? text(this._hass, "Card files sent: {sent} out of {available}", row.resources) : text(this._hass, "No card file count was recorded for this load.")));
         return item;
       }) : [node("li", text(this._hass, "No page loads recorded yet. Reload one of your dashboards."))]));
       this._get("noisy-rows").replaceChildren(...(data.noisy_entities?.entities || []).map(row => {
         const item=node("li"); const label=row.label || this._hass?.states?.[row.entity_id]?.attributes?.friendly_name || row.entity_id;
         item.append(node("span",label)); if (label!==row.entity_id) item.append(node("small",row.entity_id));
-        item.append(node("p",text(this._hass,"{count} sent updates",{count:format(row.updates)}))); return item;
+        item.append(node("p",text(this._hass,"{count} updates sent",{count:format(row.updates)}))); return item;
       }));
       if (data.noisy_entities?.untracked_updates) this._get("noisy-rows").append(node("li",
-        text(this._hass, "Tracking limit reached: {count} sent updates were not attributed.", {count:format(data.noisy_entities.untracked_updates)})));
+        text(this._hass, "Only the busiest entities are listed. {count} more updates came from entities not shown.", {count:format(data.noisy_entities.untracked_updates)})));
       this._get("performance-rows").replaceChildren(...(data.browser_reports || []).map(row => {
         const item = node("li");
         item.append(node("strong", row.dashboard));
         item.append(node("p", formatDateTime(this._hass, row.at)));
-        item.append(node("p", row.loaf_supported ? text(this._hass, "Long frames: {count}; blocking: {ms} ms", {count:format(row.frames), ms:format(row.blocking_ms)})
-          : text(this._hass, "Long Animation Frames are unavailable in this browser.")));
+        item.append(node("p", row.loaf_supported ? text(this._hass, "Slow frames: {count}, adding up to {ms} ms of delay", {count:format(row.frames), ms:format(row.blocking_ms)})
+          : text(this._hass, "This browser can't report slow frames.")));
         for (const script of row.scripts) {
           const label=data.resource_labels?.[script.source];
           if (label && label!==script.source) item.append(node("p",label));
           item.append(node("p", text(this._hass,
-          "{source} ({phase}): {ms} ms; forced layout: {layout} ms", {source:script.source,
-            phase:text(this._hass, script.phase === "buffered" ? "earlier buffered" : "measurement window"),
+          "{source} ({phase}): {ms} ms, including {layout} ms re-measuring the page", {source:script.source,
+            phase:text(this._hass, script.phase === "buffered" ? "before measuring" : "while measuring"),
             ms:format(script.duration_ms), layout:format(script.forced_layout_ms)})));
         }
         for (const subscription of row.subscriptions) item.append(node("p", `${subscription.type}: ${format(subscription.count)}`));
         if (row.subscriptions.some(value => value.type === "subscribe_events/state_changed" || value.type === "subscribe_events/*")) {
-          item.append(node("p", text(this._hass, "A raw event subscription can bypass entity filtering.")));
+          item.append(node("p", text(this._hass, "This dashboard listens to all Home Assistant events, which can bypass entity filtering.")));
         }
         return item;
       }));
@@ -418,7 +592,7 @@ function install() {
 
   customElements.define(elementName, LoonaStatisticsCard);
   window.customCards = window.customCards || [];
-  window.customCards.push({ type: elementName, name: text(app.hass, "Loona statistics"), description: text(app.hass, "Live filtering statistics and latest page loads"), preview: true });
+  window.customCards.push({ type: elementName, name: text(app.hass, "Loona statistics"), description: text(app.hass, "Live filtering statistics and recent page loads"), preview: true });
   // One report per full page load; SPA navigation does not create a new snapshot.
   const dashboard = location.pathname.split("/")[1] || "lovelace";
   let attempts = 0;

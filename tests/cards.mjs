@@ -51,31 +51,34 @@ await new Promise(setImmediate);
 assert.equal(stats.shadowRoot.getElementById("scope").textContent,"1 entity");
 assert.equal(stats.shadowRoot.getElementById("forwarded").textContent,"1,0");
 assert.ok(stats.shadowRoot.getElementById("reset-time").textContent.includes("01:00:00"));
-// Chart history is requested on opt-in and reuses normal polling, with no SVG off.
-assert.equal(stats.shadowRoot.querySelectorAll(".metric-chart svg").length,0);
-const beforeCharts=requests.length;
-stats.shadowRoot.getElementById("show-charts").click(); await new Promise(setImmediate);
-assert.equal(stats.shadowRoot.querySelectorAll(".metric-chart svg").length,5);
-assert.equal(requests.length,beforeCharts+1);
-assert.equal(requests.at(-1).include_rate_history,true);
-assert.ok(stats.shadowRoot.querySelector('#reduction-chart [data-part="ring"]').getAttribute("stroke-dasharray").startsWith("3 "));
-assert.equal(stats.shadowRoot.querySelector('#reduction-chart [data-part="value"]').textContent,"3%".replace("%"," %"));
+// Charts are on by default, request history with the normal poll, and leave no SVG when switched off.
+assert.equal(stats.shadowRoot.getElementById("show-charts").checked,true);
+assert.equal(requests.find(request=>request.type==="loona/statistics").include_rate_history,true);
+assert.equal(stats.shadowRoot.querySelectorAll(".metric-chart svg").length,4);
+assert.equal(stats.shadowRoot.getElementById("totals-visual").hidden,false);
+assert.ok(stats.shadowRoot.querySelector(".brand .mark") || !i18n.markHtml,"Brand image replaces the drawn mark");
+// Moon phase: the lit side is the filtered percentage (3%), exact value shown as text.
+assert.equal(stats.shadowRoot.querySelector("#reduction-chart svg").getAttribute("data-lit"),"0.03");
+assert.equal(stats.shadowRoot.querySelector("#estimate-chart svg").getAttribute("data-lit"),"0.06");
+assert.equal(stats.shadowRoot.querySelector('#reduction-chart [data-part="value"]').textContent,"3%".replace("%","\u00a0%"));
 assert.equal(stats.shadowRoot.querySelector('#feeds-chart [data-part="value"]').textContent,"1 / 1");
-assert.ok(stats.shadowRoot.querySelector('#estimate-chart [data-part="ring"]'));
-const sentPlot=stats.shadowRoot.querySelector("#sent-chart svg");
+assert.equal(stats.shadowRoot.querySelectorAll('#feeds-chart [data-feed]').length,1,"One star per tracked feed");
+assert.equal(stats.shadowRoot.querySelectorAll('#feeds-chart [data-feed][data-lit="true"]').length,1);
+assert.ok(stats.shadowRoot.querySelector('#estimate-chart [data-part="lit"]'));
+const streamPlot=stats.shadowRoot.querySelector("#stream-chart svg");
 const sampleData={...copy(statistics),rate_history:copy(statistics.rate_history)};
 stats._render(sampleData);
-assert.equal(stats.shadowRoot.querySelector("#sent-chart svg"),sentPlot,"Reuse SVG nodes during normal refresh");
-const sentPoints=sentPlot.querySelector('[data-part="line"]').getAttribute("points").split(" ");
-const filteredPoints=stats.shadowRoot.querySelector('#filtered-chart [data-part="line"]').getAttribute("points").split(" ");
-assert.equal(sentPoints.length,3);
-assert.equal(sentPoints.at(-1).split(",")[1],"113.33");
-assert.equal(filteredPoints.at(-1).split(",")[1],"98.67","Both rate curves must use the same scale");
+assert.equal(stats.shadowRoot.querySelector("#stream-chart svg"),streamPlot,"Reuse SVG nodes during normal refresh");
+assert.ok(streamPlot.querySelector('[data-part="sent-line"]').getAttribute("d").startsWith("M"));
+assert.equal(streamPlot.querySelector('[data-part="sent-latest"]').getAttribute("cy"),"82");
+assert.equal(streamPlot.querySelector('[data-part="filtered-latest"]').getAttribute("cy"),"56","Both series must use the same scale");
+assert.ok(streamPlot.getAttribute("aria-label").includes("Sent: 1,0 updates/s"));
 stats._render({...copy(statistics),rate_history:[],metrics:{...statistics.metrics,forwarded_rate:0,avoided_rate:0}});
-assert.equal(stats.shadowRoot.querySelectorAll(".metric-chart svg").length,5,"Idle and initial readings still have chart geometry");
-assert.ok(stats.shadowRoot.getElementById("sent-chart").textContent.includes("No history yet"));
+assert.equal(stats.shadowRoot.querySelectorAll(".metric-chart svg").length,4,"Idle and initial readings still have chart geometry");
+assert.ok(stats.shadowRoot.getElementById("stream-chart").textContent.includes("No history yet"));
 stats.shadowRoot.getElementById("show-charts").click();
 assert.equal(stats.shadowRoot.querySelectorAll(".metric-chart svg").length,0);
+assert.equal(stats.shadowRoot.getElementById("totals-visual").hidden,true);
 assert.equal(stats.shadowRoot.getElementById("measure"),null,"Measurement action belongs to the benchmark backlog");
 assert.equal(stats.shadowRoot.getElementById("chart-help"),null);
 // An older backend can reject the optional field; still surface its reload notice.
@@ -89,7 +92,7 @@ hass.callWS=async request=>{
 const beforeFallback=requests.length;
 stats.shadowRoot.getElementById("show-charts").click(); await stats._fetch();
 assert.equal(requests.length,beforeFallback+2,"Retry the native read once for an older backend");
-assert.ok(stats.shadowRoot.getElementById("version").textContent.includes("Reload dashboard"));
+assert.ok(stats.shadowRoot.getElementById("version").textContent.includes("Reload page"));
 await stats._fetch();
 assert.equal(requests.at(-1).include_rate_history,undefined,"Do not retry unsupported history on subsequent reads");
 stats.shadowRoot.getElementById("show-charts").click(); hass.callWS=nativeCallWS; await stats._fetch();
@@ -137,7 +140,7 @@ settings.shadowRoot.querySelector('[data-cancel="rules"]').click();
 statistics.version="0.9.9";
 // Loaded-module mismatch offers reload; settings drafts prevent accidental loss.
 stats._render({...copy(statistics),version:"0.9.10"});
-assert.ok(stats.shadowRoot.getElementById("version").textContent.includes("Reload dashboard"));
+assert.ok(stats.shadowRoot.getElementById("version").textContent.includes("Reload page"));
 settings._data.version="0.9.10"; settings._render(); settings._edit("controls","enabled",false);
 assert.ok(settings.shadowRoot.getElementById("version").querySelector("button").disabled);
 settings.shadowRoot.querySelector('[data-cancel="controls"]').click();
@@ -207,10 +210,10 @@ assert.equal(stats.shadowRoot.querySelector("h2").textContent,"Loona statistics"
 window.__loonaGraphCapability = { status:"unavailable", enabled:true };
 window.dispatchEvent(new Event("loona-capabilities"));
 assert.equal(settings.shadowRoot.getElementById("notices"),null,"Warnings live only on the statistics card");
-assert.ok(stats.shadowRoot.getElementById("notices").textContent.includes("Loading optimizations are unavailable in this browser"));
+assert.ok(stats.shadowRoot.getElementById("notices").textContent.includes("Faster loading is not available in this browser"));
 window.__loonaGraphCapability.status = "available";
 window.dispatchEvent(new Event("loona-capabilities"));
-assert.ok(!stats.shadowRoot.getElementById("notices").textContent.includes("Loading optimizations are unavailable in this browser"));
+assert.ok(!stats.shadowRoot.getElementById("notices").textContent.includes("Faster loading is not available in this browser"));
 // Confirmation gates do not mutate until accepted and retain drafts on cancel.
 current.action_entities = {reset_live_statistics:"button.reset"};
 settings._replace(copy(current));

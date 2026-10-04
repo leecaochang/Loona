@@ -1,47 +1,47 @@
 /* Prefilled administrator settings using native Loona validation and storage. */
-import { language, text, translate, renderVersion, saveCardPreferences, setText, confirmAction, cancelConfirmation, createHelp, closeHelp, helpStyles } from "./i18n.js?v=0.9.9";
+import { language, text, translate, renderVersion, markHtml, markStyles, hideBrokenMark, icon, makeButton, buttonStyles, saveCardPreferences, setText, confirmAction, cancelConfirmation, createHelp, closeHelp, helpStyles } from "./i18n.js?v=0.9.9";
 
 const groups = {
   controls: "Filters and performance", dashboards: "Dashboards", targets: "Accounts",
   idle: "Idle timing",
-  rules: "Entity rules", resources: "Cards", cards: "Loona dashboard",
+  rules: "Entity rules", resources: "Card files", cards: "Loona dashboard",
 };
 const cardVersion = "0.9.9";
 const labels = {
-  enabled: "Enabled", entity_filtering: "Entity filtering", registry_filtering: "Registry filtering",
-  current_dashboard_updates: "Current tab updates",
-  resource_filtering: "Resource filtering", visible_first_graphs: "Delay graph loading",
-  delay_card_resources: "Delay card files",
-  preload_card_resources: "Preload tab card files", pause_offscreen_animations: "Pause off-screen animations", idle_updates: "Idle mode",
+  enabled: "Enabled", entity_filtering: "Entity filtering", registry_filtering: "Device and area filtering",
+  current_dashboard_updates: "Live updates for current tab only",
+  resource_filtering: "Skip unused card files", visible_first_graphs: "Delay graph loading",
+  delay_card_resources: "Load current tab first",
+  preload_card_resources: "Preload card files", pause_offscreen_animations: "Pause off-screen animations", idle_updates: "Idle mode",
   idle_after_minutes: "Idle after (minutes)", idle_refresh_seconds: "Idle refresh (seconds)",
   pause_animations_during_loading: "Pause animations during loading", dashboards: "Dashboards",
   user_ids: "Accounts", extra_entities: "Entities", include_domains: "Entity types",
-  include_globs: "Entities or domain.*", exclude_globs: "Entities or domain.*",
+  include_globs: "Entities or patterns", exclude_globs: "Entities or patterns",
   dashboard_cards: "Loona dashboard cards",
-  always_forward_resources: "Additional files to load",
+  always_forward_resources: "Extra card files to load",
 };
 const help = {
-  enabled: "Turn off to restore full entity and registry feeds. Reload to restore skipped card files.",
-  entity_filtering: "Automatically find the entities used by your selected dashboards.",
-  current_dashboard_updates: "Keep this tab and Entity rules live. Hidden tabs stay cached until opened. Dialogs and editing refresh all selected dashboards. Requires Entity filtering.",
-  registry_filtering: "Keep registry rows related to the included entities and dashboard targets.",
-  resource_filtering: "Skip known unused card bundles. Keep unknown and shared modules. Reload after changes.",
-  delay_card_resources: "Load this tab's card files first, then the remaining modules. Unknown tab routes use the whole dashboard. Navigation, dialogs and editing load pending files immediately. Reload after enabling.",
-  preload_card_resources: "Fetch and compile verified tab modules early. Home Assistant still loads them normally. Reload after enabling.",
-  pause_offscreen_animations: "Pause repeating animations outside the viewport and resume them when visible. Loading indicators and finite transitions keep running.",
-  idle_updates: "Pause live entity updates after inactivity. Interaction restores fresh values immediately. Requires Entity filtering. Independent clocks, cameras and card timers may continue.",
-  visible_first_graphs: "Delay off-screen graphs until the dashboard has loaded. Scrolling to a graph loads it immediately.",
-  pause_animations_during_loading: "Pause repeating animations while loading, then resume them automatically.",
+  enabled: "Turn this off to stop all filtering and send everything as usual. Reload your browser to bring back any skipped card files.",
+  entity_filtering: "Send only the entities your selected dashboards use, plus anything in Entity rules.",
+  current_dashboard_updates: "After the page loads, only send live changes for the tab you're viewing, plus your Entity rules. Other tabs show their last known values until you open them. Pop-ups and editing temporarily update everything. Needs Entity filtering.",
+  registry_filtering: "Also trim the entity, device and area lists Home Assistant loads, so they match your dashboards.",
+  resource_filtering: "Don't load card files that none of your dashboards use. Files Loona can't identify are always kept. Reload your browser after changing this.",
+  delay_card_resources: "Load the card files your current tab needs first, and the rest once the page is ready. Switching tabs, opening pop-ups or editing loads anything still waiting. Reload your browser after turning this on.",
+  preload_card_resources: "Start downloading the card files this tab needs as early as possible. Home Assistant still loads them in its usual order. Reload your browser after turning this on.",
+  pause_offscreen_animations: "Pause repeating animations on cards you can't see, and resume them when you scroll back. Loading spinners and one-time animations keep running.",
+  idle_updates: "After a while with no activity, pause live updates. They come back as soon as you touch, click, type or scroll. Needs Entity filtering. Clocks, cameras and some cards may keep updating on their own.",
+  visible_first_graphs: "Wait to load off-screen graphs until the rest of the dashboard is ready. Scrolling to a graph loads it right away.",
+  pause_animations_during_loading: "Pause repeating animations while the dashboard loads, then resume them automatically.",
 };
 const groupHelp = {
   dashboards: "Choose which dashboards you want to filter.",
-  targets: "Choose which accounts receive filtered data while viewing selected dashboards.",
-  resources: "Known unused bundles can be skipped for the whole page session. Unknown modules always load. Save, then reload.",
+  targets: "Choose which accounts get filtered data while viewing the selected dashboards.",
+  resources: "Card files that no dashboard uses can be skipped. Files Loona can't identify always load. Save, then reload your browser.",
   cards: "Loona dashboard cards",
-  rules: "Loona finds dashboard entities automatically. Use these rules to add anything it missed or exclude entities you do not need.",
-  idle: "Selected dashboards enter idle mode after no touch, mouse, keyboard or scrolling. Refresh at the chosen interval; 0 pauses until interaction. Navigation, dialogs and editing restore live updates.",
+  rules: "Loona finds the entities your dashboards use on its own. Use these rules to add ones it missed or to leave some out. Entity types are groups such as sensor or light. In patterns, * matches anything, like sensor.kitchen_*.",
+  idle: "Selected dashboards go idle after no touch, mouse, keyboard or scrolling. While idle they refresh at the interval you choose, or not at all if it's 0. Switching tabs, opening pop-ups or editing brings live updates back.",
 };
-const statusLabels = { unused: "Not used in configured dashboards", unclassified: "Usage unknown" };
+const statusLabels = { unused: "Not used by any of your dashboards", unclassified: "Purpose unknown" };
 const make = (tag, content, cls) => {
   const element = document.createElement(tag);
   if (content !== undefined) element.textContent = content;
@@ -59,12 +59,16 @@ function install() {
       this._drafts = {}; this._conflicts = new Set(); this._searches = {}; this._limits = {};
       this._sequence = 0;
       this.shadowRoot.innerHTML = `
-        <style>${helpStyles}
+        <style>${helpStyles}${markStyles}${buttonStyles}
           :host { user-select:text; -webkit-user-select:text; display:block; color:var(--primary-text-color); }
           ha-card { user-select:text; -webkit-user-select:text; padding:24px; overflow:hidden; }
           header { display:flex; align-items:start; justify-content:space-between; gap:16px; }
           header>div { flex:1; min-width:0; }
           header>button { flex-shrink:0; white-space:nowrap; }
+          .actions .btn { flex:none; }
+          .maintenance { display:grid; gap:12px; margin-top:16px; }
+          .maintenance-group { display:flex; flex-wrap:wrap; justify-content:flex-end; align-items:center; gap:4px 12px; }
+          .maintenance-danger { display:flex; justify-content:flex-end; align-items:center; border-top:1px solid var(--divider-color); padding-top:12px; }
           h2 { margin:0; font-size:20px; font-weight:500; line-height:1.4; }
           p { margin:8px 0 0; font-size:14px; line-height:1.5; color:var(--secondary-text-color); }
           button,input,select { font:inherit; }
@@ -85,25 +89,34 @@ function install() {
           summary { min-height:36px; cursor:pointer; font-size:15px; line-height:1.5; }
           #sections { margin-top:20px; }
           #sections>details { margin-top:0; padding-top:0; }
-          #sections>details>summary { box-sizing:border-box; min-height:48px; padding:12px 0; font-weight:500; }
-          #sections>details>summary.section-heading { padding:2px 0; }
+          #sections>details>summary { box-sizing:border-box; min-height:48px; margin-inline:-8px; padding:12px 8px; border-radius:var(--ha-border-radius,8px);
+            font-weight:500; transition:background-color .15s,color .15s; }
+          #sections>details>summary:hover { background:var(--secondary-background-color); }
+          #sections>details[open]>summary { color:var(--primary-color); }
+          #sections>details>summary.section-heading { padding:2px 8px; }
           #sections>details[open] { padding-bottom:20px; }
           .field { margin-top:16px; }
           .rule-groups { display:grid; gap:24px; margin-top:24px; }
           .rule-group { min-width:0; margin:0; padding:0 16px 16px; border:1px solid var(--divider-color); border-radius:12px; }
+          .rule-group[data-rule-group="included"] { border-color:color-mix(in srgb,var(--primary-color) 38%,var(--divider-color));
+            background:linear-gradient(180deg,color-mix(in srgb,var(--primary-color) 6%,transparent),transparent 120px); }
+          .rule-group[data-rule-group="included"] legend ha-icon { color:var(--primary-color); }
+          .rule-group[data-rule-group="excluded"] legend ha-icon { color:var(--secondary-text-color); }
+          .rule-group[data-rule-group="excluded"] { background:linear-gradient(180deg,color-mix(in srgb,var(--secondary-text-color) 6%,transparent),transparent 120px); }
           .rule-group legend { padding:0 8px; font-size:18px; font-weight:600; }
           .rule-group legend ha-icon { margin-inline-end:8px; --mdc-icon-size:20px; }
           .rule-group>p { margin:4px 0 16px; }
           .rule-field { margin-top:12px; padding-top:12px; }
           .rule-field summary { display:flex; align-items:center; justify-content:space-between; gap:12px; list-style:revert; }
           .rule-field summary span { font-weight:500; }
-          .rule-field summary small { margin-inline-start:auto; color:var(--secondary-text-color); font-variant-numeric:tabular-nums; }
+          .rule-field summary small { margin-inline-start:auto; padding:1px 10px; border-radius:999px; background:var(--secondary-background-color);
+            color:var(--secondary-text-color); font-variant-numeric:tabular-nums; transition:background-color .2s,color .2s; }
+          .rule-field summary small[data-active] { background:color-mix(in srgb,var(--primary-color) 16%,var(--secondary-background-color)); color:var(--primary-text-color); font-weight:500; }
           .rule-field .field { margin-top:8px; }
           .rule-field .field>label { font-size:0; }
           .rule-field input[type=search] { font-size:14px; }
           .selected-choices { background:var(--secondary-background-color); border-radius:8px; padding:0 10px; }
           .choice-list:empty { display:none; }
-          #version { font-size:12px; }
 
           .field>label { display:block; font-size:14px; margin-bottom:8px; }
           .selection-title { font-size:13px; color:var(--secondary-text-color); margin:12px 0 4px; }
@@ -119,20 +132,21 @@ function install() {
           [hidden] { display:none !important; }
           @media(max-width:480px) { ha-card { padding:16px; } }
         </style>
-        <ha-card><header><div><div class="section-heading"><h2 data-i18n="Loona settings">Loona settings</h2><span id="settings-help"></span></div>
-          <p id="state" role="status" data-i18n="Loading settings...">Loading settings...</p></div>
-          <button id="refresh" data-i18n="Refresh">Refresh</button></header>
-          <p id="version"></p><p id="error" role="alert" hidden></p><div id="sections"></div>
-          <div id="maintenance" hidden><div class="actions">
-            <button data-action="rescan" data-i18n="Rescan dashboards">Rescan dashboards</button>
-            <button data-action="reset_live_statistics" data-i18n="Reset live statistics">Reset live statistics</button>
-            <button data-action="restore_defaults" data-i18n="Restore defaults">Restore defaults</button>
-          </div>
+        <ha-card><header><div class="brand">${markHtml}<div class="heading"><div class="section-heading"><h2 data-i18n="Loona settings">Loona settings</h2></div>
+          <p id="version"></p><p id="state" role="status" data-i18n="Loading settings...">Loading settings...</p></div></div>
+          <button id="refresh" class="btn icon-only" type="button" aria-label="Refresh" title="Refresh">${icon("refresh")}</button></header>
+          <p id="error" role="alert" hidden></p><div id="sections"></div>
+          <div id="maintenance" hidden><div class="maintenance"><div class="maintenance-group">
+            <button class="btn small" type="button" data-action="rescan">${icon("rescan")}<span data-i18n="Rescan dashboards">Rescan dashboards</span></button>
+            <button class="btn small" type="button" data-action="reset_live_statistics">${icon("reset")}<span data-i18n="Reset live statistics">Reset live statistics</span></button>
+          </div><div class="maintenance-danger">
+            <button class="btn caution small" type="button" data-action="restore_defaults">${icon("restore")}<span data-i18n="Restore defaults">Restore defaults</span></button>
+          </div></div>
           <p id="action-status" role="status"></p></div></ha-card>`;
-      this.shadowRoot.getElementById("settings-help").append(createHelp(this._hass,"Loona settings","Entity and registry feeds follow the selected dashboard scope, including its dialogs."));
-      for (const [key,message] of Object.entries({rescan:"Rescan checks dashboard changes now.",reset_live_statistics:"Reset clears live counters and page-load records; entity counts and recorded history stay unchanged.",restore_defaults:"Restore defaults clears all Loona settings and live statistics. Confirmation is required."})) {
+      hideBrokenMark(this.shadowRoot);
+      for (const [key,message] of Object.entries({rescan:"Check your dashboards for changes right now.",reset_live_statistics:"Clears the live counters and page-load records. Your settings and Home Assistant's recorded history aren't touched.",restore_defaults:"Resets all Loona settings and live statistics. You'll be asked to confirm."})) {
         const button=this.shadowRoot.querySelector(`[data-action="${key}"]`), wrapper=make("span",undefined,"action-help");
-        button.replaceWith(wrapper); wrapper.append(button,createHelp(this._hass,button.dataset.i18n,message));
+        button.replaceWith(wrapper); wrapper.append(button,createHelp(this._hass,button.querySelector("[data-i18n]").dataset.i18n,message));
       }
       this.shadowRoot.getElementById("refresh").addEventListener("click", () => this._fetch());
       this.shadowRoot.querySelectorAll("[data-action]").forEach(button => button.addEventListener("click", () => this._press(button.dataset.action)));
@@ -221,7 +235,7 @@ function install() {
       this._drafts[group] = { ...(this._drafts[group] || JSON.parse(JSON.stringify(this._data.values[group]))), [key]:value };
       if (JSON.stringify(this._drafts[group]) === JSON.stringify(this._data.values[group])) delete this._drafts[group];
       const count=this.shadowRoot.querySelector(`[data-rule-count="${key}"]`);
-      if (count) count.textContent=this._t("{count} selected",{count:value.length});
+      if (count) { count.textContent=this._t("{count} selected",{count:value.length}); count.toggleAttribute("data-active",value.length>0); }
       this._sync();
     }
     async _press(key) {
@@ -230,7 +244,7 @@ function install() {
       if (!entity || !this._hass?.user?.is_admin || this._acting || this._saving || this._loading) return;
       const account = this._hass.user.id;
       if (key === "reset_live_statistics" && !await confirmAction(this, "Reset live statistics?",
-          "Clear live counters, page-load records and browser measurements? Filtering settings and recorded history are preserved.", "Reset live statistics")) return;
+          "Clear the live counters, page-load records and browser readings? Your settings and recorded history are kept.", "Reset live statistics")) return;
       if (this._hass?.user?.id !== account || !this._hass.user.is_admin || this._acting || this._saving || !this.isConnected) return;
       const sequence = ++this._sequence; this._acting = key; this._actionStatus = "Working..."; this._error = undefined; this._sync();
       try {
@@ -253,7 +267,7 @@ function install() {
       let confirmed = false;
       if (group === "cards" && this._data.values.cards.dashboard_cards.length && !values.dashboard_cards.length) {
         confirmed = await confirmAction(this, "Remove the Loona dashboard?",
-          "Remove the generated Loona dashboard and its cards? Manually edited dashboards are preserved. You can create it again by selecting Loona dashboard cards.", "Remove dashboard");
+          "Remove the Loona dashboard that Loona created, along with its cards? Dashboards you've edited yourself are kept. To get it back, choose Loona dashboard cards again.", "Remove dashboard");
         if (!confirmed || !this._hass?.user?.is_admin || !this.isConnected || revision !== this._data?.revision
             || JSON.stringify(values) !== JSON.stringify(this._drafts[group])) return;
       }
@@ -275,7 +289,7 @@ function install() {
       const revision = this._data.revision;
       const account = this._hass.user.id;
       if (!await confirmAction(this, "Restore defaults?",
-          "Reset all Loona settings and live statistics, clear dashboard and account selections, and remove the generated Loona dashboard. Filtering stays inactive until you select dashboards and accounts again. Edited dashboards and recorded history are preserved.", "Restore defaults")) return;
+          "This resets every Loona setting and the live statistics, clears your dashboard and account choices, and removes the Loona dashboard that Loona created. Nothing is filtered until you choose dashboards and accounts again. Dashboards you've edited and recorded history are kept.", "Restore defaults")) return;
       if (this._hass?.user?.id !== account || !this._hass.user.is_admin || !this.isConnected || revision !== this._data?.revision) return;
       const sequence = ++this._sequence; this._acting = "restore_defaults"; this._error = undefined; this._sync();
       try {
@@ -283,7 +297,7 @@ function install() {
         if (sequence !== this._sequence || !this._hass?.user?.is_admin) return;
         this._drafts = {}; this._conflicts.clear(); this._saved = undefined; this._replace(data);
         saveCardPreferences(this._hass, {}, true);
-        this._actionStatus = "Defaults restored. Select dashboards and accounts, then reload the browser.";
+        this._actionStatus = "Defaults restored. Choose your dashboards and accounts, then reload your browser.";
         window.dispatchEvent(new Event("loona-statistics-reset"));
       } catch (error) {
         if (sequence === this._sequence) this._error = error.code === "conflict"
@@ -295,7 +309,8 @@ function install() {
       const admin = this._hass?.user?.is_admin;
       const refresh = this.shadowRoot.getElementById("refresh");
       refresh.disabled = !admin || this._loading || Boolean(this._saving) || Boolean(this._acting) || Object.keys(this._drafts).length > 0;
-      refresh.title = Object.keys(this._drafts).length ? this._t("Refresh is unavailable while you have unsaved changes.") : "";
+      refresh.title = Object.keys(this._drafts).length ? this._t("Refresh is unavailable while you have unsaved changes.") : this._t("Refresh");
+      refresh.setAttribute("aria-label", this._t("Refresh")); refresh.toggleAttribute("data-busy", Boolean(this._loading));
       setText(this.shadowRoot.getElementById("state"), !admin ? this._t("Sign in as an administrator to change Loona settings.")
         : this._data ? this._t((this._drafts.controls || this._data.values.controls).enabled
           ? ""
@@ -358,7 +373,7 @@ function install() {
             input.addEventListener("input",()=>this._edit(group,key,input.value==="" ? null : Number(input.value)));
             label.append(input); field.append(label); section.append(field);
           }
-          section.append(make("p",this._t("0 pauses until interaction. Otherwise refresh every 1 to 60 seconds; default 60.")));
+          section.append(make("p",this._t("0 means no refreshing until you interact. Otherwise it refreshes every 1 to 60 seconds (default 60).")));
         } else {
           if (group === "targets") {
             const label = make("label",this._t("Apply filtering to")); const select = make("select"); select.setAttribute("aria-label",this._t("Apply filtering to")); select.dataset.field="target_mode";
@@ -367,25 +382,25 @@ function install() {
             label.append(select); section.append(label);
           }
           if (group === "resources") {
-            const required=make("details"); required.append(make("summary",this._t("Files kept automatically ({count})",{count:this._data.required_resources.length})),make("p",this._t("These files are needed by your dashboards or shared styling.")));
+            const required=make("details"); required.append(make("summary",this._t("Files Loona always loads ({count})",{count:this._data.required_resources.length})),make("p",this._t("These files are needed by your dashboards or shared styling.")));
             const list=make("ul",undefined,"required"); this._data.required_resources.forEach(url=>{
               const item=make("li"); const label=this._data.resource_labels?.[url] || url;
               item.append(make("span",label)); if (label!==url) item.append(make("small",url)); list.append(item);
             }); required.append(list); section.append(required);
-            if (!this._data.resources_editable) section.append(make("p",this._t("File choices are unavailable on this installation.")));
+            if (!this._data.resources_editable) section.append(make("p",this._t("Card file choices aren't available right now.")));
           }
           if (group === "rules") {
             const panels = make("div", undefined, "rule-groups");
             for (const [kind, title, description, keys, icon] of [
-              ["included", "Included", "Add entities to the automatic dashboard list.", ["extra_entities", "include_domains", "include_globs"], "mdi:plus-circle-outline"],
-              ["excluded", "Excluded", "Exclusions override inclusions and may leave cards without data. App status entities stay included.", ["exclude_globs"], "mdi:minus-circle-outline"],
+              ["included", "Included", "Always keep these, even if no dashboard uses them.", ["extra_entities", "include_domains", "include_globs"], "mdi:plus-circle-outline"],
+              ["excluded", "Excluded", "Never send these. Exclusions win over inclusions, and cards that use them may show no data. Entities Home Assistant itself needs (people, updates, zones) are always kept.", ["exclude_globs"], "mdi:minus-circle-outline"],
             ]) {
               const panel = make("fieldset", undefined, "rule-group"); panel.dataset.ruleGroup=kind;
               const legend = make("legend"); const symbol=make("ha-icon"); symbol.setAttribute("icon",icon); symbol.setAttribute("aria-hidden","true");
               legend.append(symbol,make("span",this._t(title))); panel.append(legend,make("p",this._t(description)));
               for (const key of keys) {
                 const field=make("details",undefined,"rule-field"); field.dataset.ruleField=key; field.open=openFields.has(key);
-                const summary=make("summary"); const count=make("small",this._t("{count} selected",{count:values[key].length})); count.dataset.ruleCount=key;
+                const summary=make("summary"); const count=make("small",this._t("{count} selected",{count:values[key].length})); count.dataset.ruleCount=key; count.toggleAttribute("data-active",values[key].length>0);
                 summary.append(make("span",this._t(labels[key])),count); field.append(summary);
                 this._field(field,group,key); panel.append(field);
               }
@@ -399,9 +414,9 @@ function install() {
           }
         }
         const actions=make("div",undefined,"actions"); const status=make("p"); status.dataset.status=group; status.setAttribute("role","status");
-        const cancel=make("button",this._t("Cancel")); cancel.dataset.cancel=group;
+        const cancel=makeButton(this._hass,"Cancel","cancel","quiet"); cancel.dataset.cancel=group;
         cancel.addEventListener("click",()=>{delete this._drafts[group]; this._conflicts.delete(group); this._error=undefined; this._render();});
-        const save=make("button",this._t("Save")); save.dataset.save=group; save.addEventListener("click",()=>this._save(group));
+        const save=makeButton(this._hass,"Save","save","primary"); save.dataset.save=group; save.addEventListener("click",()=>this._save(group));
         actions.append(status,cancel,save); section.append(actions); container.append(section);
       }
       this._rendered=true;
@@ -479,7 +494,7 @@ function install() {
       const availableRows=make("div",undefined,"choice-list"); available.slice(0,limit).forEach(row=>availableRows.append(renderRow(row,false)));
       if (!available.length) availableRows.append(make("p",this._t("No matching choices"))); root.append(availableRows);
       if (available.length>limit || values.length>limit || this._data.paged_choices?.[key]) {
-        const more=make("button",this._t("Show more")); more.addEventListener("click",()=>{
+        const more=makeButton(this._hass,"Show more","more","quiet small"); more.addEventListener("click",()=>{
           if (this._data.paged_choices?.[key]) this._loadChoices(root,group,key,true);
           else { this._limits[key]=limit+this._data.choice_page; this._choices(root,group,key); }
         }); root.append(more);

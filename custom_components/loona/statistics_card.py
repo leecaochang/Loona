@@ -11,7 +11,7 @@ from homeassistant.components.lovelace.dashboard import DashboardsCollection
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
-from .const import DOMAIN, STATISTICS_ASSET, STATISTICS_DASHBOARD, SETTINGS_ASSET, I18N_ASSET, VERSION, DASHBOARD_CARDS
+from .const import DOMAIN, STATISTICS_ASSET, STATISTICS_DASHBOARD, SETTINGS_ASSET, I18N_ASSET, ICON_ASSET, VERSION, DASHBOARD_CARDS
 from .dashboard import dashboard_objects
 
 
@@ -71,7 +71,7 @@ class StatisticsCard:
         key = "loona_statistics_asset_registered"
         if not self.hass.data.get(key):
             assets = [(asset, str(Path(__file__).parent / "frontend" / filename)) for asset, filename in (
-                (STATISTICS_ASSET, "statistics-card.js"), (SETTINGS_ASSET, "settings-card.js"), (I18N_ASSET, "i18n.js")
+                (STATISTICS_ASSET, "statistics-card.js"), (SETTINGS_ASSET, "settings-card.js"), (I18N_ASSET, "i18n.js"), (ICON_ASSET, "icon-512.png")
             )]
             if callable(getattr(self.hass.http, "async_register_static_paths", None)):
                 from homeassistant.components.http import StaticPathConfig
