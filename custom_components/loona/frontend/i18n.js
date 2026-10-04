@@ -1,5 +1,21 @@
 /* Shared English/Simplified Chinese messages for Loona cards. */
 const chinese = {
+  "Measurements": "测量读数",
+  "Measurement": "测量项目",
+  "Setting": "设置项",
+  "Value": "数值",
+  "Dashboard": "仪表盘",
+  "Tab": "标签页",
+  "Completed": "完成时间",
+  "Method": "测量方式",
+  "Pass": "轮次",
+  "Mode": "模式",
+  "Ready (s)": "就绪（秒）",
+  "Data (KB)": "数据（KB）",
+  "Updates": "更新次数",
+  "Blocking (ms)": "阻塞（毫秒）",
+  "Right-click the image above and choose Copy Image. On a touch screen, touch and hold it.": "右键点击上方图片并选择复制图片。使用触屏时，请长按图片。",
+
   "Detailed report": "详细报告",
   "Executive summary": "结果摘要",
   "Test details": "测试信息",

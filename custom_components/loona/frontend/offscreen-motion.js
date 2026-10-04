@@ -1,5 +1,5 @@
 /* Pause owned infinite browser animations only while their card is off screen. */
-import { animationProtected } from "./startup-motion.js?v=0.9.12";
+import { animationProtected } from "./startup-motion.js?v=0.9.13";
 
 export class OffscreenMotion {
   constructor(version,startup) {

@@ -1,6 +1,6 @@
 /* Same-tab, administrator-only comparisons. Exported SVG contains aggregate data only. */
-import {text, language, markHtml, markStyles, buttonStyles, makeButton, confirmAction, cancelConfirmation} from "./i18n.js?v=0.9.12";
-const VERSION="0.9.12", KEY="loona.benchmark", RESULT=KEY+".result", ERROR=KEY+".error";
+import {text, language, markHtml, markStyles, buttonStyles, makeButton, confirmAction, cancelConfirmation, helpStyles} from "./i18n.js?v=0.9.13";
+const VERSION="0.9.13", KEY="loona.benchmark", RESULT=KEY+".result", ERROR=KEY+".error";
 const ns="http://www.w3.org/2000/svg";
 const finite=value=>typeof value==="number" && Number.isFinite(value) && value>=0;
 const median=values=>{ const rows=values.filter(finite).sort((a,b)=>a-b); return rows.length ? (rows[Math.floor((rows.length-1)/2)]+rows[Math.floor(rows.length/2)])/2 : null; };
@@ -50,9 +50,15 @@ export function benchmarkSections(report,hass) {
   if(!report) return [{title:"",lines:methods.map(key=>t(key))}];
   if(report.error) return [{title:t("Executive summary"),lines:[t("No valid comparison was completed."),t(report.reason||"Benchmark interrupted"),t("Start over to run a new comparison.")]}];
   const metrics=benchmarkMetrics(report);
-  sections.push({title:t("Executive summary"),lines:metrics.map(metric=>t("{label}: {status}. Native HA: {native}; Loona: {loona}.",{label:t(metric.label),status:metricStatus(metric,hass),native:valueLabel(metric,hass,0),loona:valueLabel(metric,hass,1)}))});
+  sections.push({title:t("Executive summary"),list:true,lines:metrics.map(metric=>`${t(metric.label)}: ${metricStatus(metric,hass)}.`)});
+  sections.push({title:t("Measurements"),headers:[t("Measurement"),"Native HA","Loona"],rows:metrics.map(metric=>[t(metric.label),valueLabel(metric,hass,0),valueLabel(metric,hass,1)])});
   const names=report.names||{}, settings=report.settings||{};
-  sections.push({title:t("Test details"),lines:[t("Dashboard: {dashboard}; tab: {view}",{dashboard:report.dashboard_title||t("Unavailable"),view:report.view_title||t("Unavailable")}),`Loona ${version(report.version)} · HA ${version(report.core_version)}`,t("Completed: {date}",{date:report.completed_at ? new Date(report.completed_at).toLocaleString(language(hass)) : t("Unavailable")}),t("{pairs} pairs · {seconds}s observation · cached reloads",{pairs:Math.floor(scored(report).length/2),seconds:report.seconds})]});
+  sections.push({title:t("Test details"),headers:[t("Setting"),t("Value")],rows:[
+    [t("Dashboard"),report.dashboard_title||t("Unavailable")],[t("Tab"),report.view_title||t("Unavailable")],
+    ["Loona",version(report.version)],["Home Assistant",version(report.core_version)],
+    [t("Completed"),report.completed_at ? new Date(report.completed_at).toLocaleString(language(hass)) : t("Unavailable")],
+    [t("Method"),t("{pairs} pairs · {seconds}s observation · cached reloads",{pairs:Math.floor(scored(report).length/2),seconds:report.seconds})]
+  ]});
   const advice=[];
   for(const metric of metrics) {
     if(metric.status==="No clear timing difference" || metric.timing && metric.status==="No measurable change") advice.push(t("The loading or blocking times are similar or overlap across passes. This does not indicate an interrupted test. Data savings can still be measured without a proven speed improvement."));
@@ -62,22 +68,39 @@ export function benchmarkSections(report,hass) {
   }
   for(const issue of new Set((report.samples||[]).flatMap(row=>row.issues||[]))) advice.push(t(issueMessages[issue]||"Incomplete measurement"));
   sections.push({title:t("Interpretation and next steps"),lines:[...new Set(advice),t("To inspect individual card files, open Settings > Dashboards > Resources, or filter the browser Network panel to JavaScript and reload. The comparison above reports totals without repeating files for every pass.")]});
-  const settingLines=Object.entries({...report.controls,...settings}).filter(([key])=>settingsLabels[key]).map(([key,value])=>{
+  const settingRows=Object.entries({...report.controls,...settings}).filter(([key])=>settingsLabels[key]).map(([key,value])=>{
     let display;
     if(typeof value==="boolean") display=t(value ? "Enabled" : "Disabled");
     else if(key==="target_mode") display=t(value==="all" ? "All accounts" : "Selected accounts");
     else if(key==="user_ids" && settings.target_mode==="all") display=t("All accounts");
     else if(Array.isArray(value)) display=value.map(item=>key==="dashboard_cards" ? t(cardLabels[item]||item) : names[key]?.[item]||hass?.states?.[item]?.attributes?.friendly_name||item).join(", ")||t("None");
     else display=String(value);
-    return t("{key}: {value}",{key:t(settingsLabels[key]),value:display});
+    return [t(settingsLabels[key]),display];
   });
-  sections.push({title:t("Saved settings"),lines:settingLines});
-  sections.push({title:t("Individual passes"),lines:scored(report).map((row,index)=>t("Pass {pass} of {total}",{pass:index+1,total:scored(report).length})+" · "+(row.mode==="native" ? "Native HA" : "Loona")+" · "+t("Ready: {ready}s; data: {data} KB; files: {files}; updates: {updates}; blocking: {blocking} ms.",{ready:fmt(hass,finite(row.ready_ms) ? row.ready_ms/1000 : null),data:fmt(hass,(row.initial_bytes+row.registry_bytes)/1000),files:fmt(hass,row.resources.length,0),updates:fmt(hass,row.updates,0),blocking:fmt(hass,row.loaf_supported ? row.blocking_ms : null)}))});
+  sections.push({title:t("Saved settings"),headers:[t("Setting"),t("Value")],rows:settingRows});
+  sections.push({title:t("Individual passes"),headers:[t("Pass"),t("Mode"),t("Ready (s)"),t("Data (KB)"),t("Card files"),t("Updates"),t("Blocking (ms)")],rows:scored(report).map((row,index)=>[
+    fmt(hass,index+1,0),row.mode==="native" ? "Native HA" : "Loona",fmt(hass,finite(row.ready_ms) ? row.ready_ms/1000 : null),
+    fmt(hass,(row.initial_bytes+row.registry_bytes)/1000),fmt(hass,row.resources.length,0),fmt(hass,row.updates,0),fmt(hass,row.loaf_supported ? row.blocking_ms : null)
+  ])});
   const first=scored(report)[0];
   sections.push({title:t("Measurement limits"),lines:[...methods.map(key=>t(key)),...(first ? [t("Browser: {browser}; viewport: {width} x {height}",{browser:first.browser,width:first.viewport[0],height:first.viewport[1]})] : [])]});
   return sections;
 }
-export const benchmarkText=(report,hass)=>benchmarkSections(report,hass).map(section=>(section.title ? section.title+"\n" : "")+section.lines.join("\n")).join("\n\n");
+// Treat names and failure reasons as literal Markdown content, including inside table cells.
+const markdownLiteral=value=>String(value).replace(/\\/g,"\\\\").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/([`*_{}\[\]#!|])/g,"\\$1").replace(/\r\n|\r|\n/g,"<br>");
+export function benchmarkText(report,hass) {
+  const sections=benchmarkSections(report,hass).map(section=>{
+    const parts=section.title ? ["## "+markdownLiteral(section.title)] : [];
+    if(section.lines?.length) parts.push(section.lines.map(line=>(section.list ? "- " : "")+markdownLiteral(line)).join(section.list ? "\n" : "\n\n"));
+    if(section.headers) parts.push([
+      "| "+section.headers.map(markdownLiteral).join(" | ")+" |",
+      "| "+section.headers.map(()=>"---").join(" | ")+" |",
+      ...section.rows.map(row=>"| "+row.map(markdownLiteral).join(" | ")+" |")
+    ].join("\n"));
+    return parts.join("\n\n");
+  });
+  return "# "+text(hass,"Benchmark Results")+"\n\n"+sections.join("\n\n")+"\n";
+}
 export function benchmarkFilename(report,extension) {
   const name=String(report.dashboard_title||route()?.dashboard||"dashboard").normalize("NFKC").replace(/[^\p{L}\p{N}_-]+/gu,"-").replace(/^-+|-+$/g,"").slice(0,80)||"dashboard";
   const date=new Date(report.completed_at||0), stamp=(Number.isFinite(date.getTime()) ? date : new Date(0)).toISOString().replace(/[-:]/g,"").replace(/\.\d{3}Z$/,"Z");
@@ -133,7 +156,7 @@ function install() {
   class BenchmarkCard extends HTMLElement {
   constructor() {
     super(); this._logoPromise=null; this.attachShadow({mode:"open"}); this._onProgress=()=>this._render();
-    this.shadowRoot.innerHTML=`<style>${markStyles}${buttonStyles}
+    this.shadowRoot.innerHTML=`<style>${markStyles}${buttonStyles}${helpStyles}
       :host { display:block; color:var(--primary-text-color); } [hidden] { display:none!important; }
       ha-card { padding:24px; overflow:hidden; user-select:text; -webkit-user-select:text; }
       h2 { margin:0; font-size:20px; line-height:1.35; font-weight:500; }
@@ -143,31 +166,29 @@ function install() {
       details { border-top:1px solid var(--divider-color); margin-top:20px; padding-top:8px; }
       summary { cursor:pointer; min-height:44px; line-height:1.5; padding:10px 0; box-sizing:border-box; font-weight:500; }
       summary:focus-visible { outline:2px solid var(--primary-color); outline-offset:3px; }
-      #details { max-height:min(360px,50vh); overflow-y:auto; overscroll-behavior:contain; scrollbar-color:var(--secondary-text-color) var(--card-background-color); } #details:focus-visible { outline:2px solid var(--primary-color); outline-offset:-2px; } #details p { font-size:14px; overflow-wrap:anywhere; } #details h3 { font-size:15px; margin:24px 0 8px; } #details h3:first-child { margin-top:8px; } #text-actions { margin-top:12px; } details:not([open]) #text-actions { display:none; }
-      #report svg { display:block; width:100%; height:auto; } #report { margin:-6px -6px 0; }
+      #details { max-height:min(360px,50vh); overflow-y:auto; overscroll-behavior:contain; scrollbar-color:var(--secondary-text-color) var(--card-background-color); } #details:focus-visible { outline:2px solid var(--primary-color); outline-offset:-2px; } #details p,#details li { font-size:14px; overflow-wrap:anywhere; } #details h3 { font-size:15px; margin:24px 0 8px; } #details h3:first-child { margin-top:8px; } #details ul { padding-inline-start:20px; margin:12px 0; line-height:1.5; } #details li { margin:8px 0; } .table-scroll { overflow-x:auto; scrollbar-color:var(--secondary-text-color) var(--card-background-color); } .table-scroll:focus-visible { outline:2px solid var(--primary-color); outline-offset:-2px; } table { width:100%; border-collapse:collapse; font-size:14px; line-height:1.5; } table.wide { min-width:500px; } th,td { padding:8px; text-align:start; vertical-align:top; border-bottom:1px solid var(--divider-color); overflow-wrap:anywhere; font-variant-numeric:tabular-nums; } th { font-weight:600; } #text-actions { margin-top:12px; } details:not([open]) #text-actions { display:none; }
+      #report svg,#report img { display:block; width:100%; height:auto; } #report { margin:-6px -6px 0; }
       #message { color:var(--primary-text-color); overflow-wrap:anywhere; } .error { font-weight:500; }
       @media(max-width:480px) { ha-card { padding:16px; } }
       </style><ha-card><header class="brand">${markHtml}<div class="heading"><h2></h2><p id="version"></p></div></header>
       <div id="intro"></div><p id="message" role="status" aria-live="polite" hidden></p>
       <div id="progress" hidden><p id="status" role="status" aria-live="polite"></p><progress max="100" value="0" aria-label="Benchmark progress"></progress></div>
-      <div id="report"></div><div class="actions" id="actions"></div><div class="actions secondary" id="secondary"></div>
+      <div id="report"></div><span id="copy-tip" class="help-text" role="tooltip" hidden></span><div class="actions" id="actions"></div><div class="actions secondary" id="secondary"></div>
       <details id="disclosure"><summary></summary><div id="details" tabindex="0" role="region" aria-label="Detailed report"></div><div class="actions" id="text-actions"></div></details></ha-card>`;
   }
   setConfig(config) { this._config={...config,type:"custom:loona-benchmark-card"}; }
   getCardSize() { return this._report && !this._report.error ? 15 : 4; }
   getGridOptions() { return {columns:12,rows:this._report && !this._report.error ? 15 : 4,min_columns:6}; }
   set hass(value) {
-    const themeChanged=this._hass?.themes!==value?.themes;
     const changed=this._hass?.user?.id!==value?.user?.id || this._hass?.user?.is_admin!==value?.user?.is_admin || language(this._hass)!==language(value);
     this._hass=value;
     if(changed) { this._restore(); this._render(); }
-    else if(themeChanged && this._report) requestAnimationFrame(()=>this._draw());
   }
   connectedCallback() {
     window.addEventListener("loona-benchmark",this._onProgress); this._restore(); this._render();
-    if(typeof ResizeObserver==="function") { this._resize=new ResizeObserver(()=>this._draw());this._resize.observe(this); }
+    if(typeof ResizeObserver==="function") {this._resize=new ResizeObserver(()=>this._draw());this._resize.observe(this);}
   }
-  disconnectedCallback() { window.removeEventListener("loona-benchmark",this._onProgress);this._resize?.disconnect();cancelConfirmation(this); }
+  disconnectedCallback() { window.removeEventListener("loona-benchmark",this._onProgress);this._resize?.disconnect();this._clearPreview();this._closeCopyTip();cancelConfirmation(this); }
   _restore() {
     if(this._dialogReport) return;
     const target=route(), latest=stored();
@@ -184,6 +205,7 @@ function install() {
   _message(value) { const node=this.shadowRoot.querySelector("#message");node.textContent=value||"";node.hidden=!value; }
   _render() {
     if(!this.isConnected || !this._hass) return;
+    this._closeCopyTip();
     const root=this.shadowRoot, t=key=>text(this._hass,key), state=window.loonaBenchmark;
     const running=!this._dialogReport && state && ["authorizing","loading","observing","saving","paused"].includes(state.status);
     if(state?.status==="error" && !this._dialogReport) this._report=this._errorReport(state.reason);
@@ -208,18 +230,18 @@ function install() {
     this._wasRunning=false;
     this._message(this._report ? "" : this._error);
     if(!this._hass.user?.is_admin) {
-      this._report=null;this._p(intro,"Sign in as an administrator to benchmark this dashboard.");disclosure.hidden=true;root.querySelector("#report").replaceChildren();return;
+      this._clearPreview();this._report=null;this._p(intro,"Sign in as an administrator to benchmark this dashboard.");disclosure.hidden=true;root.querySelector("#report").replaceChildren();return;
     }
     if(this._report) {
       this._draw();
-      this._button(actions,"Copy","copy","",()=>this._copy());
+      this._copyButton=this._button(actions,"Copy","copy","",()=>this._copy(),!navigator.clipboard?.write && !root.querySelector("#report img"));
       this._button(actions,"Save","download","primary",()=>this._save());
       if(!this._dialogReport) {
         this._button(secondary,"Start over","reset","quiet",()=>this._startOver());
         this._button(secondary,"Remove","trash","quiet",()=>this._remove());
       }
     } else {
-      root.querySelector("#report").replaceChildren();
+      this._clearPreview();root.querySelector("#report").replaceChildren();
       this._p(intro,"Compare native Home Assistant with your saved Loona settings on this tab. About 4 minutes, with automatic page reloads.");
       this._p(intro,"Keep this page in the foreground without touching, scrolling or resizing it. Put this card near the top with another card visible.");
       this._button(actions,"Go","play","primary",()=>this._start(),this._busy || !route());
@@ -233,32 +255,53 @@ function install() {
     root.setAttribute("aria-label",text(this._hass,"Detailed report"));
     for(const section of benchmarkSections(this._report,this._hass)) {
       if(section.title) {const h=document.createElement("h3");h.textContent=section.title;root.append(h);}
-      for(const line of section.lines) {const p=document.createElement("p");p.textContent=line;root.append(p);}
+      const lines=section.list ? document.createElement("ul") : root;
+      for(const line of section.lines||[]) {const node=document.createElement(section.list ? "li" : "p");node.textContent=line;lines.append(node);}
+      if(section.list) root.append(lines);
+      if(section.headers) {
+        const container=document.createElement("div"),table=document.createElement("table"),head=document.createElement("thead"),heading=document.createElement("tr"),body=document.createElement("tbody");
+        container.className="table-scroll";container.tabIndex=0;container.setAttribute("role","region");container.setAttribute("aria-label",section.title);table.classList.toggle("wide",section.headers.length>2);
+        for(const label of section.headers) {const cell=document.createElement("th");cell.scope="col";cell.textContent=label;heading.append(cell);}
+        head.append(heading);table.append(head,body);
+        for(const row of section.rows) {const line=document.createElement("tr");for(const value of row) {const cell=document.createElement("td");cell.textContent=value;line.append(cell);}body.append(line);}
+        container.append(table);root.append(container);
+      }
     }
     if(this._report) {
       this._button(actions,"Copy text","copy","quiet",()=>this._copyText());
       this._button(actions,"Save text","download","quiet",()=>this._saveText());
     }
   }
+  _exportSvg(width=420) {
+    const root=benchmarkSvg(this._report,this._hass,width,this._report.export_colors||{background:"#1c1c1c",text:"#e1e1e1",secondary:"#aaaaaa",accent:"#009ac7",divider:"#333333"});
+    if(this._logo) root.append(svgNode("image",{x:18,y:12,width:44,height:44,href:this._logo}));
+    return root;
+  }
+  _clearPreview() { this._drawSequence=(this._drawSequence||0)+1;if(this._previewUrl) URL.revokeObjectURL(this._previewUrl);this._previewUrl=null;this._previewReport=null; }
   _draw() {
     if(!this._report || !this._hass?.user?.is_admin) return;
-    const style=getComputedStyle(this), colors={};
-    for(const [key,name,fallback] of [["background","--card-background-color","#fff"],["text","--primary-text-color","#212121"],["secondary","--secondary-text-color","#555"],["accent","--primary-color","#007da8"],["divider","--divider-color","#ddd"]]) colors[key]=style.getPropertyValue(name).trim()||fallback;
     const root=this.shadowRoot.querySelector("#report"),width=Math.max(280,root.getBoundingClientRect().width||360);
-    this._svg=benchmarkSvg(this._report,this._hass,width,colors);root.replaceChildren(this._svg);
-    const placeLogo=()=>{
-      if(!this._logo || !this._svg || this._svg.querySelector("image")) return;
-      this._svg.append(svgNode("image",{x:18,y:12,width:44,height:44,href:this._logo}));
-      this._svg.querySelector("[data-title]").setAttribute("x",76);
-      this._svg.querySelector("[data-title]").setAttribute("font-size",width<330 ? 18 : 20);
-    };
-    placeLogo();
+    if(this._previewReport===this._report && this._previewLanguage===language(this._hass) && this._previewWidth===width) return;
+    const report=this._report,sequence=(this._drawSequence||0)+1;this._drawSequence=sequence;
+    const svg=this._exportSvg(width);this._svg=svg;root.replaceChildren(svg);
     const mark=this.shadowRoot.querySelector(".mark");
     if(!this._logoPromise && mark?.src) {
       this._logoPromise=fetch(mark.src).then(response=>{if(!response.ok) throw new Error("Logo unavailable");return response.blob();})
         .then(blob=>new Promise(resolve=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.readAsDataURL(blob);}))
-        .then(data=>{this._logo=data;placeLogo();}).catch(()=>{});
+        .then(data=>{this._logo=data;}).catch(()=>{});
     }
+    Promise.resolve(this._logoPromise).then(()=>{
+      if(this._logo && !svg.querySelector("image")) svg.append(svgNode("image",{x:18,y:12,width:44,height:44,href:this._logo}));
+      return this._rasterize(svg);
+    }).then(async blob=>{
+      const url=URL.createObjectURL(blob),image=new Image();
+      image.alt=[...svg.querySelectorAll("text")].map(node=>node.textContent).join(". ");image.src=url;
+      try {await image.decode();} catch(err) {URL.revokeObjectURL(url);throw err;}
+      if(sequence!==this._drawSequence || this._report!==report || !this.isConnected) {URL.revokeObjectURL(url);return;}
+      if(this._previewUrl) URL.revokeObjectURL(this._previewUrl);
+      this._previewUrl=url;this._previewReport=report;this._previewLanguage=language(this._hass);this._previewWidth=width;root.replaceChildren(image);
+      if(this._copyButton) this._copyButton.disabled=false;
+    }).catch(()=>{if(sequence===this._drawSequence) this._message(text(this._hass,"PNG export failed. Start over and try again."));});
   }
   async _start() {
     if(this._busy) return;this._busy=true;this._error=null;sessionStorage.removeItem(ERROR);this._render();
@@ -274,7 +317,7 @@ function install() {
       this._error=err.message||err.code||text(this._hass,"Benchmark could not start. Refresh and try again.");this._busy=false;this._render();
     }
   }
-  _startOver() { if(window.loonaBenchmark && ["error","cancelled","complete"].includes(window.loonaBenchmark.status)) delete window.loonaBenchmark;this._report=null;this._error=null;this._busy=false;this._png=null;this._pngReport=null;this.shadowRoot.querySelector("#disclosure").open=false;this.shadowRoot.querySelector("#details").scrollTop=0;sessionStorage.removeItem(RESULT);sessionStorage.removeItem(ERROR);const key=this._historyKey();if(key) localStorage.removeItem(key);this._render(); }
+  _startOver() { this._clearPreview();this._closeCopyTip();if(window.loonaBenchmark && ["error","cancelled","complete"].includes(window.loonaBenchmark.status)) delete window.loonaBenchmark;this._report=null;this._error=null;this._busy=false;this._png=null;this._pngReport=null;this.shadowRoot.querySelector("#disclosure").open=false;this.shadowRoot.querySelector("#details").scrollTop=0;sessionStorage.removeItem(RESULT);sessionStorage.removeItem(ERROR);const key=this._historyKey();if(key) localStorage.removeItem(key);this._render(); }
   async _remove() {
     if(!await confirmAction(this,"Remove benchmark card?","Remove this benchmark card from this tab? Saved PNGs are kept.","Remove")) return;
     try { await this._hass.callWS({type:"loona/benchmark",action:"remove",...route(),card:this._config}); }
@@ -285,30 +328,39 @@ function install() {
     if(this._png && this._pngReport===this._report && this._pngLanguage===language(this._hass)) return this._png;
     const report=this._report;
     // Export dimensions and paint belong to the result, never to its card or dialog container.
-    const root=benchmarkSvg(report,this._hass,420,report.export_colors||{background:"#1c1c1c",text:"#e1e1e1",secondary:"#aaaaaa",accent:"#009ac7",divider:"#333333"}),image=new Image();
-    if(this._logo) root.append(svgNode("image",{x:18,y:12,width:44,height:44,href:this._logo}));
-    const url=URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(root)],{type:"image/svg+xml;charset=utf-8"}));
+    const blob=await this._rasterize(this._exportSvg());
+    this._png=blob;this._pngReport=report;this._pngLanguage=language(this._hass);return blob;
+  }
+  async _rasterize(root) {
+    const image=new Image(),url=URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(root)],{type:"image/svg+xml;charset=utf-8"}));
     try {
       image.src=url;await image.decode();const canvas=document.createElement("canvas");canvas.width=Number(root.getAttribute("width"))*2;canvas.height=Number(root.getAttribute("height"))*2;
       canvas.getContext("2d").drawImage(image,0,0,canvas.width,canvas.height);
-      const blob=await new Promise((resolve,reject)=>canvas.toBlob(value=>value ? resolve(value) : reject(new Error("PNG export failed")),"image/png"));
-      this._png=blob;this._pngReport=report;this._pngLanguage=language(this._hass);return blob;
+      return await new Promise((resolve,reject)=>canvas.toBlob(value=>value ? resolve(value) : reject(new Error("PNG export failed")),"image/png"));
     } finally { URL.revokeObjectURL(url); }
   }
   async _copy() {
     if(globalThis.ClipboardItem && navigator.clipboard?.write) {
       try { await navigator.clipboard.write([new ClipboardItem({"image/png":this._blob()})]);this._message(text(this._hass,"PNG copied."));return; } catch { /* Native image copying remains available. */ }
     }
-    try {
-      const url=URL.createObjectURL(await this._blob()),dialog=document.createElement("dialog"),image=document.createElement("img"),instructions=document.createElement("p"),close=makeButton(this._hass,"Close","cancel","quiet");
-      dialog.style.cssText="box-sizing:border-box;max-width:calc(100vw - 32px);max-height:calc(100vh - 32px);overflow:auto;padding:16px;border:0;border-radius:12px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#212121);font:inherit;line-height:1.5";
-      dialog.dataset.loonaCopy="";
-      const style=document.createElement("style");style.textContent=buttonStyles.replaceAll(".btn","dialog[data-loona-copy] .btn");dialog.append(style);
-      instructions.textContent=text(this._hass,"Right-click the image and choose Copy Image. On a touch screen, touch and hold the image.");
-      image.src=url;image.alt=text(this._hass,"Benchmark Results");image.style.cssText="display:block;max-width:100%;width:420px;height:auto;margin:12px 0";
-      dialog.setAttribute("aria-label",text(this._hass,"Copy image"));close.addEventListener("click",()=>dialog.close());dialog.append(instructions,image,close);document.body.append(dialog);
-      dialog.addEventListener("close",()=>{URL.revokeObjectURL(url);dialog.remove();},{once:true});dialog.showModal();
-    } catch {this._message(text(this._hass,"PNG export failed. Start over and try again."));}
+    this._showCopyTip();
+  }
+  _closeCopyTip() {
+    const tip=this.shadowRoot.querySelector("#copy-tip");if(tip) tip.hidden=true;this._copyButton?.removeAttribute("aria-describedby");
+    document.removeEventListener("pointerdown",this._tipOutside);document.removeEventListener("keydown",this._tipEscape);
+    window.removeEventListener("resize",this._tipDismiss);window.removeEventListener("scroll",this._tipDismiss,true);
+  }
+  _showCopyTip() {
+    const tip=this.shadowRoot.querySelector("#copy-tip"),button=this._copyButton;
+    if(!tip || !button) return;
+    if(!tip.hidden) {this._closeCopyTip();return;}
+    tip.textContent=text(this._hass,"Right-click the image above and choose Copy Image. On a touch screen, touch and hold it.");tip.hidden=false;button.setAttribute("aria-describedby",tip.id);
+    const bounds=button.getBoundingClientRect(),width=Math.min(320,window.innerWidth-32);tip.style.left=Math.max(16,Math.min(bounds.right-width,window.innerWidth-width-16))+"px";tip.style.top="16px";
+    const height=tip.getBoundingClientRect().height;tip.style.top=Math.max(16,bounds.bottom+height+8<=window.innerHeight-16 ? bounds.bottom+8 : bounds.top-height-8)+"px";
+    this._tipOutside=event=>{if(!event.composedPath().includes(button) && !event.composedPath().includes(tip)) this._closeCopyTip();};
+    this._tipEscape=event=>{if(event.key==="Escape") {event.preventDefault();event.stopPropagation();this._closeCopyTip();}};
+    this._tipDismiss=()=>this._closeCopyTip();
+    document.addEventListener("pointerdown",this._tipOutside);document.addEventListener("keydown",this._tipEscape);window.addEventListener("resize",this._tipDismiss);window.addEventListener("scroll",this._tipDismiss,true);
   }
   _download(blob,extension) {const url=URL.createObjectURL(blob),link=document.createElement("a");link.href=url;link.download=benchmarkFilename(this._report,extension);link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   async _save() { try {this._download(await this._blob(),"png");} catch {this._message(text(this._hass,"PNG export failed. Start over and try again."));} }
@@ -323,7 +375,7 @@ function install() {
       this._message(text(this._hass,"Text copied."));
     } catch {this._message(text(this._hass,"Could not copy the text. Save the text instead."));}
   }
-  _saveText() {this._download(new Blob([benchmarkText(this._report,this._hass)],{type:"text/plain;charset=utf-8"}),"txt");}
+  _saveText() {this._download(new Blob([benchmarkText(this._report,this._hass)],{type:"text/markdown;charset=utf-8"}),"md");}
 
 }
   customElements.define("loona-benchmark-card",BenchmarkCard);
