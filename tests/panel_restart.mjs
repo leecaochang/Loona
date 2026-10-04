@@ -26,7 +26,7 @@ class App { hassConnected() {} }
 const window = { addEventListener: (k, cb) => listeners.set(k, cb), setInterval: (cb) => timers.push(cb) };
 const context = vm.createContext({ window, location, URL, console, document: { querySelector: () => app }, customElements: { get: () => App } });
 const source = readFileSync(new URL("../custom_components/loona/frontend/panel-context.js", import.meta.url), "utf8")
-  .replace('import "./resource-loading.js?v=0.9.10";', readFileSync(new URL("../custom_components/loona/frontend/resource-loading.js", import.meta.url), "utf8"))
+  .replace('import "./resource-loading.js?v=0.9.11";', readFileSync(new URL("../custom_components/loona/frontend/resource-loading.js", import.meta.url), "utf8"))
   .replaceAll("import.meta.url", JSON.stringify("http://test/loona/panel-context.js?poll=100"));
 const unhandled = [];
 process.on("unhandledRejection", (reason) => unhandled.push(reason?.code ?? String(reason)));

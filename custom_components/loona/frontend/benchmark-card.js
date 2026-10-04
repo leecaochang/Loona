@@ -1,6 +1,6 @@
 /* Same-tab, administrator-only comparisons. Exported SVG contains aggregate data only. */
-import {text, language, markHtml, markStyles, buttonStyles, makeButton, confirmAction, cancelConfirmation} from "./i18n.js?v=0.9.10";
-const VERSION="0.9.10", KEY="loona.benchmark", RESULT=KEY+".result", ERROR=KEY+".error";
+import {text, language, markHtml, markStyles, buttonStyles, makeButton, confirmAction, cancelConfirmation} from "./i18n.js?v=0.9.11";
+const VERSION="0.9.11", KEY="loona.benchmark", RESULT=KEY+".result", ERROR=KEY+".error";
 const ns="http://www.w3.org/2000/svg";
 const finite=value=>typeof value==="number" && Number.isFinite(value) && value>=0;
 const median=values=>{ const rows=values.filter(finite).sort((a,b)=>a-b); return rows.length ? (rows[Math.floor((rows.length-1)/2)]+rows[Math.floor(rows.length/2)])/2 : null; };
@@ -75,7 +75,11 @@ const issueMessages={
   resource_error:"A card file failed to load. Check dashboard resources and the connection, then start over.",
   observer_limit:"The observer reached its limit. Try a smaller tab with fewer cards and start over."
 };
-class BenchmarkCard extends HTMLElement {
+function install() {
+  // HA can replace its HTMLElement and registry during browser bootstrap.
+  if(!document.querySelector("home-assistant")?.hass) { window.setTimeout(install,100);return; }
+  if(customElements.get("loona-benchmark-card")) return;
+  class BenchmarkCard extends HTMLElement {
   constructor() {
     super(); this._logoPromise=null; this.attachShadow({mode:"open"}); this._onProgress=()=>this._render();
     this.shadowRoot.innerHTML=`<style>${markStyles}${buttonStyles}
@@ -252,9 +256,11 @@ class BenchmarkCard extends HTMLElement {
   async _copy() { try { await navigator.clipboard.write([new ClipboardItem({"image/png":this._blob()})]);this._message(text(this._hass,"PNG copied.")); } catch {this._message(text(this._hass,"Could not copy the PNG. Save it instead."));} }
   async _save() { try {const url=URL.createObjectURL(await this._blob()),link=document.createElement("a");link.href=url;link.download="loona-benchmark.png";link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);} catch {this._message(text(this._hass,"PNG export failed. Start over and try again."));} }
 }
-if(!customElements.get("loona-benchmark-card")) customElements.define("loona-benchmark-card",BenchmarkCard);
-window.customCards=window.customCards||[];
-if(!window.customCards.some(card=>card.type==="loona-benchmark-card")) window.customCards.push({type:"loona-benchmark-card",name:"Loona benchmark",description:"Compare native HA and saved Loona settings on this tab."});
+  customElements.define("loona-benchmark-card",BenchmarkCard);
+  window.customCards=window.customCards||[];
+  if(!window.customCards.some(card=>card.type==="loona-benchmark-card")) window.customCards.push({type:"loona-benchmark-card",name:"Loona benchmark",description:"Compare native HA and saved Loona settings on this tab."});
+}
+install();
 // The module is also loaded when the card is hidden or unmounted.
 function showResults(hass,result) {
   const active=[...document.querySelectorAll("home-assistant")];
@@ -271,7 +277,7 @@ if(completed && !completed.notified) {
   let attempts=0;
   const notify=()=>{
     const app=document.querySelector("home-assistant"),hass=app?.hass;
-    if(!hass) {if(attempts++<120) setTimeout(notify,250);return;}
+    if(!hass || !customElements.get("loona-benchmark-card")) {if(attempts++<120) setTimeout(notify,250);return;}
     if(!hass.user?.is_admin || completed.owner!==hass.user.id) return;
     completed.notified=true;try {sessionStorage.setItem(RESULT,JSON.stringify(completed));} catch { /* Result still available. */ }
     app.dispatchEvent(new CustomEvent("hass-notification",{bubbles:true,composed:true,detail:{message:text(hass,"Benchmark complete. Results are ready."),duration:10000,action:{text:text(hass,"Show results"),action:()=>showResults(hass,completed)}}}));
