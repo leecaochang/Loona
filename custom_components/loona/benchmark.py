@@ -17,13 +17,14 @@ from homeassistant.components.lovelace.dashboard import LovelaceStorage
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.const import __version__ as CORE_VERSION
 from homeassistant.helpers.event import async_call_later
+from homeassistant.util import dt as dt_util
 
 from .const import (DOMAIN, VERSION, BENCHMARK_COMMAND, BENCHMARK_PAIRS,
                     BENCHMARK_SECONDS, BENCHMARK_READY_MS, BENCHMARK_SESSION_SECONDS,
                     BENCHMARK_SESSION_LIMIT, BENCHMARK_RESOURCE_LIMIT, BENCHMARK_WARMUP_SECONDS,
                     BENCHMARK_SCRIPT_LIMIT, BENCHMARK_HISTORY_LIMIT, BENCHMARK_RETRY_LIMIT,
                     CONF_DASHBOARD_CARDS, STATISTICS_DASHBOARD)
-from .dashboard import dashboard_objects, load_dashboard
+from .dashboard import dashboard_objects, dashboard_titles, load_dashboard
 
 if TYPE_CHECKING:
     from .runtime import LoonaRuntime
@@ -119,6 +120,7 @@ class BenchmarkRun:
     settings: dict[str, Any]
     expires: float
     sequence: list[dict[str, Any]]
+    names: dict[str, Any] = field(default_factory=dict)
     index: int = 0
     samples: list[dict[str, Any]] = field(default_factory=list)
     connection: Any = None
@@ -181,7 +183,8 @@ class BenchmarkManager:
         return {"version": VERSION, "status": run.status, "index": run.index,
                 "sequence": run.sequence, "seconds": BENCHMARK_WARMUP_SECONDS if run.index < len(run.sequence) and run.sequence[run.index]["warmup"] else BENCHMARK_SECONDS,
                 "ready_ms": BENCHMARK_READY_MS, "session_seconds": BENCHMARK_SESSION_SECONDS, "history_limit": BENCHMARK_HISTORY_LIMIT,
-                "controls": run.controls, "settings": run.settings,
+                "controls": run.controls, "settings": run.settings, **run.names,
+                "completed_at": dt_util.utcnow().isoformat() if run.status == "complete" else None,
                 "samples": run.samples, "core_version": CORE_VERSION,
                 "resource_urls": [row["url"] for row in self.runtime.resource_preview.get("resources", [])]}
 
@@ -241,6 +244,11 @@ class BenchmarkManager:
                                 (("native", "loona") if pair % 2 == 0 else ("loona", "native")))
             run = BenchmarkRun(user_id, dashboard, path, self.fingerprint(), digest(config),
                                dict(self.runtime.controls), deepcopy(self.runtime.settings), monotonic() + BENCHMARK_SESSION_SECONDS, sequence)
+            titles = dashboard_titles(self.runtime.hass)
+            accounts = await self.runtime.hass.auth.async_get_users() if run.settings.get("user_ids") else []
+            run.names = {"dashboard_title": titles.get(dashboard, dashboard),
+                         "view_title": view.get("title") or view.get("path") or str(config["views"].index(view) + 1),
+                         "names": {"dashboards": titles, "user_ids": {user.id: user.name or user.id for user in accounts}}}
             token = token_hex(32)
             self.runs[token] = run
             run.remove_expiry = async_call_later(self.runtime.hass, BENCHMARK_SESSION_SECONDS,

@@ -1,6 +1,6 @@
 /* Same-tab, administrator-only comparisons. Exported SVG contains aggregate data only. */
-import {text, language, markHtml, markStyles, buttonStyles, makeButton, confirmAction, cancelConfirmation} from "./i18n.js?v=0.9.11";
-const VERSION="0.9.11", KEY="loona.benchmark", RESULT=KEY+".result", ERROR=KEY+".error";
+import {text, language, markHtml, markStyles, buttonStyles, makeButton, confirmAction, cancelConfirmation} from "./i18n.js?v=0.9.12";
+const VERSION="0.9.12", KEY="loona.benchmark", RESULT=KEY+".result", ERROR=KEY+".error";
 const ns="http://www.w3.org/2000/svg";
 const finite=value=>typeof value==="number" && Number.isFinite(value) && value>=0;
 const median=values=>{ const rows=values.filter(finite).sort((a,b)=>a-b); return rows.length ? (rows[Math.floor((rows.length-1)/2)]+rows[Math.floor(rows.length/2)])/2 : null; };
@@ -17,19 +17,71 @@ export function benchmarkMetrics(report) {
   const samples=scored(report), modes=["native","loona"].map(mode=>samples.filter(row=>row.mode===mode));
   return [
     {label:"Visible cards ready",unit:"s",values:modes.map(rows=>rows.map(row=>row.issues.length || !finite(row.ready_ms) ? null : row.ready_ms/1000)),timing:true},
-    {label:"Initial dashboard data",unit:"KB",values:modes.map(rows=>rows.map(row=>(row.initial_bytes+row.registry_bytes)/1000)),extras:modes.map(rows=>median(rows.map(row=>row.initial_entities))),extra:"{count} entities"},
-    {label:"Card files loaded",unit:"KB",values:modes.map(rows=>rows.map(row=>{const value=bytes(row.resources);return value===null ? null : value/1000;})),extras:modes.map(rows=>median(rows.map(row=>row.resources.length))),extra:"{count} card files"},
-    {label:"Live updates",unit:"updates/s",values:modes.map(rows=>rows.map(row=>row.updates/(row.duration_ms/1000))),inactive:modes.every(rows=>rows.every(row=>row.updates===0))},
-    {label:"Browser blocking",unit:"ms",values:modes.map(rows=>rows.map(row=>row.loaf_supported ? row.blocking_ms : null)),timing:true}
+    {label:"Initial dashboard data",unit:"KB",values:modes.map(rows=>rows.map(row=>(row.initial_bytes+row.registry_bytes)/1000)),extras:modes.map(rows=>median(rows.map(row=>row.initial_entities))),extra:"{count} entities",less:"{percent}% less data",more:"{percent}% more data"},
+    {label:"Card files loaded",unit:"KB",values:modes.map(rows=>rows.map(row=>{const value=bytes(row.resources);return value===null ? null : value/1000;})),extras:modes.map(rows=>median(rows.map(row=>row.resources.length))),extra:"{count} card files",less:"{percent}% less file data",more:"{percent}% more file data"},
+    {label:"Live updates",unit:"updates/s",values:modes.map(rows=>rows.map(row=>row.updates/(row.duration_ms/1000))),inactive:modes.every(rows=>rows.every(row=>row.updates===0)),less:"{percent}% fewer updates",more:"{percent}% more updates"},
+    {label:"Browser blocking",unit:"ms",values:modes.map(rows=>rows.map(row=>row.loaf_supported ? row.blocking_ms : null)),timing:true,unsupported:samples.length>0 && samples.every(row=>!row.loaf_supported)}
   ].map(metric=>{
     const values=metric.values.map(median), complete=metric.values.every(rows=>rows.length>=3 && rows.every(finite));
-    let status="Comparison available";
-    if(!complete) status="Incomplete measurement";
+    let status="No measurable change", percent=null;
+    if(metric.unsupported) status="Not supported in this browser";
+    else if(!complete) status="Incomplete measurement";
     else if(metric.inactive) status="No updates observed";
-    else if(values[0]===values[1]) status="No measurable change";
-    else if(metric.timing && Math.max(Math.min(...metric.values[0]),Math.min(...metric.values[1]))<=Math.min(Math.max(...metric.values[0]),Math.max(...metric.values[1]))) status="Inconclusive";
-    return {...metric,medians:values,status};
+    else if(metric.timing && (values[0]!==values[1]) && Math.max(Math.min(...metric.values[0]),Math.min(...metric.values[1]))<=Math.min(Math.max(...metric.values[0]),Math.max(...metric.values[1]))) status="No clear timing difference";
+    else if(values[0]!==values[1]) {
+      percent=values[0]>0 ? Math.abs(100*(values[1]-values[0])/values[0]) : null;
+      status=metric.timing ? (values[1]<values[0] ? "Less time observed" : "More time observed") : finite(percent) ? (values[1]<values[0] ? metric.less : metric.more) : "More observed with Loona";
+    }
+    return {...metric,medians:values,status,percent};
   });
+}
+const metricStatus=(metric,hass)=>text(hass,metric.status,{percent:fmt(hass,metric.percent,0)});
+const valueLabel=(metric,hass,mode)=>{
+  const value=metric.medians[mode];
+  let result=fmt(hass,value)+(finite(value) ? " "+text(hass,metric.unit) : "");
+  if(metric.extras) result=text(hass,metric.extra,{count:fmt(hass,metric.extras[mode],0)})+" · "+result;
+  return result;
+};
+const settingsLabels={enabled:"Enabled",entity_filtering:"Entity filtering",current_dashboard_updates:"Live updates for current tab only",registry_filtering:"Device and area filtering",resource_filtering:"Skip unused card files",delay_card_resources:"Load current tab first",preload_card_resources:"Preload card files",visible_first_graphs:"Delay graph loading",pause_animations_during_loading:"Pause animations during loading",pause_offscreen_animations:"Pause off-screen animations",idle_updates:"Idle mode",dashboard_cards:"Loona dashboard cards",dashboards:"Dashboards",target_mode:"Apply filtering to",user_ids:"Accounts",extra_entities:"Entities",include_domains:"Entity types",include_globs:"Entities to include",exclude_globs:"Entities to exclude",always_forward_resources:"Extra card files to load",idle_after_minutes:"Idle after (minutes)",idle_refresh_seconds:"Idle refresh (seconds)"};
+const cardLabels={benchmark:"Loona benchmark",settings:"Loona settings",statistics:"Loona statistics"};
+const methods=["Reloads use the browser cache. This is not a cold-cache or hard-refresh test.","Readiness means known visible cards have mounted and loading indicators have settled. Cameras, charts and custom content may still be loading.","JSON sizes are logical UTF-8 message sizes, before network compression. Card file sizes are decoded content sizes when the browser exposes them.","Browser blocking uses Long Animation Frames. It does not measure total CPU, GPU, memory, battery or all response delays.","Each mode gets a warm-up, then three alternating pairs. Live activity can differ between passes. Overlapping timing ranges are inconclusive.","Idle savings appear only if the configured idle threshold is reached. This test does not isolate the benefit of each setting."];
+export function benchmarkSections(report,hass) {
+  const t=(key,values)=>text(hass,key,values), sections=[];
+  if(!report) return [{title:"",lines:methods.map(key=>t(key))}];
+  if(report.error) return [{title:t("Executive summary"),lines:[t("No valid comparison was completed."),t(report.reason||"Benchmark interrupted"),t("Start over to run a new comparison.")]}];
+  const metrics=benchmarkMetrics(report);
+  sections.push({title:t("Executive summary"),lines:metrics.map(metric=>t("{label}: {status}. Native HA: {native}; Loona: {loona}.",{label:t(metric.label),status:metricStatus(metric,hass),native:valueLabel(metric,hass,0),loona:valueLabel(metric,hass,1)}))});
+  const names=report.names||{}, settings=report.settings||{};
+  sections.push({title:t("Test details"),lines:[t("Dashboard: {dashboard}; tab: {view}",{dashboard:report.dashboard_title||t("Unavailable"),view:report.view_title||t("Unavailable")}),`Loona ${version(report.version)} · HA ${version(report.core_version)}`,t("Completed: {date}",{date:report.completed_at ? new Date(report.completed_at).toLocaleString(language(hass)) : t("Unavailable")}),t("{pairs} pairs · {seconds}s observation · cached reloads",{pairs:Math.floor(scored(report).length/2),seconds:report.seconds})]});
+  const advice=[];
+  for(const metric of metrics) {
+    if(metric.status==="No clear timing difference" || metric.timing && metric.status==="No measurable change") advice.push(t("The loading or blocking times are similar or overlap across passes. This does not indicate an interrupted test. Data savings can still be measured without a proven speed improvement."));
+    if(metric.unsupported) advice.push(t("This browser does not expose Long Animation Frames. Blocking is unavailable; the other comparisons remain valid. Use a browser supporting this API to measure blocking."));
+    if(metric.status==="Incomplete measurement") advice.push(t(metric.label)+": "+t(metric.label==="Card files loaded" ? "Some servers hide file sizes. File counts are still available; use the browser Network panel to inspect sizes." : "Fewer than three valid readings are available. Resolve the issues below and repeat the test."));
+    if(metric.inactive) advice.push(t("No live updates were observed. Repeat while the dashboard entities are changing."));
+  }
+  for(const issue of new Set((report.samples||[]).flatMap(row=>row.issues||[]))) advice.push(t(issueMessages[issue]||"Incomplete measurement"));
+  sections.push({title:t("Interpretation and next steps"),lines:[...new Set(advice),t("To inspect individual card files, open Settings > Dashboards > Resources, or filter the browser Network panel to JavaScript and reload. The comparison above reports totals without repeating files for every pass.")]});
+  const settingLines=Object.entries({...report.controls,...settings}).filter(([key])=>settingsLabels[key]).map(([key,value])=>{
+    let display;
+    if(typeof value==="boolean") display=t(value ? "Enabled" : "Disabled");
+    else if(key==="target_mode") display=t(value==="all" ? "All accounts" : "Selected accounts");
+    else if(key==="user_ids" && settings.target_mode==="all") display=t("All accounts");
+    else if(Array.isArray(value)) display=value.map(item=>key==="dashboard_cards" ? t(cardLabels[item]||item) : names[key]?.[item]||hass?.states?.[item]?.attributes?.friendly_name||item).join(", ")||t("None");
+    else display=String(value);
+    return t("{key}: {value}",{key:t(settingsLabels[key]),value:display});
+  });
+  sections.push({title:t("Saved settings"),lines:settingLines});
+  sections.push({title:t("Individual passes"),lines:scored(report).map((row,index)=>t("Pass {pass} of {total}",{pass:index+1,total:scored(report).length})+" · "+(row.mode==="native" ? "Native HA" : "Loona")+" · "+t("Ready: {ready}s; data: {data} KB; files: {files}; updates: {updates}; blocking: {blocking} ms.",{ready:fmt(hass,finite(row.ready_ms) ? row.ready_ms/1000 : null),data:fmt(hass,(row.initial_bytes+row.registry_bytes)/1000),files:fmt(hass,row.resources.length,0),updates:fmt(hass,row.updates,0),blocking:fmt(hass,row.loaf_supported ? row.blocking_ms : null)}))});
+  const first=scored(report)[0];
+  sections.push({title:t("Measurement limits"),lines:[...methods.map(key=>t(key)),...(first ? [t("Browser: {browser}; viewport: {width} x {height}",{browser:first.browser,width:first.viewport[0],height:first.viewport[1]})] : [])]});
+  return sections;
+}
+export const benchmarkText=(report,hass)=>benchmarkSections(report,hass).map(section=>(section.title ? section.title+"\n" : "")+section.lines.join("\n")).join("\n\n");
+export function benchmarkFilename(report,extension) {
+  const name=String(report.dashboard_title||route()?.dashboard||"dashboard").normalize("NFKC").replace(/[^\p{L}\p{N}_-]+/gu,"-").replace(/^-+|-+$/g,"").slice(0,80)||"dashboard";
+  const date=new Date(report.completed_at||0), stamp=(Number.isFinite(date.getTime()) ? date : new Date(0)).toISOString().replace(/[-:]/g,"").replace(/\.\d{3}Z$/,"Z");
+  return `loona-${version(report.version||VERSION)}-benchmark-${name}-${stamp}.${extension}`;
 }
 // All report strings are fixed messages or validated version numbers. Private details never enter this tree.
 export function benchmarkSvg(report,hass,width=360,colors={}) {
@@ -39,15 +91,15 @@ export function benchmarkSvg(report,hass,width=360,colors={}) {
   const root=svgNode("svg",{xmlns:ns,viewBox:`0 0 ${width} ${height}`,width,height,role:"img","aria-label":text(hass,"Benchmark Results")});
   root.append(svgNode("rect",{width,height,fill:c.background}));
   const label=(value,x,y,size=14,color=c.text,weight=400)=>{const node=svgNode("text",{x,y,fill:color,"font-size":size,"font-family":"Arial, sans-serif","font-weight":weight},value);root.append(node);return node;};
-  label(text(hass,"Benchmark Results"),18,36,20,c.text,600).setAttribute("data-title", "");
+  label(text(hass,"Benchmark Results"),76,32,width<330 ? 18 : 20,c.text,600).setAttribute("data-title", "");
+  label(`Loona ${version(report.version||VERSION)}`,76,53,12,c.secondary);
   if(report.error) {
     label(text(hass,"Benchmark interrupted"),18,82,16,c.text,600);
     label(text(hass,"No valid comparison was completed."),18,108,12,c.secondary);
     label(text(hass,"See the detailed report for recovery steps."),18,140,12,c.secondary);
     return root;
   }
-  const partial=metrics.some(metric=>["Incomplete measurement","Inconclusive"].includes(metric.status));
-  label(text(hass,partial ? "Some results are inconclusive" : "Native HA and current Loona settings"),18,76,12,c.secondary);
+  label(text(hass,"Native HA and current Loona settings"),18,80,12,c.secondary);
   const legendY=104;
   root.append(svgNode("rect",{x:18,y:legendY-9,width:12,height:8,fill:c.secondary,rx:2})); label("Native HA",36,legendY,12,c.secondary);
   root.append(svgNode("rect",{x:width/2,y:legendY-9,width:12,height:8,fill:c.accent,rx:2})); label("Loona",width/2+18,legendY,12,c.secondary);
@@ -56,13 +108,12 @@ export function benchmarkSvg(report,hass,width=360,colors={}) {
     label(text(hass,metric.label),18,y,15,c.text,600);
     available.forEach((value,mode)=>{
       const lineY=y+24+mode*32;
-      let valueText=fmt(hass,value)+(finite(value) ? " "+text(hass,metric.unit) : "");
-      if(metric.extras) valueText=text(hass,metric.extra,{count:fmt(hass,metric.extras[mode],0)})+" · "+valueText;
+      const valueText=valueLabel(metric,hass,mode);
       label(valueText,18,lineY,12,c.secondary);
       root.append(svgNode("rect",{x:18,y:lineY+6,width:barWidth,height:6,fill:c.divider,rx:3}));
       if(finite(value) && value>0) root.append(svgNode("rect",{x:18,y:lineY+6,width:barWidth*value/max,height:6,fill:mode ? c.accent : c.secondary,rx:3}));
     });
-    label(text(hass,metric.status),18,y+99,12,c.secondary);
+    label(metricStatus(metric,hass),18,y+99,12,c.secondary);
   });
   root.append(svgNode("line",{x1:18,x2:width-18,y1:758,y2:758,stroke:c.divider}));
   label(`HA ${version(report.core_version)} · Loona ${version(report.version)}`,18,780,12,c.secondary);
@@ -87,12 +138,12 @@ function install() {
       ha-card { padding:24px; overflow:hidden; user-select:text; -webkit-user-select:text; }
       h2 { margin:0; font-size:20px; line-height:1.35; font-weight:500; }
       p { line-height:1.5; margin:14px 0; } .muted,#version { color:var(--secondary-text-color); }
-      .actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; } .secondary { margin-top:8px; }
+      .actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:16px; } .secondary { margin-top:8px; } .actions button { width:100%; justify-content:center; } .actions button:only-child { grid-column:1 / -1; }
       #status { margin:16px 0 8px; min-height:24px; } progress { width:100%; height:8px; accent-color:var(--primary-color); }
       details { border-top:1px solid var(--divider-color); margin-top:20px; padding-top:8px; }
-      summary { cursor:pointer; min-height:44px; line-height:44px; font-weight:500; }
+      summary { cursor:pointer; min-height:44px; line-height:1.5; padding:10px 0; box-sizing:border-box; font-weight:500; }
       summary:focus-visible { outline:2px solid var(--primary-color); outline-offset:3px; }
-      #details p { font-size:14px; overflow-wrap:anywhere; } #details h3 { font-size:15px; margin:24px 0 8px; }
+      #details { max-height:min(360px,50vh); overflow-y:auto; overscroll-behavior:contain; scrollbar-color:var(--secondary-text-color) var(--card-background-color); } #details:focus-visible { outline:2px solid var(--primary-color); outline-offset:-2px; } #details p { font-size:14px; overflow-wrap:anywhere; } #details h3 { font-size:15px; margin:24px 0 8px; } #details h3:first-child { margin-top:8px; } #text-actions { margin-top:12px; } details:not([open]) #text-actions { display:none; }
       #report svg { display:block; width:100%; height:auto; } #report { margin:-6px -6px 0; }
       #message { color:var(--primary-text-color); overflow-wrap:anywhere; } .error { font-weight:500; }
       @media(max-width:480px) { ha-card { padding:16px; } }
@@ -100,7 +151,7 @@ function install() {
       <div id="intro"></div><p id="message" role="status" aria-live="polite" hidden></p>
       <div id="progress" hidden><p id="status" role="status" aria-live="polite"></p><progress max="100" value="0" aria-label="Benchmark progress"></progress></div>
       <div id="report"></div><div class="actions" id="actions"></div><div class="actions secondary" id="secondary"></div>
-      <details id="disclosure"><summary></summary><div id="details"></div></details></ha-card>`;
+      <details id="disclosure"><summary></summary><div id="details" tabindex="0" role="region" aria-label="Detailed report"></div><div class="actions" id="text-actions"></div></details></ha-card>`;
   }
   setConfig(config) { this._config={...config,type:"custom:loona-benchmark-card"}; }
   getCardSize() { return this._report && !this._report.error ? 15 : 4; }
@@ -122,7 +173,7 @@ function install() {
     const target=route(), latest=stored();
     this._report=matches(target,latest) && latest.owner===this._hass?.user?.id ? latest.report : null;
     const historyKey=this._historyKey();
-    if(sessionStorage.getItem(ERROR)) {this._report={error:true,samples:[],controls:{}};return;}
+    if(sessionStorage.getItem(ERROR)) {this._report=this._errorReport(sessionStorage.getItem(ERROR));return;}
     if(this._hass?.user?.is_admin && historyKey) {
       if(this._report) { try { const history=read(localStorage,`${RESULT}.history.${this._hass.user.id}`)||[];const keys=[historyKey,...history.filter(key=>key!==historyKey)].slice(0,this._report.history_limit||1);for(const key of history) if(!keys.includes(key)) localStorage.removeItem(key);localStorage.setItem(`${RESULT}.history.${this._hass.user.id}`,JSON.stringify(keys));localStorage.setItem(historyKey,JSON.stringify(this._report)); } catch { /* Session result remains available. */ } }
       else this._report=read(localStorage,historyKey);
@@ -135,15 +186,15 @@ function install() {
     if(!this.isConnected || !this._hass) return;
     const root=this.shadowRoot, t=key=>text(this._hass,key), state=window.loonaBenchmark;
     const running=!this._dialogReport && state && ["authorizing","loading","observing","saving","paused"].includes(state.status);
-    if(state?.status==="error" && !this._dialogReport) this._report={error:true,samples:[],controls:{}};
+    if(state?.status==="error" && !this._dialogReport) this._report=this._errorReport(state.reason);
     root.querySelector("header").hidden=Boolean(this._report && !running);
-    root.querySelector("h2").textContent=t("Benchmark this dashboard");root.querySelector("#version").textContent=t("Version: {version}").replace("{version}",VERSION);
+    root.querySelector("h2").textContent=t("Benchmark this dashboard");root.querySelector("#version").textContent=text(this._hass,"Version: {version}",{version:VERSION});
     const intro=root.querySelector("#intro"),actions=root.querySelector("#actions"),secondary=root.querySelector("#secondary");
     intro.replaceChildren();if(!running || !this._wasRunning) actions.replaceChildren();secondary.replaceChildren();
     root.querySelector("#progress").hidden=!running;
     root.querySelector("#report").hidden=Boolean(running);
     const disclosure=root.querySelector("#disclosure");disclosure.hidden=Boolean(running);
-    root.querySelector("summary").textContent=t(this._report ? "Detailed report (may contain private information)" : "What will be measured");
+    root.querySelector("summary").textContent=t(this._report ? "Detailed report" : "What will be measured");
     if(running) {
       const current=state.report?.sequence?.[state.index];
       const phase=state.status==="paused" ? "Paused. Return to this page to repeat this pass." : state.status==="observing" ? "Observing" : state.status==="saving" ? "Saving pass" : "Loading dashboard";
@@ -155,15 +206,14 @@ function install() {
       this._message("");return;
     }
     this._wasRunning=false;
-    this._message(this._error || (state?.status==="error" ? state.reason : sessionStorage.getItem(ERROR)));
+    this._message(this._report ? "" : this._error);
     if(!this._hass.user?.is_admin) {
       this._report=null;this._p(intro,"Sign in as an administrator to benchmark this dashboard.");disclosure.hidden=true;root.querySelector("#report").replaceChildren();return;
     }
     if(this._report) {
       this._draw();
-      this._button(actions,"Copy","copy","",()=>this._copy(),!globalThis.ClipboardItem || !navigator.clipboard?.write);
+      this._button(actions,"Copy","copy","",()=>this._copy());
       this._button(actions,"Save","download","primary",()=>this._save());
-      if(!globalThis.ClipboardItem || !navigator.clipboard?.write) this._p(intro,"Clipboard copying needs a secure browser connection. Save the PNG instead.");
       if(!this._dialogReport) {
         this._button(secondary,"Start over","reset","quiet",()=>this._startOver());
         this._button(secondary,"Remove","trash","quiet",()=>this._remove());
@@ -177,42 +227,30 @@ function install() {
     this._details();
   }
   _p(root,key,values) { const p=document.createElement("p");p.textContent=text(this._hass,key,values);root.append(p);return p; }
+  _errorReport(reason) { return {error:true,reason,version:VERSION,completed_at:new Date().toISOString(),samples:[],controls:{}}; }
   _details() {
-    const root=this.shadowRoot.querySelector("#details");root.replaceChildren();
-    for(const key of ["Reloads use the browser cache. This is not a cold-cache or hard-refresh test.","Readiness means known visible cards have mounted and loading indicators have settled. Cameras, charts and custom content may still be loading.","JSON sizes are logical UTF-8 message sizes, before network compression. Card file sizes are decoded content sizes when the browser exposes them.","Browser blocking uses Long Animation Frames. It does not measure total CPU, GPU, memory, battery or all response delays.","Each mode gets a warm-up, then three alternating pairs. Live activity can differ between passes. Overlapping timing ranges are inconclusive.","Idle savings appear only if the configured idle threshold is reached. This test does not isolate the benefit of each setting."]) this._p(root,key);
-    if(!this._report) return;
-    const metrics=benchmarkMetrics(this._report);
-    for(const metric of metrics) if(metric.status!=="Comparison available") {
-      this._p(root,metric.label).style.fontWeight="600";
-      this._p(root,metric.status);
-      if(metric.status==="Incomplete measurement") this._p(root,"A required reading is unavailable. Check the per-pass issues below. For blocking measurements use a browser that supports Long Animation Frames; file sizes may be hidden by cross-origin servers.");
-      if(metric.status==="Inconclusive") this._p(root,"Timing ranges overlap. Close other busy applications, keep the same viewport and repeat the test.");
-      if(metric.status==="No updates observed") this._p(root,"No live updates were observed. Repeat while the dashboard entities are changing.");
+    const root=this.shadowRoot.querySelector("#details"),actions=this.shadowRoot.querySelector("#text-actions");root.replaceChildren();actions.replaceChildren();
+    root.setAttribute("aria-label",text(this._hass,"Detailed report"));
+    for(const section of benchmarkSections(this._report,this._hass)) {
+      if(section.title) {const h=document.createElement("h3");h.textContent=section.title;root.append(h);}
+      for(const line of section.lines) {const p=document.createElement("p");p.textContent=line;root.append(p);}
     }
-    const heading=document.createElement("h3");heading.textContent=text(this._hass,"Saved settings");root.append(heading);
-    for(const [key,value] of Object.entries(this._report.controls||{})) this._p(root,"{key}: {value}",{key,value:text(this._hass,value ? "Enabled" : "Disabled")});
-    const settings=document.createElement("p");settings.textContent=JSON.stringify(this._report.settings||{});root.append(settings);
-    this._report.samples.forEach((row,index)=>{
-      const h=document.createElement("h3");h.textContent=`${text(this._hass,"Pass {pass} of {total}",{pass:index+1,total:this._report.samples.length})} · ${row.mode==="native" ? "Native HA" : "Loona"}${row.warmup ? " · "+text(this._hass,"Warm-up (excluded)") : ""}`;root.append(h);
-      this._p(root,"Ready: {ready}s; observation: {duration}s; initial entities: {entities}; initial JSON: {initial} KB; registry JSON: {registry} KB; live updates: {updates} ({bytes} KB).",{ready:fmt(this._hass,row.ready_ms===null ? null : row.ready_ms/1000),duration:fmt(this._hass,row.duration_ms/1000),entities:fmt(this._hass,row.initial_entities,0),initial:fmt(this._hass,row.initial_bytes/1000),registry:fmt(this._hass,row.registry_bytes/1000),updates:fmt(this._hass,row.updates,0),bytes:fmt(this._hass,row.update_bytes/1000)});
-      this._p(root,"Startup blocking: {startup} ms; observation blocking: {live} ms; long frames: {frames}.",{startup:fmt(this._hass,row.loaf_supported ? row.startup_blocking_ms : null),live:fmt(this._hass,row.loaf_supported ? row.blocking_ms : null),frames:fmt(this._hass,row.startup_frames+row.frames,0)});
-      for(const issue of row.issues) this._p(root,issueMessages[issue]||"Incomplete measurement");
-      this._p(root,"Browser: {browser}; viewport: {width} x {height}",{browser:row.browser,width:row.viewport[0],height:row.viewport[1]});
-      for(const file of row.resources) this._p(root,"{source}: {bytes} KB ({phase}, {cache})",{source:file.source,bytes:fmt(this._hass,file.bytes===null ? null : file.bytes/1000),phase:text(this._hass,file.before_ready ? "before measuring" : "while measuring"),cache:text(this._hass,file.cached ? "Cached" : "Downloaded")});
-      for(const script of row.scripts) this._p(root,"{source} ({phase}): {ms} ms",{source:script.source,phase:text(this._hass,script.phase==="startup" ? "before measuring" : "while measuring"),ms:fmt(this._hass,script.duration_ms)});
-    });
+    if(this._report) {
+      this._button(actions,"Copy text","copy","quiet",()=>this._copyText());
+      this._button(actions,"Save text","download","quiet",()=>this._saveText());
+    }
   }
   _draw() {
     if(!this._report || !this._hass?.user?.is_admin) return;
     const style=getComputedStyle(this), colors={};
     for(const [key,name,fallback] of [["background","--card-background-color","#fff"],["text","--primary-text-color","#212121"],["secondary","--secondary-text-color","#555"],["accent","--primary-color","#007da8"],["divider","--divider-color","#ddd"]]) colors[key]=style.getPropertyValue(name).trim()||fallback;
     const root=this.shadowRoot.querySelector("#report"),width=Math.max(280,root.getBoundingClientRect().width||360);
-    this._svg=benchmarkSvg(this._report,this._hass,width,colors);root.replaceChildren(this._svg);this._png=null;
+    this._svg=benchmarkSvg(this._report,this._hass,width,colors);root.replaceChildren(this._svg);
     const placeLogo=()=>{
       if(!this._logo || !this._svg || this._svg.querySelector("image")) return;
       this._svg.append(svgNode("image",{x:18,y:12,width:44,height:44,href:this._logo}));
       this._svg.querySelector("[data-title]").setAttribute("x",76);
-      this._svg.querySelector("[data-title]").setAttribute("font-size",width<330 ? 18 : 20);this._png=null;
+      this._svg.querySelector("[data-title]").setAttribute("font-size",width<330 ? 18 : 20);
     };
     placeLogo();
     const mark=this.shadowRoot.querySelector(".mark");
@@ -236,7 +274,7 @@ function install() {
       this._error=err.message||err.code||text(this._hass,"Benchmark could not start. Refresh and try again.");this._busy=false;this._render();
     }
   }
-  _startOver() { this._report=null;this._error=null;sessionStorage.removeItem(RESULT);sessionStorage.removeItem(ERROR);const key=this._historyKey();if(key) localStorage.removeItem(key);this._render(); }
+  _startOver() { if(window.loonaBenchmark && ["error","cancelled","complete"].includes(window.loonaBenchmark.status)) delete window.loonaBenchmark;this._report=null;this._error=null;this._busy=false;this._png=null;this._pngReport=null;this.shadowRoot.querySelector("#disclosure").open=false;this.shadowRoot.querySelector("#details").scrollTop=0;sessionStorage.removeItem(RESULT);sessionStorage.removeItem(ERROR);const key=this._historyKey();if(key) localStorage.removeItem(key);this._render(); }
   async _remove() {
     if(!await confirmAction(this,"Remove benchmark card?","Remove this benchmark card from this tab? Saved PNGs are kept.","Remove")) return;
     try { await this._hass.callWS({type:"loona/benchmark",action:"remove",...route(),card:this._config}); }
@@ -244,17 +282,49 @@ function install() {
   }
   async _blob() {
     await this._logoPromise;
-    if(this._png) return this._png;
-    const root=this._svg.cloneNode(true), image=new Image();
+    if(this._png && this._pngReport===this._report && this._pngLanguage===language(this._hass)) return this._png;
+    const report=this._report;
+    // Export dimensions and paint belong to the result, never to its card or dialog container.
+    const root=benchmarkSvg(report,this._hass,420,report.export_colors||{background:"#1c1c1c",text:"#e1e1e1",secondary:"#aaaaaa",accent:"#009ac7",divider:"#333333"}),image=new Image();
+    if(this._logo) root.append(svgNode("image",{x:18,y:12,width:44,height:44,href:this._logo}));
     const url=URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(root)],{type:"image/svg+xml;charset=utf-8"}));
     try {
       image.src=url;await image.decode();const canvas=document.createElement("canvas");canvas.width=Number(root.getAttribute("width"))*2;canvas.height=Number(root.getAttribute("height"))*2;
       canvas.getContext("2d").drawImage(image,0,0,canvas.width,canvas.height);
-      this._png=await new Promise((resolve,reject)=>canvas.toBlob(blob=>blob ? resolve(blob) : reject(new Error("PNG export failed")),"image/png"));return this._png;
+      const blob=await new Promise((resolve,reject)=>canvas.toBlob(value=>value ? resolve(value) : reject(new Error("PNG export failed")),"image/png"));
+      this._png=blob;this._pngReport=report;this._pngLanguage=language(this._hass);return blob;
     } finally { URL.revokeObjectURL(url); }
   }
-  async _copy() { try { await navigator.clipboard.write([new ClipboardItem({"image/png":this._blob()})]);this._message(text(this._hass,"PNG copied.")); } catch {this._message(text(this._hass,"Could not copy the PNG. Save it instead."));} }
-  async _save() { try {const url=URL.createObjectURL(await this._blob()),link=document.createElement("a");link.href=url;link.download="loona-benchmark.png";link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);} catch {this._message(text(this._hass,"PNG export failed. Start over and try again."));} }
+  async _copy() {
+    if(globalThis.ClipboardItem && navigator.clipboard?.write) {
+      try { await navigator.clipboard.write([new ClipboardItem({"image/png":this._blob()})]);this._message(text(this._hass,"PNG copied."));return; } catch { /* Native image copying remains available. */ }
+    }
+    try {
+      const url=URL.createObjectURL(await this._blob()),dialog=document.createElement("dialog"),image=document.createElement("img"),instructions=document.createElement("p"),close=makeButton(this._hass,"Close","cancel","quiet");
+      dialog.style.cssText="box-sizing:border-box;max-width:calc(100vw - 32px);max-height:calc(100vh - 32px);overflow:auto;padding:16px;border:0;border-radius:12px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#212121);font:inherit;line-height:1.5";
+      dialog.dataset.loonaCopy="";
+      const style=document.createElement("style");style.textContent=buttonStyles.replaceAll(".btn","dialog[data-loona-copy] .btn");dialog.append(style);
+      instructions.textContent=text(this._hass,"Right-click the image and choose Copy Image. On a touch screen, touch and hold the image.");
+      image.src=url;image.alt=text(this._hass,"Benchmark Results");image.style.cssText="display:block;max-width:100%;width:420px;height:auto;margin:12px 0";
+      dialog.setAttribute("aria-label",text(this._hass,"Copy image"));close.addEventListener("click",()=>dialog.close());dialog.append(instructions,image,close);document.body.append(dialog);
+      dialog.addEventListener("close",()=>{URL.revokeObjectURL(url);dialog.remove();},{once:true});dialog.showModal();
+    } catch {this._message(text(this._hass,"PNG export failed. Start over and try again."));}
+  }
+  _download(blob,extension) {const url=URL.createObjectURL(blob),link=document.createElement("a");link.href=url;link.download=benchmarkFilename(this._report,extension);link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+  async _save() { try {this._download(await this._blob(),"png");} catch {this._message(text(this._hass,"PNG export failed. Start over and try again."));} }
+  async _copyText() {
+    const value=benchmarkText(this._report,this._hass);
+    try {
+      if(navigator.clipboard?.writeText) await navigator.clipboard.writeText(value);
+      else {
+        const input=document.createElement("textarea"),focus=document.activeElement;input.value=value;input.style.cssText="position:fixed;top:0;left:0;opacity:0";this.shadowRoot.append(input);input.select();
+        try {if(!document.execCommand("copy")) throw new Error("Copy unavailable");} finally {input.remove();focus?.focus();}
+      }
+      this._message(text(this._hass,"Text copied."));
+    } catch {this._message(text(this._hass,"Could not copy the text. Save the text instead."));}
+  }
+  _saveText() {this._download(new Blob([benchmarkText(this._report,this._hass)],{type:"text/plain;charset=utf-8"}),"txt");}
+
 }
   customElements.define("loona-benchmark-card",BenchmarkCard);
   window.customCards=window.customCards||[];

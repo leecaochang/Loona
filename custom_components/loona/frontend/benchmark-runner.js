@@ -209,6 +209,12 @@
     try {
       const result=await connection.sendMessagePromise({type:"loona/benchmark",action:"pass",token:marker.token,index:marker.index,sample});
       if (result.status==="complete") {
+        const style=getComputedStyle(document.querySelector("home-assistant")||document.documentElement);
+        result.export_colors={};
+        for(const [name,property] of [["background","--card-background-color"],["text","--primary-text-color"],["secondary","--secondary-text-color"],["accent","--primary-color"],["divider","--divider-color"]]) {
+          const color=style.getPropertyValue(property).trim();
+          if(/^(#[0-9a-f]{3,8}|rgba?\([\d.,% ]+\))$/i.test(color)) result.export_colors[name]=color;
+        }
         sessionStorage.setItem("loona.benchmark.result",JSON.stringify({owner:marker.owner,dashboard:marker.dashboard,view:marker.view,report:result}));
         sessionStorage.removeItem(key);
       } else { marker.index=result.index; write(); }

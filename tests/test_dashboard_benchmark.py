@@ -41,6 +41,9 @@ async def test_owner_connection_local_native_order_and_cleanup(benchmark_runtime
     other, _ = make_connection(user)
     stranger, _ = make_connection(make_user(admin=True))
     result = await manager.execute(owner, dict(action="start", dashboard="wall-panel", view="main"))
+    assert result["dashboard_title"] == "Wall"
+    assert result["view_title"] == "main"
+    assert result["names"]["dashboards"]["wall-panel"] == "Wall"
     token = result["token"]
     assert [row["mode"] for row in result["sequence"]] == ["native", "loona", "native", "loona", "loona", "native", "native", "loona"]
     with pytest.raises(ValueError, match="unavailable"):

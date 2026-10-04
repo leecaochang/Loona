@@ -1,7 +1,7 @@
 /* Native-themed live filtering statistics. */
-import { language, text, translate, renderNotices, renderVersion, markHtml, markStyles, hideBrokenMark, icon, buttonStyles, cardPreferences, saveCardPreferences, setText, formatNumber, formatDateTime, confirmAction, cancelConfirmation, createHelp, closeHelp, helpStyles } from "./i18n.js?v=0.9.11";
+import { language, text, translate, renderNotices, renderVersion, markHtml, markStyles, hideBrokenMark, icon, buttonStyles, cardPreferences, saveCardPreferences, setText, formatNumber, formatDateTime, confirmAction, cancelConfirmation, createHelp, closeHelp, helpStyles } from "./i18n.js?v=0.9.12";
 
-const cardVersion = "0.9.11";
+const cardVersion = "0.9.12";
 const command = "loona/statistics";
 const elementName = "loona-statistics-card";
 
