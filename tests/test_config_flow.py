@@ -210,7 +210,7 @@ async def test_restore_initial_choices_and_empty_exceptions_preserves_other_opti
     assert result["data"] == {"extra_entities": ["sensor.future"]}
 
 
-@pytest.mark.parametrize("cards", [[], ["statistics"], ["settings"], ["statistics", "settings"]])
+@pytest.mark.parametrize("cards", [[], ["statistics"], ["settings"], ["statistics", "settings"], ["benchmark"], ["settings", "statistics", "benchmark"]])
 async def test_optional_card_selections(loona_hass, cards):
     flow = LoonaConfigFlow()
     flow.hass, flow.handler, flow.context = loona_hass, "loona", {"source": "user"}

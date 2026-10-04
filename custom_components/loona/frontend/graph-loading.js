@@ -1,12 +1,12 @@
-import { StartupMotion } from "./startup-motion.js?v=0.9.9";
-import { OffscreenMotion } from "./offscreen-motion.js?v=0.9.9";
-import { text } from "./i18n.js?v=0.9.9";
+import { StartupMotion } from "./startup-motion.js?v=0.9.10";
+import { OffscreenMotion } from "./offscreen-motion.js?v=0.9.10";
+import { text } from "./i18n.js?v=0.9.10";
 
 // Probe the native card container before enabling optional graph scheduling.
 // Dashboard configuration and loaded card elements remain native.
 if (!window[Symbol.for("loona.graph-loading")]) {
   window[Symbol.for("loona.graph-loading")] = true;
-  const moduleVersion = "0.9.9";
+  const moduleVersion = "0.9.10";
   const motion = new StartupMotion(moduleVersion);
   const offscreen = new OffscreenMotion(moduleVersion,motion);
   const capability = window.__loonaGraphCapability = { status: "pending", enabled: false };

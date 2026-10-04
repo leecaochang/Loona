@@ -34,6 +34,7 @@ from homeassistant.helpers.event import async_call_later, async_track_time_inter
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
+from .benchmark import BenchmarkManager
 from .compatibility import CompatibilityError
 from .const import (
     CONTROL_DASHBOARD_LIVE,
@@ -117,6 +118,7 @@ class LoonaRuntime:
         self.statistics_card = StatisticsCard(hass, entry.entry_id)
         self.statistics_card_problem: str | None = None
         self.adapter: SubscriptionAdapter | None = None
+        self.benchmark = BenchmarkManager(self)
         self.panel_context = PanelContext(hass, self._panel_changed)
         self.panel_context.resource_plan = self.resource_loading_plan
         self.panel_context.idle_policy = self.idle_policy
@@ -237,7 +239,7 @@ class LoonaRuntime:
             )
         )
         await self.async_scan()
-        adapter = SubscriptionAdapter(self.hass, self._policy(), self.live_statistics, self.panel_context.active, self._delivery_scope, self._idle)
+        adapter = SubscriptionAdapter(self.hass, self._policy(), self.live_statistics, self._dashboard_active, self._delivery_scope, self._idle)
         try:
             adapter.install()
         except CompatibilityError as err:
@@ -249,7 +251,7 @@ class LoonaRuntime:
                 self._policy(CONTROL_REGISTRIES),
                 self.registry_scope,
                 self._registry_failed,
-                self.panel_context.active,
+                self._dashboard_active,
             )
         try:
             registry_adapter.install()
@@ -269,7 +271,7 @@ class LoonaRuntime:
                 self.hass, self._policy(CONTROL_RESOURCES), self.resource_report,
                 self._resources_failed,
                 self._observe_resource_load,
-                self.panel_context.active,
+                self._dashboard_active,
             )
             try:
                 if self.resource_scan_problem is None:
@@ -330,7 +332,7 @@ class LoonaRuntime:
         enabled = bool(self.resource_adapter is not None and self.resource_complete
                        and self.panel_compatibility_problem is None and self.bootstrap_installed is not False
                        and not self.resource_preview.get("unresolved_custom_types")
-                       and self.panel_context.active(connection) and connection.user.is_active
+                       and self._dashboard_active(connection) and connection.user.is_active
                        and not self.panel_context.expanded(connection)
                        and self.controls[CONTROL_MASTER]
                        and (self.controls[CONTROL_RESOURCE_DELAY] or self.controls[CONTROL_RESOURCE_PRELOAD])
@@ -362,7 +364,7 @@ class LoonaRuntime:
 
     def idle_policy(self, connection: websocket_api.ActiveConnection) -> dict[str, Any]:
         """Only eligible selected-account entity feeds may enter idle mode."""
-        allowed = bool(self.adapter is not None and self.panel_compatibility_problem is None
+        allowed = bool(not self.benchmark.native(connection) and self.adapter is not None and self.panel_compatibility_problem is None
                        and self.controls[CONTROL_IDLE] and self.panel_context.delivery_dashboard(connection) is not None
                        and connection.user.is_active and self._policy().scope_for(connection.user.id) is not None)
         from .config_flow import validate_idle_settings
@@ -656,6 +658,10 @@ class LoonaRuntime:
             complete=self.resource_complete if control == CONTROL_RESOURCES else not self.problems,
         )
 
+    def _dashboard_active(self, connection: websocket_api.ActiveConnection) -> bool:
+        """Native benchmark passes bypass only their own connection."""
+        return self.panel_context.active(connection) and not self.benchmark.native(connection)
+
     def _delivery_scope(self, connection: websocket_api.ActiveConnection, retained: frozenset[str]) -> frozenset[str]:
         """Keep the active view and shared rules live; dialogs refresh the union."""
         if not self.controls[CONTROL_DASHBOARD_LIVE]:
@@ -678,7 +684,7 @@ class LoonaRuntime:
         useful |= bool(self.resource_adapter is not None and self.resource_complete
                        and self.controls[CONTROL_MASTER]
                        and (self.controls[CONTROL_RESOURCE_DELAY] or self.controls[CONTROL_RESOURCE_PRELOAD]))
-        return {"enabled": useful and bool(paths), "routes": sorted(route_key(path) for path in paths)}
+        return {"enabled": useful and bool(paths), "routes": sorted(route_key(path) for path in paths), "benchmark": True}
 
     @callback
     def _panel_changed(self, connection: websocket_api.ActiveConnection) -> None:
@@ -864,6 +870,7 @@ class LoonaRuntime:
     async def async_stop(self) -> None:
         """Cancel work before restoring subscriptions and releasing references."""
         self._stopped = True
+        self.benchmark.stop()
         if self._debounce:
             self._debounce()
             self._debounce = None

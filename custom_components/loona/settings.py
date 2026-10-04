@@ -17,7 +17,7 @@ from .const import (
     CONF_TARGET_MODE, CONF_USER_IDS, DOMAIN, TARGET_SELECTED, CONTROL_RESOURCES, CONTROL_DEFAULTS,
     VERSION,
     SETTINGS_COMMAND, SETTINGS_SAVE_COMMAND, SETTINGS_GROUPS, SETTINGS_CHOICE_PAGE, SETTINGS_EMPTY_DEFAULTS,
-    SETTINGS_CHOICES_COMMAND, CONF_DASHBOARD_CARDS, DASHBOARD_CARDS,
+    SETTINGS_CHOICES_COMMAND, CONF_DASHBOARD_CARDS, DASHBOARD_CARD_CHOICES,
     SETTINGS_RESTORE_COMMAND,
     CONF_IDLE_AFTER, CONF_IDLE_REFRESH, IDLE_AFTER_MINUTES, IDLE_REFRESH_SECONDS,
 )
@@ -99,7 +99,7 @@ async def settings_report(runtime: LoonaRuntime) -> dict[str, Any]:
             CONF_ALWAYS_FORWARD: [{"value": row["url"], "label": labels.get(row["url"], row["url"]), "status": row["status"]}
                                   for row in resources["resources"] if row["status"] == "unused" or row["url"] in settings.get(CONF_ALWAYS_FORWARD, []) and row["status"] != "required"]
                 + [{"value": url, "label": labels.get(url, url), "unavailable": True} for url in resources["stale_exceptions"]],
-            CONF_DASHBOARD_CARDS: [{"value": key, "label": "Loona " + key} for key in DASHBOARD_CARDS],
+            CONF_DASHBOARD_CARDS: [{"value": key, "label": "Loona " + key} for key in DASHBOARD_CARD_CHOICES],
         },
         "required_resources": [row["url"] for row in resources["resources"] if row["status"] != "unused"],
         "resource_labels": labels,
@@ -196,7 +196,7 @@ async def websocket_save_settings(hass: HomeAssistant, connection: websocket_api
             else:
                 choices = entity_rule_choices(hass, runtime.settings)
                 if group == "cards":
-                    choices = {CONF_DASHBOARD_CARDS: list(DASHBOARD_CARDS)}
+                    choices = {CONF_DASHBOARD_CARDS: list(DASHBOARD_CARD_CHOICES)}
                 if group == "resources":
                     if CONTROL_RESOURCES not in runtime.available_controls:
                         raise ValueError("unsupported")

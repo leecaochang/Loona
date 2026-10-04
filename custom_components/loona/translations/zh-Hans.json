@@ -19,7 +19,7 @@
       },
       "cards": {
         "title": "添加仪表盘卡片",
-        "description": "Loona 自带两张卡片：设置卡片和统计卡片。勾选需要的卡片，Loona 会将它们放到仅管理员可见的新仪表盘上。以后也可以把它们添加到你自己的仪表盘。",
+        "description": "Loona 提供设置、统计和基准测试卡片。勾选后会将它们放在仅管理员可见的 Loona 仪表盘上。要测试其他标签页，请在该标签页手动添加基准测试卡片。",
         "data": {
           "dashboard_cards": "仪表盘卡片"
         }
@@ -103,7 +103,7 @@
       },
       "cards": {
         "title": "添加仪表盘卡片",
-        "description": "Loona 自带两张卡片：设置卡片和统计卡片。勾选需要的卡片，Loona 会将它们放到仅管理员可见的新仪表盘上。以后也可以把它们添加到你自己的仪表盘。",
+        "description": "Loona 提供设置、统计和基准测试卡片。勾选后会将它们放在仅管理员可见的 Loona 仪表盘上。要测试其他标签页，请在该标签页手动添加基准测试卡片。",
         "data": {
           "dashboard_cards": "仪表盘卡片"
         }
@@ -257,7 +257,8 @@
     "dashboard_cards": {
       "options": {
         "statistics": "Loona 统计",
-        "settings": "Loona 设置"
+        "settings": "Loona 设置",
+        "benchmark": "Loona 基准测试"
       }
     }
   }

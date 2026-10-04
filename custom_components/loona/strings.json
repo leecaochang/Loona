@@ -19,7 +19,7 @@
       },
       "cards": {
         "title": "Add dashboard cards",
-        "description": "Loona comes with two cards: one for settings and one for statistics. Tick the ones you want and Loona will put them on a new dashboard that only administrators can see. You can also add them to your own dashboards later.",
+        "description": "Choose settings, statistics or benchmark cards for the administrator-only Loona dashboard. To benchmark another tab, manually add the benchmark card to that tab.",
         "data": {
           "dashboard_cards": "Dashboard cards"
         }
@@ -103,7 +103,7 @@
       },
       "cards": {
         "title": "Add dashboard cards",
-        "description": "Loona comes with two cards: one for settings and one for statistics. Tick the ones you want and Loona will put them on a new dashboard that only administrators can see. You can also add them to your own dashboards later.",
+        "description": "Choose settings, statistics or benchmark cards for the administrator-only Loona dashboard. To benchmark another tab, manually add the benchmark card to that tab.",
         "data": {
           "dashboard_cards": "Dashboard cards"
         }
@@ -257,7 +257,8 @@
     "dashboard_cards": {
       "options": {
         "statistics": "Loona statistics",
-        "settings": "Loona settings"
+        "settings": "Loona settings",
+        "benchmark": "Loona benchmark"
       }
     }
   }

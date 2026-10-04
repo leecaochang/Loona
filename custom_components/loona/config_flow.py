@@ -17,7 +17,7 @@ from .const import (
     CONTROL_DASHBOARD_LIVE,
     CONF_DASHBOARDS,
     CONF_DASHBOARD_CARDS,
-    DASHBOARD_CARDS,
+    DASHBOARD_CARD_CHOICES,
     CONF_ALWAYS_FORWARD,
     CONTROL_RESOURCES,
     CONTROL_RESOURCE_DELAY,
@@ -225,10 +225,10 @@ class LoonaConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_cards(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Offer either bundled card, both, or no generated dashboard."""
+        """Offer bundled cards individually, together, or no generated dashboard."""
         schema = vol.Schema({vol.Optional(CONF_DASHBOARD_CARDS, default=[]):
             selector.SelectSelector(selector.SelectSelectorConfig(
-                options=list(DASHBOARD_CARDS), multiple=True,
+                options=list(DASHBOARD_CARD_CHOICES), multiple=True,
                 translation_key="dashboard_cards", mode=selector.SelectSelectorMode.LIST,
             ))})
         errors = {}
@@ -500,7 +500,7 @@ class LoonaOptionsFlow(OptionsFlow):
         """Change the generated dashboard's card selection."""
         schema = vol.Schema({vol.Optional(CONF_DASHBOARD_CARDS, default=self.settings.get(CONF_DASHBOARD_CARDS, [])):
             selector.SelectSelector(selector.SelectSelectorConfig(
-                options=list(DASHBOARD_CARDS), multiple=True, translation_key="dashboard_cards",
+                options=list(DASHBOARD_CARD_CHOICES), multiple=True, translation_key="dashboard_cards",
                 mode=selector.SelectSelectorMode.LIST,
             ))})
         errors = {}

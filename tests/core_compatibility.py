@@ -241,13 +241,18 @@ async def check(hass: HomeAssistant) -> None:
         from custom_components.loona.statistics_card import StatisticsCard
         # Exercise each optional installation against the real native collection.
         await runtime.statistics_card.set_enabled(False)
-        for cards in ((), ("settings",), ("statistics",), ("statistics", "settings")):
+        for cards in ((), ("settings",), ("statistics",), ("benchmark",), ("statistics", "settings"), ("statistics", "settings", "benchmark")):
             await runtime.statistics_card.set_enabled(True, cards)
             boards_now = hass.data[key].dashboards if data_class else hass.data[key]["dashboards"]
             if cards:
                 generated_cards = (await boards_now["loona-statistics"].async_load(False))["views"][0]["cards"]
                 assert [row["type"] for row in generated_cards] == [f"custom:loona-{name}-card" for name in cards]
                 assert boards_now["loona-statistics"].config["icon"] == "mdi:weather-night"
+                if cards == ("statistics", "settings", "benchmark"):
+                    generated = await boards_now["loona-statistics"].async_load(False)
+                    assert await runtime.statistics_card.remove_benchmark(generated) == ("statistics", "settings")
+                    assert (await runtime.statistics_card.store.async_load())["cards"] == ["statistics", "settings"]
+                    assert len((await boards_now["loona-statistics"].async_load(False))["views"][0]["cards"]) == 2
             else:
                 assert "loona-statistics" not in boards_now
             # Reloaded ownership must remove one-card dashboards too.

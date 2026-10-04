@@ -130,6 +130,7 @@ class GraphLoadingAdapter:
         table = self.hass.data.get(websocket_api.DOMAIN, {})
         allowed = (
             not self.stopped
+            and not self.runtime.benchmark.native(connection)
             and table.get("get_config") == self.owned
             and table.get(GRAPH_SUBSCRIBE) == self.subscription
             and connection.user.is_active

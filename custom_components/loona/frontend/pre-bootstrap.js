@@ -9,10 +9,18 @@
   const selected = path => config.routes == null || config.routes.includes(routeKey(path));
   let path;
   try { path = decodeURIComponent(location.pathname.split("/")[1] || ""); } catch { return; }
-  if (!config.enabled || (path ? !selected(path) : !config.routing)) return;
+  let benchmark;
+  if (config.benchmark) {
+    try {
+      benchmark = JSON.parse(sessionStorage.getItem(config.benchmark_key));
+      if (!benchmark || benchmark.dashboard !== path || benchmark.expires < Date.now()) benchmark = null;
+    } catch { benchmark = null; }
+  }
+  if (!benchmark && (!config.enabled || (path ? !selected(path) : !config.routing))) return;
   if (window.__loonaBootstrap || Object.getOwnPropertyDescriptor(window, "hassConnection")) return;
   const state = window.__loonaBootstrap = { status: "installed", routing: config.routing, selected };
   /* LOONA_REPORTER */
+  /* LOONA_BENCHMARK */
   let promise;
   Object.defineProperty(window, "hassConnection", {
     configurable: true,
@@ -30,12 +38,18 @@
           delete state.resume;
           resolve(value);
         };
-        const timer = window.setTimeout(() => finish("timeout"), config.timeout);
+        const timer = window.setTimeout(() => {
+          if (benchmark) window.loonaBenchmark?.fail("Startup authorization timed out. Check the connection and start over.");
+          finish("timeout");
+        }, benchmark ? config.benchmark_authorize_ms : config.timeout);
         state.status = "waiting";
         state.resume = () => {
           if (finished || state.started || typeof window.loonaAttachBootstrapPanel !== "function") return;
           state.started = true;
-          Promise.resolve().then(() => window.loonaAttachBootstrapPanel(value?.conn, state.routing))
+          Promise.resolve().then(async () => {
+            if (benchmark) await window.loonaBenchmark.attach(value?.conn);
+            return window.loonaAttachBootstrapPanel(value?.conn, state.routing);
+          })
             .then(ready => finish(ready ? "ready" : "fallback"), () => finish("fallback"));
         };
         state.resume();

@@ -26,10 +26,10 @@ Then set it up:
 1. Open **Settings > Devices & services > Add integration** and choose **Loona**. Only one instance can be installed.
 2. Pick the dashboards you want Loona to filter.
 3. Choose **Selected accounts** or **All accounts**. Home Assistant permissions still apply; Loona never grants or removes anyone's access.
-4. Optionally pick the **Loona settings** card, the **Loona statistics** card, or both. Loona then creates a **Loona** dashboard with those cards, visible to administrators only. Pick neither to skip it.
+4. Optionally pick the **Loona settings**, **Loona statistics** and **Loona benchmark** cards. Loona then creates a **Loona** dashboard with those cards, visible to administrators only. Pick none to skip it.
 5. Refresh your browser so the new card files load.
 
-## The two cards and the settings
+## Dashboard cards and settings
 
 You can change settings from the **Loona settings** card or from the integration's **Configure** menu. The Loona device also has switches and buttons for the same things, which is handy for automations.
 
@@ -69,7 +69,17 @@ A few things worth knowing:
 - Reset live statistics, Restore defaults and removing the Loona dashboard from the card selection all ask you to confirm. Cancel leaves everything as it was.
 - Restore defaults also clears that account's chart and dismissed-warning preferences in the current browser.
 - Loona only updates or removes the Loona dashboard it generated, and only while you have not edited it. If you delete that dashboard yourself, Loona will not recreate it, even after a reload. If you edit it, you manage it by hand from then on.
-- The settings and statistics cards are in English and Simplified Chinese, following your profile language. Other Chinese profiles fall back to English. Entity and device names follow Home Assistant's system language.
+- The Loona cards are in English and Simplified Chinese, following your profile language. Other Chinese profiles fall back to English. Entity and device names follow Home Assistant's system language.
+
+## Dashboard benchmark card
+
+Choose **Loona benchmark** in setup or under **Loona dashboard cards** in the settings card to place it on the generated Loona dashboard. For another dashboard, manually add `type: custom:loona-benchmark-card` to the dashboard tab you want to test, preferably near the top with another card visible. Sign in as an administrator and press **Go**. The card compares native Home Assistant with your saved Loona settings on that one tab, using two warm-ups and three alternating pairs. Allow about four minutes and keep the page in the foreground without scrolling, interacting or resizing. Page reloads are automatic; **Cancel benchmark** stops the run. Hidden pages repeat the interrupted pass when you return.
+
+The finished **Benchmark Results** SVG shows visible-card readiness, initial JSON data, registered card files loaded, live update rate and browser blocking. The image contains aggregate readings and versions only. **Copy** copies a PNG when the browser supports image clipboard access over a secure connection; **Save** downloads a PNG. Detailed settings, file sources, per-pass readings and recovery guidance are below the actions in a collapsed disclosure that may contain private information. The browser keeps the latest result for up to ten tested tabs for this account. A completion toast offers **Show results**, including when the installed card is hidden.
+
+This measures reloads with the browser cache, not cold-cache loads or a guaranteed hard refresh. Readiness covers known visible card elements and loading indicators; custom content, graphs and cameras can finish later. JSON sizes are logical UTF-8 messages before network compression. File sizes cover observed registered resource entry files, not every imported dependency; cross-origin servers may hide their sizes. Browser blocking requires Long Animation Frames and covers the live observation window, with startup readings in the disclosure. It does not measure total CPU, GPU, memory or battery use. No activity, missing readings, errors and overlapping timing ranges are identified explicitly. Idle savings require reaching the configured idle threshold. Settings that do not apply to the chosen account or tab will not produce a filtering benefit.
+
+Benchmark sessions preserve Home Assistant permissions and bypass Loona only on the initiating connection during native passes. They leave saved Loona settings and dashboard configuration unchanged. **Start over** clears this tab's displayed result. **Remove** asks for confirmation and removes only an exact, uniquely identifiable card from a UI-managed dashboard; YAML dashboards and ambiguous wrappers require manual removal. Removing it from an untouched generated Loona dashboard also updates the saved card selection; if it was the only selected card, that generated dashboard is removed. Historical trend charts are not included.
 
 ## How filtering decides what to send
 
@@ -241,7 +251,7 @@ The full development suite is pinned to Core 2026.9.4 and needs Python 3.14.2 or
 <details>
 <summary>Technical details</summary>
 
-- **Startup hook:** when a compatible filter is enabled, a small inline script on selected dashboard URLs queues dashboard context before Home Assistant's first requests, without waiting for a reply. Other named routes skip it, and turning Enabled off removes it from newly served pages. The root URL `/` needs one parallel lookup of dashboard visibility and default-page preferences (up to two seconds after sign-in), which can add a network round trip even for an untargeted account. Failed lookups, unsupported root routing or a timeout can leave the first snapshot full; later filtering still works.
+- **Startup hook:** when a compatible filter is enabled, a small inline script on selected dashboard URLs queues dashboard context before Home Assistant's first requests, without waiting for a reply. Other named routes skip normal filtering setup. A session-marker guard remains available with filtering off so an explicitly started benchmark can authorize its native passes; it starts no benchmark observer without that marker. The root URL `/` needs one parallel lookup of dashboard visibility and default-page preferences (up to two seconds after sign-in), which can add a network round trip even for an untargeted account. Failed lookups, unsupported root routing or a timeout can leave the first snapshot full; later filtering still works.
 - **Capability checks:** each load probes entity schemas, scoped snapshots, live diffs and read permissions; registry schemas and update subscriptions; card file commands and results; frontend registration and browser hooks; connection-local dashboard reporting; and HTML ownership, startup promise and root routing. Failed backend features appear in diagnostics, the cards and the log, and their switches become unavailable while keeping saved values. The browser checks its own card container before changing anything.
 - **Tested versions:** native backend acceptance runs cover Core 2024.6.0, 2024.6.4, 2024.12.5, 2025.6.3, 2026.1.3, 2026.8.3, 2026.9.2, 2026.9.3 and 2026.9.4. These are samples, not an allowlist. Graph and animation acceptance uses the frontend shipped with Core 2026.9.4; older frontends may keep normal loading while backend filtering still works.
 - **Browser syntax:** the bundled cards and graph code use ES2020 syntax such as optional chaining, so Safari older than 13.1 cannot parse them. The page reporter also uses optional catch bindings. Python 3.12 or newer is the syntax floor.

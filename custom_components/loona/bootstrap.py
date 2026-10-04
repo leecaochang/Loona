@@ -12,7 +12,9 @@ from homeassistant.components import frontend
 from homeassistant.core import HomeAssistant
 
 from .compatibility import CompatibilityError, probe_error
-from .const import BOOTSTRAP_TIMEOUT_MS, PANEL_ASSET, PANEL_POLL_MS, VERSION, BROWSER_MEASURE_MS
+from .const import (BOOTSTRAP_TIMEOUT_MS, PANEL_ASSET, PANEL_POLL_MS, VERSION, BROWSER_MEASURE_MS,
+                    BENCHMARK_STORAGE_KEY, BENCHMARK_AUTHORIZE_MS, BENCHMARK_RESOURCE_LIMIT,
+                    BENCHMARK_SCRIPT_LIMIT, BENCHMARK_FRAME_LIMIT, BENCHMARK_REQUEST_LIMIT, BENCHMARK_NODE_LIMIT)
 
 
 def route_key(path: str) -> str:
@@ -96,6 +98,8 @@ async def async_install(hass: HomeAssistant, policy: Callable[[], dict] | None =
                 raise CompatibilityError("Resource loader bootstrap import changed")
             reporter = reporter.replace(import_line, loader)
             script = script.replace("/* LOONA_REPORTER */", reporter.replace("import.meta.url", json.dumps("http://loona.invalid" + url)))
+            runner = (Path(__file__).parent / "frontend" / "benchmark-runner.js").read_text(encoding="utf8")
+            script = script.replace("/* LOONA_BENCHMARK */", runner)
             return source, script, url, routing
 
         source, script, url, routing = await hass.async_add_executor_job(prepare)
@@ -108,14 +112,17 @@ async def async_install(hass: HomeAssistant, policy: Callable[[], dict] | None =
             nonlocal owned, previous
             if view._template_cache is not owned:
                 raise CompatibilityError("Native frontend template ownership changed")
-            settings = {"timeout": BOOTSTRAP_TIMEOUT_MS, "routing": routing,
+            settings = {"timeout": BOOTSTRAP_TIMEOUT_MS, "routing": routing, "benchmark_key": BENCHMARK_STORAGE_KEY,
+                        "benchmark_authorize_ms": BENCHMARK_AUTHORIZE_MS,
+                        "benchmark_limits": {"resources": BENCHMARK_RESOURCE_LIMIT, "scripts": BENCHMARK_SCRIPT_LIMIT,
+                                             "frames": BENCHMARK_FRAME_LIMIT, "requests": BENCHMARK_REQUEST_LIMIT, "nodes": BENCHMARK_NODE_LIMIT},
                         **(policy() if policy else {"enabled": True, "routes": None})}
             serialized = json.dumps(settings)
             if serialized == previous:
                 return
             previous = serialized
             insertion = ""
-            if settings["enabled"]:
+            if settings["enabled"] or settings.get("benchmark"):
                 insertion = ('{% if ' + json.dumps(url) + ' in extra_modules %}<script>'
                              + script.replace("/* LOONA_CONFIG */ {}", serialized)
                              + '</script>{% endif %}')

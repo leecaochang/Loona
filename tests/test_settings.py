@@ -230,7 +230,8 @@ async def test_word_search_entity_priority_and_display_names(settings_runtime):
     assert all("*" not in item["value"] for item in rows[:first_pattern])
     report = await settings_report(runtime)
     assert report["choices"]["dashboard_cards"] == [
-        {"value": "statistics", "label": "Loona statistics"}, {"value": "settings", "label": "Loona settings"}]
+        {"value": "statistics", "label": "Loona statistics"}, {"value": "settings", "label": "Loona settings"},
+        {"value": "benchmark", "label": "Loona benchmark"}]
 
 
 async def test_optional_hacs_labels_are_read_only_and_exact(settings_runtime):

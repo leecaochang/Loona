@@ -11,7 +11,7 @@ from homeassistant.components.lovelace.dashboard import DashboardsCollection
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
-from .const import DOMAIN, STATISTICS_ASSET, STATISTICS_DASHBOARD, SETTINGS_ASSET, I18N_ASSET, ICON_ASSET, VERSION, DASHBOARD_CARDS
+from .const import DOMAIN, STATISTICS_ASSET, STATISTICS_DASHBOARD, SETTINGS_ASSET, I18N_ASSET, ICON_ASSET, VERSION, DASHBOARD_CARDS, BENCHMARK_ASSET
 from .dashboard import dashboard_objects
 
 
@@ -36,7 +36,7 @@ class StatisticsCard:
         self.hass = hass
         self.store: Store[dict[str, Any]] = Store(hass, 1, f"{DOMAIN}.{entry_id}.statistics_dashboard")
         self.url = f"{STATISTICS_ASSET}?v={VERSION}"
-        self.module_urls = (self.url, f"{SETTINGS_ASSET}?v={VERSION}")
+        self.module_urls = (self.url, f"{SETTINGS_ASSET}?v={VERSION}", f"{BENCHMARK_ASSET}?v={VERSION}")
         self.lock = asyncio.Lock()
         self.enabled = False
         self.opted_out = False
@@ -71,7 +71,7 @@ class StatisticsCard:
         key = "loona_statistics_asset_registered"
         if not self.hass.data.get(key):
             assets = [(asset, str(Path(__file__).parent / "frontend" / filename)) for asset, filename in (
-                (STATISTICS_ASSET, "statistics-card.js"), (SETTINGS_ASSET, "settings-card.js"), (I18N_ASSET, "i18n.js"), (ICON_ASSET, "icon-512.png")
+                (STATISTICS_ASSET, "statistics-card.js"), (SETTINGS_ASSET, "settings-card.js"), (I18N_ASSET, "i18n.js"), (BENCHMARK_ASSET, "benchmark-card.js"), (ICON_ASSET, "icon-512.png")
             )]
             if callable(getattr(self.hass.http, "async_register_static_paths", None)):
                 from homeassistant.components.http import StaticPathConfig
@@ -95,6 +95,18 @@ class StatisticsCard:
         except Exception as err:
             _LOGGER.exception("Loona native dashboard or asset operation failed")
             raise StatisticsCardError("Native statistics dashboard operation failed") from err
+
+    async def remove_benchmark(self, config: dict[str, Any]) -> tuple[str, ...] | None:
+        """Keep the generated dashboard's card selection and ownership consistent."""
+        owned = await self.store.async_load() or {}
+        board = dashboard_objects(self.hass).get(STATISTICS_DASHBOARD)
+        cards = tuple(owned.get("cards", DASHBOARD_CARDS))
+        if (board is None or not owned.get("id") or (board.config or {}).get("id") != owned["id"]
+            or "benchmark" not in cards or config != card_dashboard_config(cards)):
+            return None
+        remaining = tuple(card for card in cards if card != "benchmark")
+        await self.set_enabled(True, remaining)
+        return remaining
 
     async def _set_enabled(self, enabled: bool, cards: tuple[str, ...]) -> None:
         """Apply a card selection while preserving edited or deleted dashboards."""
