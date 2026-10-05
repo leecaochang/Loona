@@ -15,17 +15,18 @@ const scored=report=>(report?.samples||[]).filter(row=>!row.warmup);
 const bytes=rows=>rows.some(row=>!finite(row.bytes)) ? null : rows.reduce((sum,row)=>sum+row.bytes,0);
 export function benchmarkMetrics(report) {
   const samples=scored(report), modes=["native","loona"].map(mode=>samples.filter(row=>row.mode===mode));
+  const fileSizes=modes.map(rows=>rows.map(row=>{const value=bytes(row.resources);return value===null ? null : value/1000;}));
+  const countOnly=fileSizes.some(rows=>rows.some(value=>!finite(value)));
   return [
     {label:"Visible cards ready",unit:"s",values:modes.map(rows=>rows.map(row=>row.issues.length || !finite(row.ready_ms) ? null : row.ready_ms/1000)),timing:true},
     {label:"Initial dashboard data",unit:"KB",values:modes.map(rows=>rows.map(row=>(row.initial_bytes+row.registry_bytes)/1000)),extras:modes.map(rows=>median(rows.map(row=>row.initial_entities))),extra:"{count} entities",less:"{percent}% less data",more:"{percent}% more data"},
-    {label:"Card files loaded",unit:"KB",values:modes.map(rows=>rows.map(row=>{const value=bytes(row.resources);return value===null ? null : value/1000;})),extras:modes.map(rows=>median(rows.map(row=>row.resources.length))),extra:"{count} card files",less:"{percent}% less file data",more:"{percent}% more file data"},
+    {label:"Card files loaded",unit:countOnly ? "files" : "KB",countOnly,values:countOnly ? modes.map(rows=>rows.map(row=>row.resources.length)) : fileSizes,extras:countOnly ? null : modes.map(rows=>median(rows.map(row=>row.resources.length))),extra:"{count} card files",less:countOnly ? "{percent}% fewer files" : "{percent}% less file data",more:countOnly ? "{percent}% more files" : "{percent}% more file data"},
     {label:"Live updates",unit:"updates/s",values:modes.map(rows=>rows.map(row=>row.updates/(row.duration_ms/1000))),inactive:modes.every(rows=>rows.every(row=>row.updates===0)),less:"{percent}% fewer updates",more:"{percent}% more updates"},
     {label:"Browser blocking",unit:"ms",values:modes.map(rows=>rows.map(row=>row.loaf_supported ? row.blocking_ms : null)),timing:true,unsupported:samples.length>0 && samples.every(row=>!row.loaf_supported)}
-  ].map(metric=>{
+  ].filter(metric=>!metric.unsupported).map(metric=>{
     const values=metric.values.map(median), complete=metric.values.every(rows=>rows.length>=3 && rows.every(finite));
     let status="No measurable change", percent=null;
-    if(metric.unsupported) status="Not supported in this browser";
-    else if(!complete) status="Incomplete measurement";
+    if(!complete) status="Incomplete measurement";
     else if(metric.inactive) status="No updates observed";
     else if(metric.timing && (values[0]!==values[1]) && Math.max(Math.min(...metric.values[0]),Math.min(...metric.values[1]))<=Math.min(Math.max(...metric.values[0]),Math.max(...metric.values[1]))) status="No clear timing difference";
     else if(values[0]!==values[1]) {
@@ -38,16 +39,20 @@ export function benchmarkMetrics(report) {
 const metricStatus=(metric,hass)=>text(hass,metric.status,{percent:fmt(hass,metric.percent,0)});
 const valueLabel=(metric,hass,mode)=>{
   const value=metric.medians[mode];
+  if(metric.countOnly) return text(hass,"{count} card files",{count:fmt(hass,value,0)});
   let result=fmt(hass,value)+(finite(value) ? " "+text(hass,metric.unit) : "");
   if(metric.extras) result=text(hass,metric.extra,{count:fmt(hass,metric.extras[mode],0)})+" · "+result;
   return result;
 };
 const settingsLabels={enabled:"Enabled",entity_filtering:"Entity filtering",current_dashboard_updates:"Live updates for current tab only",registry_filtering:"Device and area filtering",resource_filtering:"Skip unused card files",delay_card_resources:"Load current tab first",preload_card_resources:"Preload card files",visible_first_graphs:"Delay graph loading",pause_animations_during_loading:"Pause animations during loading",pause_offscreen_animations:"Pause off-screen animations",idle_updates:"Idle mode",dashboard_cards:"Loona dashboard cards",dashboards:"Dashboards",target_mode:"Apply filtering to",user_ids:"Accounts",extra_entities:"Entities",include_domains:"Entity types",include_globs:"Entities to include",exclude_globs:"Entities to exclude",always_forward_resources:"Extra card files to load",idle_after_minutes:"Idle after (minutes)",idle_refresh_seconds:"Idle refresh (seconds)"};
 const cardLabels={benchmark:"Loona benchmark",settings:"Loona settings",statistics:"Loona statistics"};
-const methods=["Reloads use the browser cache. This is not a cold-cache or hard-refresh test.","Readiness means known visible cards have mounted and loading indicators have settled. Cameras, charts and custom content may still be loading.","JSON sizes are logical UTF-8 message sizes, before network compression. Card file sizes are decoded content sizes when the browser exposes them.","Browser blocking uses Long Animation Frames. It does not measure total CPU, GPU, memory, battery or all response delays.","Each mode gets a warm-up, then three alternating pairs. Live activity can differ between passes. Overlapping timing ranges are inconclusive.","Idle savings appear only if the configured idle threshold is reached. This test does not isolate the benefit of each setting."];
+const blockingMethod="Browser blocking uses Long Animation Frames. It does not measure total CPU, GPU, memory, battery or all response delays.";
+const blockingSupported=report=>report ? scored(report).some(row=>row.loaf_supported) : globalThis.PerformanceObserver?.supportedEntryTypes?.includes("long-animation-frame")===true;
+const methods=["Reloads use the browser cache. This is not a cold-cache or hard-refresh test.","Readiness means known visible cards have mounted and loading indicators have settled. Cameras, charts and custom content may still be loading.","JSON sizes are logical UTF-8 message sizes, before network compression. Card file sizes are decoded content sizes when the browser exposes them.",blockingMethod,"Each mode gets a warm-up, then three alternating pairs. Live activity can differ between passes. Overlapping timing ranges are inconclusive.","Idle savings appear only if the configured idle threshold is reached. This test does not isolate the benefit of each setting."];
 export function benchmarkSections(report,hass) {
   const t=(key,values)=>text(hass,key,values), sections=[];
-  if(!report) return [{title:"",lines:methods.map(key=>t(key))}];
+  const showBlocking=blockingSupported(report), activeMethods=methods.filter(key=>key!==blockingMethod || showBlocking);
+  if(!report) return [{title:"",lines:activeMethods.map(key=>t(key))}];
   if(report.error) return [{title:t("Executive summary"),lines:[t("No valid comparison was completed."),t(report.reason||"Benchmark interrupted"),t("Start over to run a new comparison.")]}];
   const metrics=benchmarkMetrics(report);
   sections.push({title:t("Executive summary"),list:true,lines:metrics.map(metric=>`${t(metric.label)}: ${metricStatus(metric,hass)}.`)});
@@ -62,8 +67,8 @@ export function benchmarkSections(report,hass) {
   const advice=[];
   for(const metric of metrics) {
     if(metric.status==="No clear timing difference" || metric.timing && metric.status==="No measurable change") advice.push(t("The loading or blocking times are similar or overlap across passes. This does not indicate an interrupted test. Data savings can still be measured without a proven speed improvement."));
-    if(metric.unsupported) advice.push(t("This browser does not expose Long Animation Frames. Blocking is unavailable; the other comparisons remain valid. Use a browser supporting this API to measure blocking."));
-    if(metric.status==="Incomplete measurement") advice.push(t(metric.label)+": "+t(metric.label==="Card files loaded" ? "Some servers hide file sizes. File counts are still available; use the browser Network panel to inspect sizes." : "Fewer than three valid readings are available. Resolve the issues below and repeat the test."));
+    if(metric.countOnly) advice.push(t("Some card file sizes are unavailable in this browser. This comparison uses file counts for both modes; fewer files does not establish less file data."));
+    if(metric.status==="Incomplete measurement") advice.push(t(metric.label)+": "+t("Fewer than three valid readings are available. Resolve the issues below and repeat the test."));
     if(metric.inactive) advice.push(t("No live updates were observed. Repeat while the dashboard entities are changing."));
   }
   for(const issue of new Set((report.samples||[]).flatMap(row=>row.issues||[]))) advice.push(t(issueMessages[issue]||"Incomplete measurement"));
@@ -78,12 +83,15 @@ export function benchmarkSections(report,hass) {
     return [t(settingsLabels[key]),display];
   });
   sections.push({title:t("Saved settings"),headers:[t("Setting"),t("Value")],rows:settingRows});
-  sections.push({title:t("Individual passes"),headers:[t("Pass"),t("Mode"),t("Ready (s)"),t("Data (KB)"),t("Card files"),t("Updates"),t("Blocking (ms)")],rows:scored(report).map((row,index)=>[
+  sections.push({title:t("Individual passes"),headers:[t("Pass"),t("Mode"),t("Ready (s)"),t("Data (KB)"),t("Card files"),t("Updates"),...(showBlocking ? [t("Blocking (ms)")] : [])],rows:scored(report).map((row,index)=>[
     fmt(hass,index+1,0),row.mode==="native" ? "Native HA" : "Loona",fmt(hass,finite(row.ready_ms) ? row.ready_ms/1000 : null),
-    fmt(hass,(row.initial_bytes+row.registry_bytes)/1000),fmt(hass,row.resources.length,0),fmt(hass,row.updates,0),fmt(hass,row.loaf_supported ? row.blocking_ms : null)
+    fmt(hass,(row.initial_bytes+row.registry_bytes)/1000),fmt(hass,row.resources.length,0),fmt(hass,row.updates,0),...(showBlocking ? [fmt(hass,row.loaf_supported ? row.blocking_ms : null)] : [])
   ])});
   const first=scored(report)[0];
-  sections.push({title:t("Measurement limits"),lines:[...methods.map(key=>t(key)),...(first ? [t("Browser: {browser}; viewport: {width} x {height}",{browser:first.browser,width:first.viewport[0],height:first.viewport[1]})] : [])]});
+  sections.push({title:t("Measurement limits"),lines:[...activeMethods.map(key=>t(key)),
+    t("Cached scripts in WebKit (Safari and the Apple Companion app) can report zero file sizes. After observation, Loona tries to read missing same-origin sizes from cached bodies without downloading files. Cross-origin restrictions or unreadable caches can leave sizes incomplete; the chart then uses file counts for both modes."),
+    t(showBlocking ? "Blocking is measured alongside live updates in the same observation window. It does not add a separate test phase." : "Blocking was skipped because this browser does not expose Long Animation Frames. Chrome and Edge 123+ support it; Firefox, Safari and the Apple Companion app do not. Skipping it does not shorten the run because it shares the live-update observation window."),
+    ...(first ? [t("Browser: {browser}; viewport: {width} x {height}",{browser:first.browser,width:first.viewport[0],height:first.viewport[1]})] : [])]});
   return sections;
 }
 // Treat names and failure reasons as literal Markdown content, including inside table cells.
@@ -107,40 +115,77 @@ export function benchmarkFilename(report,extension) {
   return `loona-${version(report.version||VERSION)}-benchmark-${name}-${stamp}.${extension}`;
 }
 // All report strings are fixed messages or validated version numbers. Private details never enter this tree.
+const estimate=(value,size)=>[...String(value)].reduce((sum,character)=>sum+(character.charCodeAt(0)>0x2e7f ? size : size*.58),0);
+const betterStatuses=metric=>["Less time observed",metric.less];
+const worseStatuses=metric=>["More time observed","More observed with Loona",metric.more];
+const isBetter=metric=>finite(metric.percent) && betterStatuses(metric).includes(metric.status);
+const isWorse=metric=>worseStatuses(metric).includes(metric.status);
 export function benchmarkSvg(report,hass,width=360,colors={}) {
   width=Math.max(280,Math.min(800,width));
   const c={background:colors.background||"#ffffff",text:colors.text||"#212121",secondary:colors.secondary||"#555555",accent:colors.accent||"#007da8",divider:colors.divider||"#dddddd"};
-  const metrics=benchmarkMetrics(report), height=report.error ? 168 : 806;
-  const root=svgNode("svg",{xmlns:ns,viewBox:`0 0 ${width} ${height}`,width,height,role:"img","aria-label":text(hass,"Benchmark Results")});
-  root.append(svgNode("rect",{width,height,fill:c.background}));
-  const label=(value,x,y,size=14,color=c.text,weight=400)=>{const node=svgNode("text",{x,y,fill:color,"font-size":size,"font-family":"Arial, sans-serif","font-weight":weight},value);root.append(node);return node;};
-  label(text(hass,"Benchmark Results"),76,32,width<330 ? 18 : 20,c.text,600).setAttribute("data-title", "");
+  const t=(key,values)=>text(hass,key,values), metrics=benchmarkMetrics(report);
+  const margin=14, left=30, track=width-2*left, heroY=98, heroHeight=92, panelsTop=206, panelHeight=152, gap=12;
+  const footerY=panelsTop+metrics.length*(panelHeight+gap)+4, height=report.error ? 168 : footerY+62;
+  const root=svgNode("svg",{xmlns:ns,viewBox:`0 0 ${width} ${height}`,width,height,role:"img","aria-label":t("Benchmark Results")});
+  const defs=svgNode("defs"), stops=(id,attrs,rows)=>{ const node=svgNode("linearGradient",{id,...attrs}); for(const [offset,color,opacity] of rows) node.append(svgNode("stop",{offset,"stop-color":color,"stop-opacity":opacity})); return node; };
+  const hatch=svgNode("pattern",{id:"loona-bm-hatch",width:6,height:6,patternUnits:"userSpaceOnUse",patternTransform:"rotate(45)"});
+  hatch.append(svgNode("rect",{width:6,height:6,fill:c.secondary,"fill-opacity":.22}),svgNode("line",{x1:0,y1:0,x2:0,y2:6,stroke:c.secondary,"stroke-width":2,"stroke-opacity":.5}));
+  defs.append(hatch,stops("loona-bm-bar",{x1:0,x2:1,y1:0,y2:0},[[0,c.accent,.7],[1,c.accent,1]]),stops("loona-bm-hero",{x1:0,x2:1,y1:0,y2:1},[[0,c.accent,.3],[1,c.accent,.05]]));
+  root.append(defs,svgNode("rect",{width,height,fill:c.background}));
+  const label=(value,x,y,size=14,color=c.text,weight=400,anchor)=>{const node=svgNode("text",{x,y,fill:color,"font-size":size,"font-family":"Arial, sans-serif","font-weight":weight},value);if(anchor) node.setAttribute("text-anchor",anchor);root.append(node);return node;};
+  const arrow=(x,y,up,color,size)=>{
+    const group=svgNode("g",{transform:`translate(${x} ${y}) scale(${size/24})`,fill:"none",stroke:color,"stroke-width":3.2,"stroke-linecap":"round","stroke-linejoin":"round"});
+    group.append(svgNode("path",{d:"M12 4v16"}),svgNode("path",{d:up ? "M5 11l7-7 7 7" : "M5 13l7 7 7-7"})); root.append(group);
+  };
+  label(t("Benchmark Results"),76,32,width<330 ? 18 : 20,c.text,600).setAttribute("data-title", "");
   label(`Loona ${version(report.version||VERSION)}`,76,53,12,c.secondary);
   if(report.error) {
-    label(text(hass,"Benchmark interrupted"),18,82,16,c.text,600);
-    label(text(hass,"No valid comparison was completed."),18,108,12,c.secondary);
-    label(text(hass,"See the detailed report for recovery steps."),18,140,12,c.secondary);
+    label(t("Benchmark interrupted"),18,82,16,c.text,600);
+    label(t("No valid comparison was completed."),18,108,12,c.secondary);
+    label(t("See the detailed report for recovery steps."),18,140,12,c.secondary);
     return root;
   }
-  label(text(hass,"Native HA and current Loona settings"),18,80,12,c.secondary);
-  const legendY=104;
-  root.append(svgNode("rect",{x:18,y:legendY-9,width:12,height:8,fill:c.secondary,rx:2})); label("Native HA",36,legendY,12,c.secondary);
-  root.append(svgNode("rect",{x:width/2,y:legendY-9,width:12,height:8,fill:c.accent,rx:2})); label("Loona",width/2+18,legendY,12,c.secondary);
+  label(t("Native HA and current Loona settings"),18,86,12,c.secondary);
+  // Headline: the largest improvement, with one dot per measurement that improved.
+  const improved=metrics.filter(isBetter), best=improved.sort((a,b)=>b.percent-a.percent)[0];
+  root.append(svgNode("rect",{x:margin,y:heroY,width:width-2*margin,height:heroHeight,rx:16,fill:"url(#loona-bm-hero)",stroke:c.accent,"stroke-opacity":.45}));
+  const bigSize=width<330 ? 34 : 40;
+  if(best) {
+    arrow(left,heroY+34,false,c.accent,22);
+    label(`${fmt(hass,best.percent,0)}%`,left+30,heroY+54,bigSize,c.accent,700);
+    const full=`${t(best.label)}: ${metricStatus(best,hass)}`;
+    label(estimate(full,12)>width-2*left ? metricStatus(best,hass) : full,left,heroY+78,12,c.secondary);
+  } else {
+    label(String(improved.length),left,heroY+54,bigSize,c.accent,700);
+    label(t("{count} of {total} improved",{count:improved.length,total:metrics.length}),left,heroY+78,12,c.secondary);
+  }
+  const spacing=18, dotsX=width-left-(metrics.length-1)*spacing;
+  metrics.forEach((metric,index)=>root.append(svgNode("circle",{cx:dotsX+index*spacing,cy:heroY+30,r:6,fill:isBetter(metric) ? c.accent : "none",stroke:isBetter(metric) ? c.accent : c.secondary,"stroke-opacity":isBetter(metric) ? 1 : .7,"stroke-width":1.6})));
+  label(t("{count} of {total} improved",{count:improved.length,total:metrics.length}),width-left,heroY+56,12,c.text,600,"end");
   metrics.forEach((metric,index)=>{
-    const y=136+index*124, available=metric.medians, max=Math.max(...available.filter(finite),1), barWidth=width-36;
-    label(text(hass,metric.label),18,y,15,c.text,600);
-    available.forEach((value,mode)=>{
-      const lineY=y+24+mode*32;
-      const valueText=valueLabel(metric,hass,mode);
-      label(valueText,18,lineY,12,c.secondary);
-      root.append(svgNode("rect",{x:18,y:lineY+6,width:barWidth,height:6,fill:c.divider,rx:3}));
-      if(finite(value) && value>0) root.append(svgNode("rect",{x:18,y:lineY+6,width:barWidth*value/max,height:6,fill:mode ? c.accent : c.secondary,rx:3}));
+    const top=panelsTop+index*(panelHeight+gap), values=metric.medians, max=Math.max(...values.filter(finite),1), better=isBetter(metric), worse=isWorse(metric);
+    root.append(svgNode("rect",{x:margin,y:top,width:width-2*margin,height:panelHeight,rx:14,fill:c.text,"fill-opacity":.06,stroke:c.divider}));
+    label(t(metric.label),left,top+28,15,c.text,600);
+    values.forEach((value,mode)=>{
+      const base=top+54+mode*38, barWidth=finite(value) && value>0 ? Math.max(6,track*value/max) : 0;
+      label(mode ? "Loona" : "Native HA",left,base,11,mode ? c.accent : c.secondary,700);
+      label(valueLabel(metric,hass,mode),width-left,base,12,c.text,600,"end");
+      root.append(svgNode("rect",{x:left,y:base+8,width:track,height:10,rx:5,fill:c.text,"fill-opacity":.08}));
+      if(barWidth) root.append(svgNode("rect",{x:left,y:base+8,width:barWidth,height:10,rx:5,fill:mode ? "url(#loona-bm-bar)" : "url(#loona-bm-hatch)",stroke:mode ? "none" : c.secondary,"stroke-opacity":.6}));
     });
-    label(metricStatus(metric,hass),18,y+99,12,c.secondary);
+    // The outlined ghost on the Loona row marks how much shorter it is than Native HA.
+    if(better && finite(values[0]) && finite(values[1])) {
+      const saved=track*values[0]/max, kept=Math.max(6,track*values[1]/max);
+      if(saved-kept>8) root.append(svgNode("rect",{x:left+kept,y:top+54+38+8,width:saved-kept,height:10,rx:5,fill:c.accent,"fill-opacity":.12,stroke:c.accent,"stroke-opacity":.85}));
+    }
+    const status=metricStatus(metric,hass), icon=better || worse, chipWidth=estimate(status,11)+(icon ? 20 : 0)+20, tone=better ? c.accent : c.secondary;
+    root.append(svgNode("rect",{x:left,y:top+118,width:Math.min(track,chipWidth),height:22,rx:11,fill:better ? c.accent : "none","fill-opacity":.18,stroke:tone,"stroke-opacity":better ? 1 : .5}));
+    if(icon) arrow(left+8,top+123,worse,tone,12);
+    label(status,left+(icon ? 28 : 10),top+133,11,tone,600);
   });
-  root.append(svgNode("line",{x1:18,x2:width-18,y1:758,y2:758,stroke:c.divider}));
-  label(`HA ${version(report.core_version)} · Loona ${version(report.version)}`,18,780,12,c.secondary);
-  label(text(hass,"{pairs} pairs · {seconds}s observation · cached reloads",{pairs:Math.floor(scored(report).length/2),seconds:report.seconds}),18,799,11,c.secondary);
+  root.append(svgNode("line",{x1:left,x2:width-left,y1:footerY,y2:footerY,stroke:c.divider}));
+  label(`HA ${version(report.core_version)} · Loona ${version(report.version)}`,left,footerY+22,12,c.secondary);
+  label(t("{pairs} pairs · {seconds}s observation · cached reloads",{pairs:Math.floor(scored(report).length/2),seconds:report.seconds}),left,footerY+41,11,c.secondary);
   return root;
 }
 const issueMessages={
@@ -177,8 +222,8 @@ function install() {
       <details id="disclosure"><summary></summary><div id="details" tabindex="0" role="region" aria-label="Detailed report"></div><div class="actions" id="text-actions"></div></details></ha-card>`;
   }
   setConfig(config) { this._config={...config,type:"custom:loona-benchmark-card"}; }
-  getCardSize() { return this._report && !this._report.error ? 15 : 4; }
-  getGridOptions() { return {columns:12,rows:this._report && !this._report.error ? 15 : 4,min_columns:6}; }
+  getCardSize() { return this._report && !this._report.error ? 5+3*benchmarkMetrics(this._report).length : 4; }
+  getGridOptions() { return {columns:12,rows:this.getCardSize(),min_columns:6}; }
   set hass(value) {
     const changed=this._hass?.user?.id!==value?.user?.id || this._hass?.user?.is_admin!==value?.user?.is_admin || language(this._hass)!==language(value);
     this._hass=value;

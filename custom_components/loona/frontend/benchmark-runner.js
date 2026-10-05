@@ -199,11 +199,29 @@
     state.remaining=Math.max(0,Math.ceil(report.seconds-(performance.now()-observationStart)/1000)); publish();
     if (state.remaining===0) finish(); else timer=setTimeout(tick,1000);
   }
+  async function recoverResourceSizes() {
+    if (typeof fetch!=="function" || typeof AbortController!=="function") return;
+    const missing=[...resources].filter(([url,row])=>row.bytes===null && new URL(url).origin===location.origin);
+    if (!missing.length) return;
+    const controller=new AbortController(), timeout=setTimeout(()=>controller.abort(),report.cache_read_ms);
+    try {
+      await Promise.all(missing.map(async ([url,row])=>{
+        try {
+          // Observation has stopped. Cache misses must never trigger a download.
+          const response=await fetch(url,{cache:"only-if-cached",mode:"same-origin",credentials:"same-origin",signal:controller.signal});
+          if (!response.ok) return;
+          const size=(await response.blob()).size;
+          if (size>0) row.bytes=size;
+        } catch { /* Unreadable cached bodies retain the file-count fallback. */ }
+      }));
+    } finally { clearTimeout(timeout); }
+  }
   async function finish() {
     if (stopped) return;
     sample.duration_ms=performance.now()-observationStart;
     observing=false; stop(); state.status="saving"; publish();
     performance.getEntriesByType("resource").forEach(resourceEntry);
+    await recoverResourceSizes();
     sample.resources=[...resources.values()].map(({end,...row})=>({...row,before_ready:sample.ready_ms!==null && end<=sample.ready_ms}));
     sample.scripts=[...scripts.values()]; sample.issues=[...issues];
     try {

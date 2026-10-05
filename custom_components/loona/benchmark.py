@@ -20,7 +20,7 @@ from homeassistant.helpers.event import async_call_later
 from homeassistant.util import dt as dt_util
 
 from .const import (DOMAIN, VERSION, BENCHMARK_COMMAND, BENCHMARK_PAIRS,
-                    BENCHMARK_SECONDS, BENCHMARK_READY_MS, BENCHMARK_SESSION_SECONDS,
+                    BENCHMARK_SECONDS, BENCHMARK_READY_MS, BENCHMARK_CACHE_READ_MS, BENCHMARK_SESSION_SECONDS,
                     BENCHMARK_SESSION_LIMIT, BENCHMARK_RESOURCE_LIMIT, BENCHMARK_WARMUP_SECONDS,
                     BENCHMARK_SCRIPT_LIMIT, BENCHMARK_HISTORY_LIMIT, BENCHMARK_RETRY_LIMIT,
                     CONF_DASHBOARD_CARDS, STATISTICS_DASHBOARD)
@@ -182,7 +182,7 @@ class BenchmarkManager:
     def report(self, run: BenchmarkRun) -> dict[str, Any]:
         return {"version": VERSION, "status": run.status, "index": run.index,
                 "sequence": run.sequence, "seconds": BENCHMARK_WARMUP_SECONDS if run.index < len(run.sequence) and run.sequence[run.index]["warmup"] else BENCHMARK_SECONDS,
-                "ready_ms": BENCHMARK_READY_MS, "session_seconds": BENCHMARK_SESSION_SECONDS, "history_limit": BENCHMARK_HISTORY_LIMIT,
+                "ready_ms": BENCHMARK_READY_MS, "cache_read_ms": BENCHMARK_CACHE_READ_MS, "session_seconds": BENCHMARK_SESSION_SECONDS, "history_limit": BENCHMARK_HISTORY_LIMIT,
                 "controls": run.controls, "settings": run.settings, **run.names,
                 "completed_at": dt_util.utcnow().isoformat() if run.status == "complete" else None,
                 "samples": run.samples, "core_version": CORE_VERSION,

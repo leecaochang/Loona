@@ -27,6 +27,8 @@ const chinese = {
   "{percent}% more data": "数据增加 {percent}%",
   "{percent}% less file data": "文件数据减少 {percent}%",
   "{percent}% more file data": "文件数据增加 {percent}%",
+  "{percent}% fewer files": "文件数量减少 {percent}%",
+  "{percent}% more files": "文件数量增加 {percent}%",
   "{percent}% fewer updates": "更新减少 {percent}%",
   "{percent}% more updates": "更新增加 {percent}%",
   "More observed with Loona": "Loona 模式下观测值更高",
@@ -40,6 +42,10 @@ const chinese = {
   "The loading or blocking times are similar or overlap across passes. This does not indicate an interrupted test. Data savings can still be measured without a proven speed improvement.": "各轮加载或阻塞时间相近或范围重叠，这不代表测试被中断。即使未证明速度提升，仍可测得数据节省。",
   "This browser does not expose Long Animation Frames. Blocking is unavailable; the other comparisons remain valid. Use a browser supporting this API to measure blocking.": "此浏览器不提供 Long Animation Frames，无法测量阻塞；其他比较仍有效。如需测量阻塞，请使用支持该 API 的浏览器。",
   "Some servers hide file sizes. File counts are still available; use the browser Network panel to inspect sizes.": "部分服务器隐藏文件大小。文件数量仍可查看；请使用浏览器网络面板检查大小。",
+  "Some card file sizes are unavailable in this browser. This comparison uses file counts for both modes; fewer files does not establish less file data.": "此浏览器无法提供部分卡片文件的大小，因此两种模式均按文件数量比较；文件更少不代表文件数据更少。",
+  "Cached scripts in WebKit (Safari and the Apple Companion app) can report zero file sizes. After observation, Loona tries to read missing same-origin sizes from cached bodies without downloading files. Cross-origin restrictions or unreadable caches can leave sizes incomplete; the chart then uses file counts for both modes.": "WebKit（Safari 和 Apple 平台伴侣应用）可能将缓存脚本的文件大小报告为零。观察结束后，Loona 尝试从缓存响应正文读取缺失的同源文件大小，不会下载文件。跨域限制或无法读取的缓存仍可能导致大小不完整，此时图表改为比较两种模式的文件数量。",
+  "Blocking is measured alongside live updates in the same observation window. It does not add a separate test phase.": "阻塞与实时更新在同一观察时段内测量，不会增加单独的测试阶段。",
+  "Blocking was skipped because this browser does not expose Long Animation Frames. Chrome and Edge 123+ support it; Firefox, Safari and the Apple Companion app do not. Skipping it does not shorten the run because it shares the live-update observation window.": "此浏览器不提供 Long Animation Frames，因此已跳过阻塞测量。Chrome 和 Edge 123 及以上版本支持该 API，Firefox、Safari 和 Apple 平台伴侣应用不支持。阻塞与实时更新共用观察时段，因此跳过它不会缩短测试时间。",
   "Fewer than three valid readings are available. Resolve the issues below and repeat the test.": "有效读数不足三轮。请解决下方问题后重测。",
   "To inspect individual card files, open Settings > Dashboards > Resources, or filter the browser Network panel to JavaScript and reload. The comparison above reports totals without repeating files for every pass.": "如需检查单个卡片文件，请打开设置 > 仪表盘 > 资源，或在浏览器网络面板中筛选 JavaScript 后刷新。上方比较只报告总量，不重复列出每轮文件。",
   "Entities to include": "包含的实体",
@@ -341,6 +347,7 @@ const chinese = {
   "{minutes} min ago": "{minutes} 分钟前",
   "Now": "现在",
   "On the moons, the lit part shows the percentage and the dark part is the rest.": "月亮图中，亮的部分表示该百分比，暗的部分表示其余。",
+  "{count} of {total} improved": "{total} 项中 {count} 项有改善",
   "No updates": "没有更新",
   "{label}: {rate} updates/s. {history}": "{label}：每秒 {rate} 次更新。{history}"
 };
