@@ -530,9 +530,9 @@ async def check(hass: HomeAssistant) -> None:
         assert {row.entity_id for row in translated_rows} == {row.entity_id for row in rows}
         for row in translated_rows:
             if row.translation_key == "discovered_entities":
-                assert row.original_name == "仪表盘引用的实体数"
+                assert row.original_name == "被引用的实体"
             elif row.translation_key == "unresolved_entities":
-                assert row.original_name == "未找到的实体数"
+                assert row.original_name == "未找到的实体"
         assert not runtime.controls["enabled"] and runtime.controls["entity_filtering"]
         assert runtime.available_controls == expected
         board_map = hass.data[key].dashboards if data_class else hass.data[key]["dashboards"]

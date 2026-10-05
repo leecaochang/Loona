@@ -42,6 +42,12 @@ assert.equal(benchmarkMetrics(changed)[1].percent,90);
 assert.equal(benchmarkMetrics(changed)[3].percent,90);
 assert.equal(benchmarkMetrics(changed)[2].countOnly,false);
 assert.equal(benchmarkMetrics(changed)[2].status,"{percent}% less file data");
+// The image always uses the compact name at any width; the report text spells it out.
+for(const width of [280,420]) {
+  assert.ok(benchmarkSvg(changed,{language:"en"},width).textContent.includes("Native HA and your saved Loona settings"));
+  assert.ok(!benchmarkSvg(changed,{language:"en"},width).textContent.includes("Native Home Assistant"));
+}
+assert.ok(benchmarkSvg(changed,{language:"zh-Hans"},420).textContent.includes("原生 HA"));
 const missingSizes=structuredClone(changed);
 missingSizes.samples.forEach(sample=>{sample.resources=Array.from({length:sample.mode==="native" ? 27 : 15},()=>({...row.resources[0],bytes:1000}));});
 missingSizes.samples[0].resources[0].bytes=null;
@@ -70,10 +76,12 @@ assert.ok(reportText.includes("| Dashboards | Wall display |"));
 assert.ok(!reportText.includes("entity_filtering"));
 assert.ok(!reportText.includes("private-card.js"));
 assert.ok(reportText.includes("Settings &gt; Dashboards &gt; Resources"));
-assert.ok(reportText.includes("| Measurement | Native HA | Loona |\n| --- | --- | --- |"));
+assert.ok(reportText.includes("| Measurement | Native Home Assistant | Loona |\n| --- | --- | --- |"));
 assert.ok(reportText.includes("## Individual passes\n\n| Pass | Mode |"));
 assert.ok(!reportText.includes("Browser blocking:") && !reportText.includes("Blocking (ms)"));
-assert.ok(reportText.includes("Cached scripts in WebKit") && reportText.includes("file counts for both modes"));
+assert.ok(reportText.includes("use WebKit") && reportText.includes("file counts for both modes"));
+assert.ok(reportText.includes("## Caveats\n") && !reportText.includes("Measurement limits"));
+assert.ok(reportText.includes("## Saved settings\n\nThis report can include dashboard and account names, entity names, card file addresses and browser details. Review it before posting.\n\n| Setting | Value |"));
 assert.ok(reportText.includes("Blocking was skipped") && reportText.includes("Chrome and Edge 123+") && reportText.includes("does not shorten the run"));
 const hostile=structuredClone(report);hostile.dashboard_title='Room | <img src=x onerror=alert(1)> **bold** [link](https://private)\n# heading';
 const escaped=benchmarkText(hostile,{language:"en"});

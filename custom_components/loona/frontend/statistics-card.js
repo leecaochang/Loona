@@ -361,10 +361,10 @@ function install() {
         </ha-card>`;
       hideBrokenMark(this.shadowRoot);
       this._get("rates-help").append(createHelp(this._hass,"Live updates","","interval"));
-      this._get("scope-help").append(createHelp(this._hass,"Totals and entities","Each open dashboard tab keeps a live connection to Home Assistant, sometimes more than one. 'Connections filtered / total' shows how many of them Loona is filtering. 'Estimated entities trimmed' compares the entities Loona keeps with all entities in Home Assistant, even when filtering is off."));
-      this._get("loads-help").append(createHelp(this._hass,"Recent page loads","For each dashboard, what was sent the last time its page fully loaded. If Loona recognized the dashboard at startup, only the entities it needs were sent; otherwise everything was. File counts cover the whole page session."));
-      this._get("performance-help").append(createHelp(this._hass,"Browser performance","These readings come from this browser and dashboard only. Slow frames show only part of the work your browser does. Items marked 'before measuring' happened before Loona started watching."));
-      this._get("reset-help").append(createHelp(this._hass,"Reset live statistics","Clears the live counters and page-load records. Your settings and Home Assistant's recorded history aren't touched."));
+      this._get("scope-help").append(createHelp(this._hass,"Totals and entities","A live connection is the link a dashboard tab keeps open to Home Assistant. Each open tab usually has one connection, sometimes more. 'Connections filtered / total' shows how many of them Loona is filtering. 'Estimated entities trimmed' is the percentage of Home Assistant's entities outside Loona's configured inclusion set. It describes potential entity reduction, not measured update reduction, and remains visible when filtering is off."));
+      this._get("loads-help").append(createHelp(this._hass,"Recent page loads","Shows how many entities and card files were sent versus available for each dashboard's latest recorded page load. It does not measure loading time."));
+      this._get("performance-help").append(createHelp(this._hass,"Browser performance","Lists the 20 entities with the most updates sent since reset, alongside browser reports of slow frames, script work and event subscriptions that may bypass filtering. These reports cover only part of the browser's work. Items marked 'before measuring' happened before Loona started watching."));
+      this._get("reset-help").append(createHelp(this._hass,"Reset live statistics","Clears the live counters and recent page-load records. Your Loona settings and Home Assistant's recorded history are untouched."));
       this._get("refresh").addEventListener("click", () => this._fetch());
       this._get("reset").addEventListener("click", () => this._reset());
       this._get("show-charts").addEventListener("change", () => {
@@ -375,7 +375,7 @@ function install() {
     static getStubConfig() { return { type: "custom:loona-statistics-card" }; }
     setConfig(config) {
       if (config.title !== undefined && typeof config.title !== "string") throw new Error(text(this._hass, "Loona card title must be text"));
-      if (config.show_charts !== undefined && typeof config.show_charts !== "boolean") throw new Error("show_charts must be a boolean");
+      if (config.show_charts !== undefined && typeof config.show_charts !== "boolean") throw new Error(text(this._hass, "show_charts must be a boolean"));
       this._defaultCharts = config.show_charts !== false;
       this._customTitle = config.title;
       this._localize();
@@ -489,7 +489,7 @@ function install() {
       if (!this._data?.reset_entity || this._resetting || !this._hass?.user?.is_admin) return;
       const account = this._hass.user.id;
       if (!await confirmAction(this, "Reset live statistics?",
-          "Clear the live counters, page-load records and browser readings? Your settings and recorded history are kept.", "Reset live statistics")) return;
+          "Clear the live counters, recent page-load records and browser readings? Your Loona settings and Home Assistant's recorded history are untouched.", "Reset live statistics")) return;
       if (this._hass?.user?.id !== account || !this._hass.user.is_admin || !this.isConnected || this._resetting) return;
       this._resetting = true;
       this._get("reset").disabled = true;
@@ -544,8 +544,8 @@ function install() {
       this._get("interval").textContent = (data.sample_seconds
         ? text(this._hass, "Measured over the last {seconds} seconds.", { seconds: format(data.sample_seconds) })
         : text(this._hass, "Rates update within {seconds} seconds.", { seconds: format(data.interval_seconds) }))
-        + " " + text(this._hass, "Each update counts once for every live connection, so having several tabs open raises the totals. These numbers aren't a measure of loading speed or network traffic.")
-        + " " + text(this._hass,"Charts show up to 15 minutes of history and refresh along with the statistics. Sent and filtered out share one scale.")
+        + " " + text(this._hass, "Each update counts once per connection, so opening more tabs increases the totals. These figures measure entity updates, not data size, bandwidth, CPU usage or loading speed.")
+        + " " + text(this._hass,"Charts show up to 15 minutes of history and refresh along with the statistics. Chart history is kept only in memory and clears on reset or restart. Sent and filtered out share one scale.")
         + " " + text(this._hass,"On the moons, the lit part shows the percentage and the dark part is the rest.");
       this._get("subscriptions").textContent = format(metrics.filtered_subscriptions) + " / " + format(metrics.managed_subscriptions);
       this._get("scope").textContent = text(this._hass, metrics.current_scope === 1 ? "1 entity" : "{count} entities", { count: format(metrics.current_scope) });
@@ -572,7 +572,7 @@ function install() {
         item.append(node("strong", row.dashboard));
         item.append(node("p", formatDateTime(this._hass, row.at)));
         item.append(node("p", row.loaf_supported ? text(this._hass, "Slow frames: {count}, adding up to {ms} ms of delay", {count:format(row.frames), ms:format(row.blocking_ms)})
-          : text(this._hass, "This browser can't report slow frames.")));
+          : text(this._hass, "This browser cannot report slow frames.")));
         for (const script of row.scripts) {
           const label=data.resource_labels?.[script.source];
           if (label && label!==script.source) item.append(node("p",label));

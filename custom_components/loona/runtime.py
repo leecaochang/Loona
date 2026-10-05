@@ -840,9 +840,6 @@ class LoonaRuntime:
             add("unmatched_resources", report.get("unresolved_custom_types"), severity="info",
                 items=report.get("unresolved_custom_types", ()))
             add("dynamic_resources", report.get("dynamic_configuration"), severity="info")
-            unchecked = [row["url"] for row in report.get("resources", ())
-                         if row["status"] == "unclassified" and not row["forwarded"]]
-            add("unchecked_resources", unchecked, severity="info", items=unchecked)
             add("stale_resources", report.get("stale_exceptions"), items=report.get("stale_exceptions", ()))
         return notices
 

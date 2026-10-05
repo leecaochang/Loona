@@ -504,7 +504,6 @@ async def test_resource_notices_stale_exception_and_collection_failure_isolation
     assert issue_key not in issues.issues
     await runtime.async_set_control("resource_filtering", True)
     assert issue_key not in issues.issues
-    assert not any(item["code"] == "unchecked_resources" for item in runtime.notice_report())
     await runtime.async_set_control("resource_filtering", False)
     assert issue_key not in issues.issues
     runtime.hass.config_entries.async_update_entry(runtime.entry, options={

@@ -4,14 +4,14 @@ import { language, text, translate, renderVersion, markHtml, markStyles, hideBro
 const groups = {
   controls: "Filters and performance", dashboards: "Dashboards", targets: "Accounts",
   idle: "Idle timing",
-  rules: "Entity rules", resources: "Card files", cards: "Loona dashboard",
+  rules: "Entity rules", resources: "Card files", cards: "Loona dashboard cards",
 };
 const cardVersion = "0.9.13";
 const labels = {
   enabled: "Enabled", entity_filtering: "Entity filtering", registry_filtering: "Device and area filtering",
   current_dashboard_updates: "Live updates for current tab only",
   resource_filtering: "Skip unused card files", visible_first_graphs: "Delay graph loading",
-  delay_card_resources: "Load current tab first",
+  delay_card_resources: "Prioritize current tab",
   preload_card_resources: "Preload card files", pause_offscreen_animations: "Pause off-screen animations", idle_updates: "Idle mode",
   idle_after_minutes: "Idle after (minutes)", idle_refresh_seconds: "Idle refresh (seconds)",
   pause_animations_during_loading: "Pause animations during loading", dashboards: "Dashboards",
@@ -21,25 +21,25 @@ const labels = {
   always_forward_resources: "Extra card files to load",
 };
 const help = {
-  enabled: "Turn this off to stop all filtering and send everything as usual. Reload your browser to bring back any skipped card files.",
-  entity_filtering: "Send only the entities your selected dashboards use, plus anything in Entity rules.",
-  current_dashboard_updates: "After the page loads, only send live changes for the tab you're viewing, plus your Entity rules. Other tabs show their last known values until you open them. Pop-ups and editing temporarily update everything. Needs Entity filtering.",
-  registry_filtering: "Also trim the entity, device and area lists Home Assistant loads, so they match your dashboards.",
-  resource_filtering: "Don't load card files that none of your dashboards use. Files Loona can't identify are always kept. Reload your browser after changing this.",
-  delay_card_resources: "Load the card files your current tab needs first, and the rest once the page is ready. Switching tabs, opening pop-ups or editing loads anything still waiting. Reload your browser after turning this on.",
-  preload_card_resources: "Start downloading the card files this tab needs as early as possible. Home Assistant still loads them in its usual order. Reload your browser after turning this on.",
-  pause_offscreen_animations: "Pause repeating animations on cards you can't see, and resume them when you scroll back. Loading spinners and one-time animations keep running.",
-  idle_updates: "After a while with no activity, pause live updates. They come back as soon as you touch, click, type or scroll. Needs Entity filtering. Clocks, cameras and some cards may keep updating on their own.",
-  visible_first_graphs: "Wait to load off-screen graphs until the rest of the dashboard is ready. Scrolling to a graph loads it right away.",
-  pause_animations_during_loading: "Pause repeating animations while the dashboard loads, then resume them automatically.",
+  enabled: "The master switch. Turning it off resumes Home Assistant's normal behavior. Your settings are kept as-is. Reload your browser to bring back any skipped card files.",
+  entity_filtering: "Sends only the entities your chosen dashboards use, plus any specific entities you added under Entity rules.",
+  current_dashboard_updates: "After the first load, only the tab you are viewing keeps updating, along with any entities in your Entity rules. Hidden tabs will not update until you view them. Opening a tab, opening a pop-up, or editing a dashboard refreshes values right away. Requires Entity filtering enabled.",
+  registry_filtering: "Trims the entity, device, area, floor and label lists.",
+  resource_filtering: "Prevents loading the card files that none of your dashboards actually use. Loona will still load anything it cannot safely judge. Reload your dashboard after changing this.",
+  delay_card_resources: "Delays other tabs' card files until the current tab has rendered, then loads them gradually. Opening a pop-up, switching tabs or pages, or editing loads the remaining files right away. Reload your dashboard after changing this.",
+  preload_card_resources: "Starts downloading the current tab's card files before Home Assistant requests them. This does not change when they run. Reload your dashboard after changing this.",
+  pause_offscreen_animations: "Pauses repeating animations on cards that are scrolled out of view and resumes them when you scroll back. Loading spinners and one-time animations keep running.",
+  idle_updates: "After a period of no activity, the dashboard stops live updates and refreshes its values only at a set interval, until any interaction brings live updates back. You can set the Idle after time and the Idle refresh interval. Requires Entity filtering enabled. This affects ordinary live connections only - cameras, independent clocks, card timers and raw event listeners will keep going.",
+  visible_first_graphs: "Delays building graphs that are off-screen until the rest of the page has settled. Scrolling a graph into view loads it right away.",
+  pause_animations_during_loading: "Briefly pauses repeating animations while the dashboard starts up, then resumes them.",
 };
 const groupHelp = {
-  dashboards: "Choose which dashboards you want to filter.",
-  targets: "Choose which accounts get filtered data while viewing the selected dashboards.",
-  resources: "Card files that no dashboard uses can be skipped. Files Loona can't identify always load. Save, then reload your browser.",
-  cards: "Loona dashboard cards",
-  rules: "Loona finds the entities your dashboards use on its own. Use these rules to add ones it missed or to leave some out. Entity types are groups such as sensor or light. In patterns, * matches anything, like sensor.kitchen_*.",
-  idle: "Selected dashboards go idle after no touch, mouse, keyboard or scrolling. While idle they refresh at the interval you choose, or not at all if it's 0. Switching tabs, opening pop-ups or editing brings live updates back.",
+  dashboards: "Select the dashboards you want Loona to filter.",
+  targets: "Choose Selected accounts or All accounts. Home Assistant permissions always apply; Loona never grants or removes anyone's access.",
+  resources: "Selecting Skip unused card files will load only the card files your dashboards need. Loona will still load anything it cannot safely judge. Always reload the dashboard after you make a change.",
+  cards: "Loona will create a Loona dashboard with the cards you choose, visible to administrators only. Choose none to remove it (if you have not edited it).",
+  rules: "What gets sent to the dashboard is only what your selected dashboards actually use, plus whatever you add under Entity rules. You can add single entities, a whole entity type (like sensor or light), or patterns such as sensor.kitchen_*, which means every sensor whose name starts with kitchen_.",
+  idle: "When Idle mode is on and you have not touched the page for the Idle after time, live updates pause. A fresh snapshot of current values loads at the Idle refresh interval. Changes in between are not displayed.",
 };
 const statusLabels = { unused: "Not used by any of your dashboards", unclassified: "Purpose unknown" };
 const make = (tag, content, cls) => {
@@ -144,7 +144,7 @@ function install() {
           </div></div>
           <p id="action-status" role="status"></p></div></ha-card>`;
       hideBrokenMark(this.shadowRoot);
-      for (const [key,message] of Object.entries({rescan:"Check your dashboards for changes right now.",reset_live_statistics:"Clears the live counters and page-load records. Your settings and Home Assistant's recorded history aren't touched.",restore_defaults:"Resets all Loona settings and live statistics. You'll be asked to confirm."})) {
+      for (const [key,message] of Object.entries({rescan:"Editing a dashboard normally triggers this automatically; press this button to force a rescan now.",reset_live_statistics:"Clears the live counters and recent page-load records. Your Loona settings and Home Assistant's recorded history are untouched.",restore_defaults:"Restores Loona back to default settings, as if you had installed it fresh. Also removes the Loona dashboard (if you have not edited it). You will need to select dashboards and accounts again before filtering resumes. You will be asked to confirm."})) {
         const button=this.shadowRoot.querySelector(`[data-action="${key}"]`), wrapper=make("span",undefined,"action-help");
         button.replaceWith(wrapper); wrapper.append(button,createHelp(this._hass,button.querySelector("[data-i18n]").dataset.i18n,message));
       }
@@ -244,7 +244,7 @@ function install() {
       if (!entity || !this._hass?.user?.is_admin || this._acting || this._saving || this._loading) return;
       const account = this._hass.user.id;
       if (key === "reset_live_statistics" && !await confirmAction(this, "Reset live statistics?",
-          "Clear the live counters, page-load records and browser readings? Your settings and recorded history are kept.", "Reset live statistics")) return;
+          "Clear the live counters, recent page-load records and browser readings? Your Loona settings and Home Assistant's recorded history are untouched.", "Reset live statistics")) return;
       if (this._hass?.user?.id !== account || !this._hass.user.is_admin || this._acting || this._saving || !this.isConnected) return;
       const sequence = ++this._sequence; this._acting = key; this._actionStatus = "Working..."; this._error = undefined; this._sync();
       try {
@@ -267,7 +267,7 @@ function install() {
       let confirmed = false;
       if (group === "cards" && this._data.values.cards.dashboard_cards.length && !values.dashboard_cards.length) {
         confirmed = await confirmAction(this, "Remove the Loona dashboard?",
-          "Remove the Loona dashboard that Loona created, along with its cards? Dashboards you've edited yourself are kept. To get it back, choose Loona dashboard cards again.", "Remove dashboard");
+          "Remove the Loona dashboard, along with its cards? An edited Loona dashboard is kept. To get it back, choose Loona dashboard cards again.", "Remove dashboard");
         if (!confirmed || !this._hass?.user?.is_admin || !this.isConnected || revision !== this._data?.revision
             || JSON.stringify(values) !== JSON.stringify(this._drafts[group])) return;
       }
@@ -289,7 +289,7 @@ function install() {
       const revision = this._data.revision;
       const account = this._hass.user.id;
       if (!await confirmAction(this, "Restore defaults?",
-          "This resets every Loona setting and the live statistics, clears your dashboard and account choices, and removes the Loona dashboard that Loona created. Nothing is filtered until you choose dashboards and accounts again. Dashboards you've edited and recorded history are kept.", "Restore defaults")) return;
+          "Restores Loona back to default settings, as if you had installed it fresh. Also removes the Loona dashboard (if you have not edited it). You will need to select dashboards and accounts again before filtering resumes. An edited Loona dashboard, Loona cards you placed yourself, and recorded history are kept.", "Restore defaults")) return;
       if (this._hass?.user?.id !== account || !this._hass.user.is_admin || !this.isConnected || revision !== this._data?.revision) return;
       const sequence = ++this._sequence; this._acting = "restore_defaults"; this._error = undefined; this._sync();
       try {
@@ -297,7 +297,7 @@ function install() {
         if (sequence !== this._sequence || !this._hass?.user?.is_admin) return;
         this._drafts = {}; this._conflicts.clear(); this._saved = undefined; this._replace(data);
         saveCardPreferences(this._hass, {}, true);
-        this._actionStatus = "Defaults restored. Choose your dashboards and accounts, then reload your browser.";
+        this._actionStatus = "Defaults restored. You will need to select dashboards and accounts again before filtering resumes, then reload your browser.";
         window.dispatchEvent(new Event("loona-statistics-reset"));
       } catch (error) {
         if (sequence === this._sequence) this._error = error.code === "conflict"
@@ -373,7 +373,7 @@ function install() {
             input.addEventListener("input",()=>this._edit(group,key,input.value==="" ? null : Number(input.value)));
             label.append(input); field.append(label); section.append(field);
           }
-          section.append(make("p",this._t("0 means no refreshing until you interact. Otherwise it refreshes every 1 to 60 seconds (default 60).")));
+          section.append(make("p",this._t("Idle after is 1 to 60 minutes (default 5). Idle refresh is 1 to 60 seconds (default 60). At 0, values remain frozen until you interact.")));
         } else {
           if (group === "targets") {
             const label = make("label",this._t("Apply filtering to")); const select = make("select"); select.setAttribute("aria-label",this._t("Apply filtering to")); select.dataset.field="target_mode";
@@ -387,13 +387,13 @@ function install() {
               const item=make("li"); const label=this._data.resource_labels?.[url] || url;
               item.append(make("span",label)); if (label!==url) item.append(make("small",url)); list.append(item);
             }); required.append(list); section.append(required);
-            if (!this._data.resources_editable) section.append(make("p",this._t("Card file choices aren't available right now.")));
+            if (!this._data.resources_editable) section.append(make("p",this._t("Card file choices are not available right now.")));
           }
           if (group === "rules") {
             const panels = make("div", undefined, "rule-groups");
             for (const [kind, title, description, keys, icon] of [
               ["included", "Included", "Always keep these, even if no dashboard uses them.", ["extra_entities", "include_domains", "include_globs"], "mdi:plus-circle-outline"],
-              ["excluded", "Excluded", "Never send these. Exclusions win over inclusions, and cards that use them may show no data. Entities Home Assistant itself needs (people, updates, zones) are always kept.", ["exclude_globs"], "mdi:minus-circle-outline"],
+              ["excluded", "Excluded", "The Excluded list takes precedence over Included. Person, update and zone entities cannot be excluded, because the Home Assistant interface needs them. Cards that use excluded entities may show no data.", ["exclude_globs"], "mdi:minus-circle-outline"],
             ]) {
               const panel = make("fieldset", undefined, "rule-group"); panel.dataset.ruleGroup=kind;
               const legend = make("legend"); const symbol=make("ha-icon"); symbol.setAttribute("icon",icon); symbol.setAttribute("aria-hidden","true");

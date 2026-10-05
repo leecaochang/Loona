@@ -18,10 +18,10 @@ export function benchmarkMetrics(report) {
   const fileSizes=modes.map(rows=>rows.map(row=>{const value=bytes(row.resources);return value===null ? null : value/1000;}));
   const countOnly=fileSizes.some(rows=>rows.some(value=>!finite(value)));
   return [
-    {label:"Visible cards ready",unit:"s",values:modes.map(rows=>rows.map(row=>row.issues.length || !finite(row.ready_ms) ? null : row.ready_ms/1000)),timing:true},
-    {label:"Initial dashboard data",unit:"KB",values:modes.map(rows=>rows.map(row=>(row.initial_bytes+row.registry_bytes)/1000)),extras:modes.map(rows=>median(rows.map(row=>row.initial_entities))),extra:"{count} entities",less:"{percent}% less data",more:"{percent}% more data"},
+    {label:"Visible-card readiness",unit:"s",values:modes.map(rows=>rows.map(row=>row.issues.length || !finite(row.ready_ms) ? null : row.ready_ms/1000)),timing:true},
+    {label:"Initial JSON data",unit:"KB",values:modes.map(rows=>rows.map(row=>(row.initial_bytes+row.registry_bytes)/1000)),extras:modes.map(rows=>median(rows.map(row=>row.initial_entities))),extra:"{count} entities",less:"{percent}% less data",more:"{percent}% more data"},
     {label:"Card files loaded",unit:countOnly ? "files" : "KB",countOnly,values:countOnly ? modes.map(rows=>rows.map(row=>row.resources.length)) : fileSizes,extras:countOnly ? null : modes.map(rows=>median(rows.map(row=>row.resources.length))),extra:"{count} card files",less:countOnly ? "{percent}% fewer files" : "{percent}% less file data",more:countOnly ? "{percent}% more files" : "{percent}% more file data"},
-    {label:"Live updates",unit:"updates/s",values:modes.map(rows=>rows.map(row=>row.updates/(row.duration_ms/1000))),inactive:modes.every(rows=>rows.every(row=>row.updates===0)),less:"{percent}% fewer updates",more:"{percent}% more updates"},
+    {label:"Live update rate",unit:"updates/s",values:modes.map(rows=>rows.map(row=>row.updates/(row.duration_ms/1000))),inactive:modes.every(rows=>rows.every(row=>row.updates===0)),less:"{percent}% fewer updates",more:"{percent}% more updates"},
     {label:"Browser blocking",unit:"ms",values:modes.map(rows=>rows.map(row=>row.loaf_supported ? row.blocking_ms : null)),timing:true,unsupported:samples.length>0 && samples.every(row=>!row.loaf_supported)}
   ].filter(metric=>!metric.unsupported).map(metric=>{
     const values=metric.values.map(median), complete=metric.values.every(rows=>rows.length>=3 && rows.every(finite));
@@ -44,11 +44,11 @@ const valueLabel=(metric,hass,mode)=>{
   if(metric.extras) result=text(hass,metric.extra,{count:fmt(hass,metric.extras[mode],0)})+" · "+result;
   return result;
 };
-const settingsLabels={enabled:"Enabled",entity_filtering:"Entity filtering",current_dashboard_updates:"Live updates for current tab only",registry_filtering:"Device and area filtering",resource_filtering:"Skip unused card files",delay_card_resources:"Load current tab first",preload_card_resources:"Preload card files",visible_first_graphs:"Delay graph loading",pause_animations_during_loading:"Pause animations during loading",pause_offscreen_animations:"Pause off-screen animations",idle_updates:"Idle mode",dashboard_cards:"Loona dashboard cards",dashboards:"Dashboards",target_mode:"Apply filtering to",user_ids:"Accounts",extra_entities:"Entities",include_domains:"Entity types",include_globs:"Entities to include",exclude_globs:"Entities to exclude",always_forward_resources:"Extra card files to load",idle_after_minutes:"Idle after (minutes)",idle_refresh_seconds:"Idle refresh (seconds)"};
+const settingsLabels={enabled:"Enabled",entity_filtering:"Entity filtering",current_dashboard_updates:"Live updates for current tab only",registry_filtering:"Device and area filtering",resource_filtering:"Skip unused card files",delay_card_resources:"Prioritize current tab",preload_card_resources:"Preload card files",visible_first_graphs:"Delay graph loading",pause_animations_during_loading:"Pause animations during loading",pause_offscreen_animations:"Pause off-screen animations",idle_updates:"Idle mode",dashboard_cards:"Loona dashboard cards",dashboards:"Dashboards",target_mode:"Apply filtering to",user_ids:"Accounts",extra_entities:"Entities",include_domains:"Entity types",include_globs:"Entities to include",exclude_globs:"Entities to exclude",always_forward_resources:"Extra card files to load",idle_after_minutes:"Idle after (minutes)",idle_refresh_seconds:"Idle refresh (seconds)"};
 const cardLabels={benchmark:"Loona benchmark",settings:"Loona settings",statistics:"Loona statistics"};
 const blockingMethod="Browser blocking uses Long Animation Frames. It does not measure total CPU, GPU, memory, battery or all response delays.";
 const blockingSupported=report=>report ? scored(report).some(row=>row.loaf_supported) : globalThis.PerformanceObserver?.supportedEntryTypes?.includes("long-animation-frame")===true;
-const methods=["Reloads use the browser cache. This is not a cold-cache or hard-refresh test.","Readiness means known visible cards have mounted and loading indicators have settled. Cameras, charts and custom content may still be loading.","JSON sizes are logical UTF-8 message sizes, before network compression. Card file sizes are decoded content sizes when the browser exposes them.",blockingMethod,"Each mode gets a warm-up, then three alternating pairs. Live activity can differ between passes. Overlapping timing ranges are inconclusive.","Idle savings appear only if the configured idle threshold is reached. This test does not isolate the benefit of each setting."];
+const methods=["The benchmark measures reloads with the browser cache, not cold-cache loads or a guaranteed hard refresh.","Readiness covers known visible card elements and loading indicators. Cameras, charts and custom content may still be loading.","JSON sizes are logical UTF-8 message sizes, before network compression. File sizes cover observed registered resource entry files, not every imported dependency.",blockingMethod,"Each mode gets a warm-up, then three alternating pairs. Live activity can differ between passes. Overlapping timing ranges are inconclusive.","Idle savings only appear if the configured idle threshold is reached. This test does not isolate the benefit of each setting."];
 export function benchmarkSections(report,hass) {
   const t=(key,values)=>text(hass,key,values), sections=[];
   const showBlocking=blockingSupported(report), activeMethods=methods.filter(key=>key!==blockingMethod || showBlocking);
@@ -56,7 +56,7 @@ export function benchmarkSections(report,hass) {
   if(report.error) return [{title:t("Executive summary"),lines:[t("No valid comparison was completed."),t(report.reason||"Benchmark interrupted"),t("Start over to run a new comparison.")]}];
   const metrics=benchmarkMetrics(report);
   sections.push({title:t("Executive summary"),list:true,lines:metrics.map(metric=>`${t(metric.label)}: ${metricStatus(metric,hass)}.`)});
-  sections.push({title:t("Measurements"),headers:[t("Measurement"),"Native HA","Loona"],rows:metrics.map(metric=>[t(metric.label),valueLabel(metric,hass,0),valueLabel(metric,hass,1)])});
+  sections.push({title:t("Measurements"),headers:[t("Measurement"),t("Native Home Assistant"),"Loona"],rows:metrics.map(metric=>[t(metric.label),valueLabel(metric,hass,0),valueLabel(metric,hass,1)])});
   const names=report.names||{}, settings=report.settings||{};
   sections.push({title:t("Test details"),headers:[t("Setting"),t("Value")],rows:[
     [t("Dashboard"),report.dashboard_title||t("Unavailable")],[t("Tab"),report.view_title||t("Unavailable")],
@@ -67,7 +67,7 @@ export function benchmarkSections(report,hass) {
   const advice=[];
   for(const metric of metrics) {
     if(metric.status==="No clear timing difference" || metric.timing && metric.status==="No measurable change") advice.push(t("The loading or blocking times are similar or overlap across passes. This does not indicate an interrupted test. Data savings can still be measured without a proven speed improvement."));
-    if(metric.countOnly) advice.push(t("Some card file sizes are unavailable in this browser. This comparison uses file counts for both modes; fewer files does not establish less file data."));
+    if(metric.countOnly) advice.push(t("Some card file sizes are unavailable in this browser. Card files loaded instead compares file counts for both modes; fewer files does not establish less file data."));
     if(metric.status==="Incomplete measurement") advice.push(t(metric.label)+": "+t("Fewer than three valid readings are available. Resolve the issues below and repeat the test."));
     if(metric.inactive) advice.push(t("No live updates were observed. Repeat while the dashboard entities are changing."));
   }
@@ -82,15 +82,15 @@ export function benchmarkSections(report,hass) {
     else display=String(value);
     return [t(settingsLabels[key]),display];
   });
-  sections.push({title:t("Saved settings"),headers:[t("Setting"),t("Value")],rows:settingRows});
+  sections.push({title:t("Saved settings"),lines:[t("This report can include dashboard and account names, entity names, card file addresses and browser details. Review it before posting.")],headers:[t("Setting"),t("Value")],rows:settingRows});
   sections.push({title:t("Individual passes"),headers:[t("Pass"),t("Mode"),t("Ready (s)"),t("Data (KB)"),t("Card files"),t("Updates"),...(showBlocking ? [t("Blocking (ms)")] : [])],rows:scored(report).map((row,index)=>[
-    fmt(hass,index+1,0),row.mode==="native" ? "Native HA" : "Loona",fmt(hass,finite(row.ready_ms) ? row.ready_ms/1000 : null),
+    fmt(hass,index+1,0),row.mode==="native" ? t("Native Home Assistant") : "Loona",fmt(hass,finite(row.ready_ms) ? row.ready_ms/1000 : null),
     fmt(hass,(row.initial_bytes+row.registry_bytes)/1000),fmt(hass,row.resources.length,0),fmt(hass,row.updates,0),...(showBlocking ? [fmt(hass,row.loaf_supported ? row.blocking_ms : null)] : [])
   ])});
   const first=scored(report)[0];
-  sections.push({title:t("Measurement limits"),lines:[...activeMethods.map(key=>t(key)),
-    t("Cached scripts in WebKit (Safari and the Apple Companion app) can report zero file sizes. After observation, Loona tries to read missing same-origin sizes from cached bodies without downloading files. Cross-origin restrictions or unreadable caches can leave sizes incomplete; the chart then uses file counts for both modes."),
-    t(showBlocking ? "Blocking is measured alongside live updates in the same observation window. It does not add a separate test phase." : "Blocking was skipped because this browser does not expose Long Animation Frames. Chrome and Edge 123+ support it; Firefox, Safari and the Apple Companion app do not. Skipping it does not shorten the run because it shares the live-update observation window."),
+  sections.push({title:t("Caveats"),lines:[...activeMethods.map(key=>t(key)),
+    t("Safari and the Home Assistant Companion app for iOS and macOS use WebKit, which may not report decoded file sizes for cached scripts, even when the files loaded successfully. After the benchmark ends, Loona tries to recover the missing file sizes using cache-only reads. Cross-origin restrictions can also hide sizes. If any pass still lacks a file size, Card files loaded instead compares file counts for both modes."),
+    t(showBlocking ? "Blocking is measured alongside live updates in the same observation window. It does not add a separate test phase." : "Blocking was skipped because this browser does not expose Long Animation Frames. Chrome and Edge 123+ support it; Firefox, Safari and the iOS and macOS Companion apps (WebKit) do not. Skipping it does not shorten the run because it shares the live-update observation window."),
     ...(first ? [t("Browser: {browser}; viewport: {width} x {height}",{browser:first.browser,width:first.viewport[0],height:first.viewport[1]})] : [])]});
   return sections;
 }
@@ -145,7 +145,7 @@ export function benchmarkSvg(report,hass,width=360,colors={}) {
     label(t("See the detailed report for recovery steps."),18,140,12,c.secondary);
     return root;
   }
-  label(t("Native HA and current Loona settings"),18,86,12,c.secondary);
+  label(t("Native HA and your saved Loona settings"),18,86,12,c.secondary);
   // Headline: the largest improvement, with one dot per measurement that improved.
   const improved=metrics.filter(isBetter), best=improved.sort((a,b)=>b.percent-a.percent)[0];
   root.append(svgNode("rect",{x:margin,y:heroY,width:width-2*margin,height:heroHeight,rx:16,fill:"url(#loona-bm-hero)",stroke:c.accent,"stroke-opacity":.45}));
@@ -168,16 +168,11 @@ export function benchmarkSvg(report,hass,width=360,colors={}) {
     label(t(metric.label),left,top+28,15,c.text,600);
     values.forEach((value,mode)=>{
       const base=top+54+mode*38, barWidth=finite(value) && value>0 ? Math.max(6,track*value/max) : 0;
-      label(mode ? "Loona" : "Native HA",left,base,11,mode ? c.accent : c.secondary,700);
+      label(mode ? "Loona" : t("Native HA"),left,base,11,mode ? c.accent : c.secondary,700);
       label(valueLabel(metric,hass,mode),width-left,base,12,c.text,600,"end");
       root.append(svgNode("rect",{x:left,y:base+8,width:track,height:10,rx:5,fill:c.text,"fill-opacity":.08}));
       if(barWidth) root.append(svgNode("rect",{x:left,y:base+8,width:barWidth,height:10,rx:5,fill:mode ? "url(#loona-bm-bar)" : "url(#loona-bm-hatch)",stroke:mode ? "none" : c.secondary,"stroke-opacity":.6}));
     });
-    // The outlined ghost on the Loona row marks how much shorter it is than Native HA.
-    if(better && finite(values[0]) && finite(values[1])) {
-      const saved=track*values[0]/max, kept=Math.max(6,track*values[1]/max);
-      if(saved-kept>8) root.append(svgNode("rect",{x:left+kept,y:top+54+38+8,width:saved-kept,height:10,rx:5,fill:c.accent,"fill-opacity":.12,stroke:c.accent,"stroke-opacity":.85}));
-    }
     const status=metricStatus(metric,hass), icon=better || worse, chipWidth=estimate(status,11)+(icon ? 20 : 0)+20, tone=better ? c.accent : c.secondary;
     root.append(svgNode("rect",{x:left,y:top+118,width:Math.min(track,chipWidth),height:22,rx:11,fill:better ? c.accent : "none","fill-opacity":.18,stroke:tone,"stroke-opacity":better ? 1 : .5}));
     if(icon) arrow(left+8,top+123,worse,tone,12);
@@ -258,14 +253,14 @@ function install() {
     root.querySelector("h2").textContent=t("Benchmark this dashboard");root.querySelector("#version").textContent=text(this._hass,"Version: {version}",{version:VERSION});
     const intro=root.querySelector("#intro"),actions=root.querySelector("#actions"),secondary=root.querySelector("#secondary");
     intro.replaceChildren();if(!running || !this._wasRunning) actions.replaceChildren();secondary.replaceChildren();
-    root.querySelector("#progress").hidden=!running;
+    root.querySelector("#progress").hidden=!running;root.querySelector("progress").setAttribute("aria-label",t("Benchmark progress"));
     root.querySelector("#report").hidden=Boolean(running);
     const disclosure=root.querySelector("#disclosure");disclosure.hidden=Boolean(running);
     root.querySelector("summary").textContent=t(this._report ? "Detailed report" : "What will be measured");
     if(running) {
       const current=state.report?.sequence?.[state.index];
       const phase=state.status==="paused" ? "Paused. Return to this page to repeat this pass." : state.status==="observing" ? "Observing" : state.status==="saving" ? "Saving pass" : "Loading dashboard";
-      root.querySelector("#status").textContent=t(phase)+" · "+(current?.mode==="native" ? "Native HA" : "Loona")+" · "+text(this._hass,"Pass {pass} of {total}",{pass:state.index+1,total:state.report?.sequence.length||8})+(state.status==="observing" ? ` · ${state.remaining}s` : "");
+      root.querySelector("#status").textContent=t(phase)+" · "+(current?.mode==="native" ? t("Native Home Assistant") : "Loona")+" · "+text(this._hass,"Pass {pass} of {total}",{pass:state.index+1,total:state.report?.sequence.length||8})+(state.status==="observing" ? ` · ${state.remaining}s` : "");
       const total=state.report?.sequence.length||8, seconds=state.report?.seconds||30;
       root.querySelector("progress").value=100*(state.index+(state.status==="observing" ? 1-state.remaining/seconds : 0))/total;
       if(!this._wasRunning) this._button(actions,"Cancel benchmark","cancel","quiet",()=>window.loonaBenchmark.cancel());
@@ -287,8 +282,8 @@ function install() {
       }
     } else {
       this._clearPreview();root.querySelector("#report").replaceChildren();
-      this._p(intro,"Compare native Home Assistant with your saved Loona settings on this tab. About 4 minutes, with automatic page reloads.");
-      this._p(intro,"Keep this page in the foreground without touching, scrolling or resizing it. Put this card near the top with another card visible.");
+      this._p(intro,"Compares native Home Assistant with your saved Loona settings on this tab, using two warm-ups and three alternating pairs. Allow about four minutes. Page reloads are automatic.");
+      this._p(intro,"Keep the page in the foreground without scrolling, interacting or resizing. Put this card near the top with another card visible.");
       this._button(actions,"Go","play","primary",()=>this._start(),this._busy || !route());
     }
     this._details();
@@ -359,14 +354,14 @@ function install() {
       if(!location.pathname.split("/").filter(Boolean).length) location.replace("/lovelace"); else location.reload();
     } catch(err) {
       if(result?.token) await this._hass.callWS({type:"loona/benchmark",action:"cancel",token:result.token}).catch(()=>{});
-      this._error=err.message||err.code||text(this._hass,"Benchmark could not start. Refresh and try again.");this._busy=false;this._render();
+      this._error=text(this._hass,err.message||err.code||"Benchmark could not start. Refresh and try again.");this._busy=false;this._render();
     }
   }
   _startOver() { this._clearPreview();this._closeCopyTip();if(window.loonaBenchmark && ["error","cancelled","complete"].includes(window.loonaBenchmark.status)) delete window.loonaBenchmark;this._report=null;this._error=null;this._busy=false;this._png=null;this._pngReport=null;this.shadowRoot.querySelector("#disclosure").open=false;this.shadowRoot.querySelector("#details").scrollTop=0;sessionStorage.removeItem(RESULT);sessionStorage.removeItem(ERROR);const key=this._historyKey();if(key) localStorage.removeItem(key);this._render(); }
   async _remove() {
     if(!await confirmAction(this,"Remove benchmark card?","Remove this benchmark card from this tab? Saved PNGs are kept.","Remove")) return;
     try { await this._hass.callWS({type:"loona/benchmark",action:"remove",...route(),card:this._config}); }
-    catch(err) { this._message(err.message||text(this._hass,"Remove this card manually in the dashboard editor or YAML source.")); }
+    catch(err) { this._message(text(this._hass,err.message||"Remove this card manually in the dashboard editor or YAML source.")); }
   }
   async _blob() {
     await this._logoPromise;
@@ -425,7 +420,7 @@ function install() {
 }
   customElements.define("loona-benchmark-card",BenchmarkCard);
   window.customCards=window.customCards||[];
-  if(!window.customCards.some(card=>card.type==="loona-benchmark-card")) window.customCards.push({type:"loona-benchmark-card",name:"Loona benchmark",description:"Compare native HA and saved Loona settings on this tab."});
+  if(!window.customCards.some(card=>card.type==="loona-benchmark-card")) window.customCards.push({type:"loona-benchmark-card",name:text(document.querySelector("home-assistant").hass,"Loona benchmark"),description:text(document.querySelector("home-assistant").hass,"Compare native Home Assistant with your saved Loona settings on one tab.")});
 }
 install();
 // The module is also loaded when the card is hidden or unmounted.

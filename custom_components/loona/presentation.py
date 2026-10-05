@@ -58,7 +58,7 @@ def notice_labels(hass: HomeAssistant, notices: list[dict[str, Any]]) -> dict[st
         for value in item.get("items", ()):
             if item["code"] in {"missing_entities", "excluded_dependencies"}:
                 labels[value] = entity_label(hass, value)
-            elif item["code"] in {"unchecked_resources", "stale_resources"}:
+            elif item["code"] == "stale_resources":
                 resources.append(value)
     labels.update(resource_labels(hass, resources))
     return labels

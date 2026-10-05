@@ -4,29 +4,29 @@
     "step": {
       "user": {
         "title": "Select dashboards",
-        "description": "Choose the dashboards Loona should filter. Dashboards that Home Assistant generates automatically need to be saved before you can pick them.",
+        "description": "Select the dashboards you want Loona to filter. It is recommended you save automatically generated dashboards first.",
         "data": {
           "dashboards": "Dashboards"
         }
       },
       "targets": {
         "title": "Select accounts",
-        "description": "Choose which accounts get filtered data. It only applies while they're viewing the dashboards you picked. Loona doesn't change what anyone is allowed to see.",
+        "description": "Choose **Selected accounts** or **All accounts**. Filtering only applies while an account is viewing a dashboard you selected. Home Assistant permissions always apply; Loona never grants or removes anyone's access.",
         "data": {
           "target_mode": "Apply filtering to",
           "user_ids": "Accounts"
         }
       },
       "cards": {
-        "title": "Add dashboard cards",
-        "description": "Choose settings, statistics or benchmark cards for the administrator-only Loona dashboard. To benchmark another tab, manually add the benchmark card to that tab.",
+        "title": "Loona dashboard cards",
+        "description": "Optionally install the **Loona settings**, **Loona statistics** and **Loona benchmark** cards. Loona will create a **Loona** dashboard with those cards, visible to administrators only. Pick none to skip this step. To benchmark one of your own dashboards, you must add the benchmark card to it yourself.",
         "data": {
-          "dashboard_cards": "Dashboard cards"
+          "dashboard_cards": "Loona dashboard cards"
         }
       },
       "finish": {
         "title": "Finish setup",
-        "description": "**Refresh your browser when you're done.** The new cards won't appear until your browser reloads."
+        "description": "Refresh your browser so the new dashboard card files load."
       }
     },
     "error": {
@@ -48,20 +48,20 @@
           "filters": "Filters and performance",
           "rules": "Entity rules",
           "resource_preview": "Card files",
-          "cards": "Loona dashboard",
+          "cards": "Loona dashboard cards",
           "idle": "Idle timing"
         }
       },
       "dashboards": {
         "title": "Dashboards",
-        "description": "Choose which dashboards you want to filter.",
+        "description": "Select the dashboards you want Loona to filter.",
         "data": {
           "dashboards": "Dashboards"
         }
       },
       "targets": {
         "title": "Select accounts",
-        "description": "Choose which accounts get filtered data. It only applies while they're viewing the dashboards you picked. Loona doesn't change what anyone is allowed to see.",
+        "description": "Choose **Selected accounts** or **All accounts**. Filtering only applies while an account is viewing a dashboard you selected. Home Assistant permissions always apply; Loona never grants or removes anyone's access.",
         "data": {
           "target_mode": "Apply filtering to",
           "user_ids": "Accounts"
@@ -69,23 +69,23 @@
       },
       "filters": {
         "title": "Filters and performance",
-        "description": "Turn on the features you want. Reload your browser after changing anything that mentions card files.\n\n- **Entity filtering:** send only the entities your dashboards use.\n- **Device and area filtering:** trim the entity, device and area lists the same way.\n- **Live updates for current tab only:** after the page loads, keep only the tab you're viewing live. Needs entity filtering.\n- **Skip unused card files:** don't load card files that no dashboard uses.\n- **Load current tab first:** load the current tab's card files before the rest.\n- **Preload card files:** start downloading card files as early as possible.\n- **Delay graph loading:** wait to load off-screen graphs until you scroll to them.\n- **Pause off-screen animations** and **Pause animations during loading:** pause repeating animations you can't see, or while the dashboard loads.\n- **Idle mode:** pause live updates after inactivity. Needs entity filtering.",
+        "description": "Turn on the features you want. Always reload the dashboard after you make a change.\n\n- **Entity filtering:** Sends only the entities your chosen dashboards use, plus any specific entities you added under Entity rules.\n- **Device and area filtering:** Trims the entity, device, area, floor and label lists.\n- **Live updates for current tab only:** After the first load, only the tab you are viewing keeps updating. Requires Entity filtering enabled.\n- **Skip unused card files:** Prevents loading the card files that none of your dashboards actually use.\n- **Delay graph loading:** Delays building graphs that are off-screen until the rest of the page has settled.\n- **Idle mode:** After a period of no activity, the dashboard stops live updates and refreshes its values only at a set interval. Requires Entity filtering enabled.\n- **Pause animations during loading:** Briefly pauses repeating animations while the dashboard starts up, then resumes them.\n- **Pause off-screen animations:** Pauses repeating animations on cards that are scrolled out of view and resumes them when you scroll back.\n- **Preload card files:** Starts downloading the current tab's card files before Home Assistant requests them.\n- **Prioritize current tab:** Delays other tabs' card files until the current tab has rendered, then loads them gradually.",
         "data": {
           "entity_filtering": "Entity filtering",
           "registry_filtering": "Device and area filtering",
-          "visible_first_graphs": "Delay graph loading",
-          "pause_animations_during_loading": "Pause animations during loading",
-          "resource_filtering": "Skip unused card files",
-          "delay_card_resources": "Load current tab first",
           "current_dashboard_updates": "Live updates for current tab only",
-          "preload_card_resources": "Preload card files",
+          "resource_filtering": "Skip unused card files",
+          "visible_first_graphs": "Delay graph loading",
+          "idle_updates": "Idle mode",
+          "pause_animations_during_loading": "Pause animations during loading",
           "pause_offscreen_animations": "Pause off-screen animations",
-          "idle_updates": "Idle mode"
+          "preload_card_resources": "Preload card files",
+          "delay_card_resources": "Prioritize current tab"
         }
       },
       "rules": {
         "title": "Entity rules",
-        "description": "Loona finds the entities your dashboards use on its own. Add any it missed under Included, or leave some out under Excluded. You can add whole entity types (like sensor), specific entity IDs, or patterns such as sensor.kitchen_*. Exclusions win over inclusions. People, update and zone entities that Home Assistant needs are always kept.",
+        "description": "What gets sent to the dashboard is only what your selected dashboards actually use, plus whatever you add under Included. You can add single entities, a whole entity type (like `sensor` or `light`), or patterns such as `sensor.kitchen_*`, which means every sensor whose name starts with `kitchen_`. The Excluded list takes precedence over Included. Person, update and zone entities cannot be excluded, because the Home Assistant interface needs them.",
         "data": {
           "extra_entities": "Included: entities",
           "include_domains": "Included: entity types",
@@ -95,29 +95,29 @@
       },
       "resource_preview": {
         "title": "Card files",
-        "description": "{required_start}Files Loona always loads ({required_count}){required_summary_end}\n\nYour dashboards or shared styling need these files, or Loona can't tell whether they're used.\n\n{required}\n\nCard types with no matching file ({unresolved_count}): {unresolved}\n\nSaved files that no longer exist ({stale_count}): {stale}\n\nWhen Skip unused card files is on, Loona leaves out files that no dashboard uses. Files it can't identify are always loaded, and everything loads if your dashboards use templates or a scan is incomplete.\n\nTick extra files you need for pop-ups or other features, and untick saved files you no longer want. Save, then reload your browser. Files that are already loaded stay loaded until you reload. If Skip unused card files isn't working, check the diagnostics.",
+        "description": "{required_start}Files Loona always loads ({required_count}){required_summary_end}\n\nYour dashboards or shared styling need these files, or Loona cannot safely judge whether they are used.\n\n{required}\n\nCard types with no matching file ({unresolved_count}): {unresolved}\n\nSaved files that no longer exist ({stale_count}): {stale}\n\nSelecting Skip unused card files will load only the card files your dashboards need. Loona will still load anything it cannot safely judge. If it finds a template it cannot read on any dashboard, every card file is loaded.\n\nExtra card files to load lets you keep specific card files that Loona would otherwise skip, such as files your pop-ups or other features need even though no dashboard uses them. Tick the extra files you need and untick saved files you no longer want. Always reload the dashboard after you make a change. If Skip unused card files is not working, check the diagnostics.",
         "data": {
           "resource_filtering": "Skip unused card files",
           "always_forward_resources": "Extra card files to load"
         }
       },
       "cards": {
-        "title": "Add dashboard cards",
-        "description": "Choose settings, statistics or benchmark cards for the administrator-only Loona dashboard. To benchmark another tab, manually add the benchmark card to that tab.",
+        "title": "Loona dashboard cards",
+        "description": "Optionally install the **Loona settings**, **Loona statistics** and **Loona benchmark** cards. Loona will create a **Loona** dashboard with those cards, visible to administrators only. Pick none to remove it (if you have not edited it). To benchmark one of your own dashboards, you must add the benchmark card to it yourself.",
         "data": {
-          "dashboard_cards": "Dashboard cards"
+          "dashboard_cards": "Loona dashboard cards"
         }
       },
       "confirm_remove_dashboard": {
         "title": "Remove the Loona dashboard",
-        "description": "Remove the Loona dashboard that Loona created, along with its cards? Dashboards you've edited yourself are kept. Cancel to keep things as they are.",
+        "description": "Remove the Loona dashboard, along with its cards? An edited Loona dashboard is kept. Cancel to keep things as they are.",
         "data": {
           "confirm": "Confirm removal"
         }
       },
       "idle": {
         "title": "Idle timing",
-        "description": "Choose how long the dashboard waits before going idle, and how often it refreshes while idle. Set refresh to 0 to stop refreshing until someone uses the dashboard; otherwise pick 1 to 60 seconds (default 60). Clocks, cameras and some cards may keep updating on their own.",
+        "description": "When Idle mode is on and you have not touched the page for the Idle after time, live updates pause. A fresh snapshot of current values loads at the Idle refresh interval. Changes in between are not displayed. Idle after is 1 to 60 minutes (default 5). Idle refresh is 1 to 60 seconds (default 60). At 0, values remain frozen until you interact. This affects ordinary live connections only - cameras, independent clocks, card timers and raw event listeners will keep going.",
         "data": {
           "idle_after_minutes": "Idle after (minutes)",
           "idle_refresh_seconds": "Idle refresh (seconds)"
@@ -147,29 +147,29 @@
       "registry_filtering": {
         "name": "Device and area filtering"
       },
-      "visible_first_graphs": {
-        "name": "Delay graph loading"
-      },
-      "pause_animations_during_loading": {
-        "name": "Pause animations during loading"
+      "current_dashboard_updates": {
+        "name": "Live updates for current tab only"
       },
       "resource_filtering": {
         "name": "Skip unused card files"
       },
-      "delay_card_resources": {
-        "name": "Load current tab first"
+      "visible_first_graphs": {
+        "name": "Delay graph loading"
       },
-      "current_dashboard_updates": {
-        "name": "Live updates for current tab only"
+      "idle_updates": {
+        "name": "Idle mode"
       },
-      "preload_card_resources": {
-        "name": "Preload card files"
+      "pause_animations_during_loading": {
+        "name": "Pause animations during loading"
       },
       "pause_offscreen_animations": {
         "name": "Pause off-screen animations"
       },
-      "idle_updates": {
-        "name": "Idle mode"
+      "preload_card_resources": {
+        "name": "Preload card files"
+      },
+      "delay_card_resources": {
+        "name": "Prioritize current tab"
       }
     },
     "button": {

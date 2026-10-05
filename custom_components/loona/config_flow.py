@@ -356,7 +356,7 @@ class LoonaOptionsFlow(OptionsFlow):
                 {
                     vol.Required(key, default=runtime.controls[key]): selector.BooleanSelector()
                     for key in (
-                        CONTROL_ENTITIES, CONTROL_DASHBOARD_LIVE, CONTROL_REGISTRIES, CONTROL_RESOURCES, CONTROL_RESOURCE_DELAY, CONTROL_RESOURCE_PRELOAD, CONTROL_GRAPHS, CONTROL_MOTION, CONTROL_OFFSCREEN, CONTROL_IDLE
+                        CONTROL_ENTITIES, CONTROL_REGISTRIES, CONTROL_DASHBOARD_LIVE, CONTROL_RESOURCES, CONTROL_GRAPHS, CONTROL_IDLE, CONTROL_MOTION, CONTROL_OFFSCREEN, CONTROL_RESOURCE_PRELOAD, CONTROL_RESOURCE_DELAY
                     )
                     if runtime is not None and key in runtime.available_controls
                 }
