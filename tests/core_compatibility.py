@@ -281,6 +281,9 @@ async def check(hass: HomeAssistant) -> None:
         await runtime.statistics_card.set_enabled(True)
         assert await statistics_board.async_load(False) == edited_statistics
         await statistics_board.async_save(generated)
+        # Finish discovery after dashboard lifecycle mutations before filtering.
+        await runtime.async_scan()
+        assert runtime.resource_complete, runtime.resource_scan_problem
         assert not runtime.scope_problem, runtime.problems
         assert not runtime.resource_compatibility_problem, runtime.resource_compatibility_problem
         resource_client, resource_output = client(admin)
