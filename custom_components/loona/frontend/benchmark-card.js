@@ -1,6 +1,6 @@
 /* Same-tab, administrator-only comparisons. Exported SVG contains aggregate data only. */
-import {text, language, markHtml, markStyles, buttonStyles, makeButton, confirmAction, cancelConfirmation, helpStyles} from "./i18n.js?v=0.9.13";
-const VERSION="0.9.13", KEY="loona.benchmark", RESULT=KEY+".result", ERROR=KEY+".error";
+import {text, language, markHtml, markStyles, buttonStyles, makeButton, confirmAction, cancelConfirmation, helpStyles} from "./i18n.js?v=0.9.14";
+const VERSION="0.9.14", KEY="loona.benchmark", RESULT=KEY+".result", ERROR=KEY+".error";
 const ns="http://www.w3.org/2000/svg";
 const finite=value=>typeof value==="number" && Number.isFinite(value) && value>=0;
 const median=values=>{ const rows=values.filter(finite).sort((a,b)=>a-b); return rows.length ? (rows[Math.floor((rows.length-1)/2)]+rows[Math.floor(rows.length/2)])/2 : null; };
@@ -48,7 +48,7 @@ const settingsLabels={enabled:"Enabled",entity_filtering:"Entity filtering",curr
 const cardLabels={benchmark:"Loona benchmark",settings:"Loona settings",statistics:"Loona statistics"};
 const blockingMethod="Browser blocking uses Long Animation Frames. It does not measure total CPU, GPU, memory, battery or all response delays.";
 const blockingSupported=report=>report ? scored(report).some(row=>row.loaf_supported) : globalThis.PerformanceObserver?.supportedEntryTypes?.includes("long-animation-frame")===true;
-const methods=["The benchmark measures reloads with the browser cache, not cold-cache loads or a guaranteed hard refresh.","Readiness covers known visible card elements and loading indicators. Cameras, charts and custom content may still be loading.","JSON sizes are logical UTF-8 message sizes, before network compression. File sizes cover observed registered resource entry files, not every imported dependency.",blockingMethod,"Each mode gets a warm-up, then three alternating pairs. Live activity can differ between passes. Overlapping timing ranges are inconclusive.","Idle savings only appear if the configured idle threshold is reached. This test does not isolate the benefit of each setting."];
+const methods=["The benchmark measures reloads with the browser cache, not cold-cache loads or a guaranteed hard refresh.","Readiness waits for visible cards and icons to render, visible images and fonts to load, and pending native requests to finish. Cameras, charts and custom content may still be loading.","JSON sizes are logical UTF-8 message sizes, before network compression. File sizes cover observed registered resource entry files, not every imported dependency.",blockingMethod,"Each mode gets a warm-up, then three alternating pairs. Live activity can differ between passes. Overlapping timing ranges are inconclusive.","Idle savings only appear if the configured idle threshold is reached. This test does not isolate the benefit of each setting."];
 export function benchmarkSections(report,hass) {
   const t=(key,values)=>text(hass,key,values), sections=[];
   const showBlocking=blockingSupported(report), activeMethods=methods.filter(key=>key!==blockingMethod || showBlocking);

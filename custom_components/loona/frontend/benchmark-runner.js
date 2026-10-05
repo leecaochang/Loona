@@ -146,26 +146,36 @@
   }
   function visibleCards() {
     const cards=[], loading=[]; let nodes=0;
+    const visible = element => {
+      if (element.hidden || element.checkVisibility?.({checkOpacity:true,checkVisibilityCSS:true})===false) return false;
+      const rect=element.getBoundingClientRect();
+      return rect.width>0 && rect.height>0 && rect.bottom>0 && rect.top<innerHeight && rect.right>0 && rect.left<innerWidth;
+    };
     const visit=root=>{
       for (const element of root.children||[]) {
         if (++nodes>config.benchmark_limits.nodes) { keepIssue("observer_limit"); return; }
         if (element.tagName==="LOONA-BENCHMARK-CARD") continue;
-        let visible=false;
-        if (["HUI-CARD","HUI-ERROR-CARD","HA-SPINNER","HA-CIRCULAR-PROGRESS","MD-CIRCULAR-PROGRESS","LOONA-GRAPH-PLACEHOLDER"].includes(element.tagName)) {
-          const rect=element.getBoundingClientRect();
-          visible=rect.width>0 && rect.height>0 && rect.bottom>0 && rect.top<innerHeight && rect.right>0 && rect.left<innerWidth;
-        }
-        if (visible && element.tagName==="HUI-ERROR-CARD") keepIssue("card_error");
-        if (visible && element.tagName==="HUI-CARD" && element.config?.type!=="custom:loona-benchmark-card") {
+        const progress=["HA-SPINNER","HA-CIRCULAR-PROGRESS","MD-CIRCULAR-PROGRESS","LOONA-GRAPH-PLACEHOLDER"].includes(element.tagName);
+        const relevant=progress || ["HUI-CARD","HUI-ERROR-CARD","HA-ICON","IMG"].includes(element.tagName) || element.isUpdatePending===true;
+        const onScreen=relevant && visible(element);
+        if (onScreen && element.tagName==="HUI-ERROR-CARD") keepIssue("card_error");
+        if (onScreen && element.tagName==="HUI-CARD" && element.config?.type!=="custom:loona-benchmark-card") {
           cards.push(element); if (!element._element || !element._element.isConnected || element._element.hidden) loading.push(element);
         }
-        if (visible && ["HA-SPINNER","HA-CIRCULAR-PROGRESS","MD-CIRCULAR-PROGRESS","LOONA-GRAPH-PLACEHOLDER"].includes(element.tagName)) loading.push(element);
+        if (onScreen && (progress || element.isUpdatePending===true || element.tagName==="IMG" && !element.complete)) loading.push(element);
+        // HA's first Lit render creates an empty SVG before its asynchronous
+        // icon lookup finishes. updateComplete alone cannot establish readiness.
+        if (onScreen && element.tagName==="HA-ICON" && element.icon) {
+          const svg=element.shadowRoot?.querySelector("ha-svg-icon");
+          const legacy=element.shadowRoot?.querySelector("iron-icon")?.shadowRoot?.querySelector("svg");
+          if (!svg?.path && !legacy) loading.push(element);
+        }
         if (element.shadowRoot) visit(element.shadowRoot);
         visit(element);
       }
     };
     visit(document);
-    return cards.length>0 && loading.length===0 && !issues.has("card_error");
+    return cards.length>0 && loading.length===0 && document.fonts?.status!=="loading" && !issues.has("card_error");
   }
   let readySince, viewportReady=false;
   function checkReady() {
@@ -180,7 +190,8 @@
       fail("Viewport size changed during testing. Keep the same orientation and start over."); return;
     }
     if (performance.now()>report.ready_ms) { keepIssue("readiness_timeout"); observe(); return; }
-    if (initialFeeds.size && visibleCards()) {
+    const pendingCommands=[...(connection.commands?.values?.()||[])].some(info=>!("subscribe" in info));
+    if (initialFeeds.size && !pendingCommands && visibleCards()) {
       readySince??=performance.now();
       if (performance.now()-readySince>=500) { sample.ready_ms=readySince; observe(); return; }
     } else readySince=undefined;

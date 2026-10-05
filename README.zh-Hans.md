@@ -252,7 +252,7 @@ Loona 能够理解 button-card、Mushroom、Bubble Card、card-mod 和 UIX 所�
 **浏览器阻塞：** Loona 会检测浏览器是否支持 [Long Animation Frames](https://developer.mozilla.org/en-US/docs/Web/API/PerformanceLongAnimationFrameTiming#browser_compatibility)。Chrome 和 Edge 123 及以上版本支持它；Firefox、Safari 以及 iOS 和 macOS 版 Companion 应用（WebKit）不支持。不支持的浏览器会跳过阻塞观察器，并在图表、摘要条目和各轮列中省略它。
 
 - 基准测试测量的是使用浏览器缓存的重新加载，不是无缓存加载，也不保证是强制刷新。
-- 就绪指的是已知的可见卡片元素和加载指示器。
+- 就绪时间会等待可见卡片和图标渲染完成、可见图片和字体加载完成，以及待完成的原生请求结束。摄像头、图表和自定义内容仍可能在加载。
 - 文件大小只涵盖观察到的已注册资源入口文件，不包括每一个被导入的依赖项。
 - 无活动、缺失的读数、错误以及重叠的时间范围，都会被明确标出。
 - 只有达到设置的空闲阈值，才会出现空闲模式带来的节省。

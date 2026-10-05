@@ -253,7 +253,7 @@ The finished **Benchmark Results** image shows visible-card readiness, initial J
 **Browser blocking:** Loona detects support for [Long Animation Frames](https://developer.mozilla.org/en-US/docs/Web/API/PerformanceLongAnimationFrameTiming#browser_compatibility). Chrome and Edge 123+ support it; Firefox, Safari and the iOS and macOS Companion apps (WebKit) do not. Unsupported browsers skip the blocking observer and omit its chart, summary entry and per-pass column.
 
 - The benchmark measures reloads with the browser cache, not cold-cache loads or a guaranteed hard refresh.
-- Readiness covers known visible card elements and loading indicators.
+- Readiness waits for visible cards and icons to render, visible images and fonts to load, and pending native requests to finish. Cameras, charts and custom content may still be loading.
 - File sizes cover observed registered resource entry files, not every imported dependency.
 - No activity, missing readings, errors and overlapping timing ranges are identified explicitly.
 - Idle savings only appear if the configured idle threshold is reached.

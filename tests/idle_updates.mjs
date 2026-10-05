@@ -18,14 +18,14 @@ function advance(ms) {
   now=end;
 }
 let publish;
-const policy={version:"0.9.13",enabled:true,after_ms:60000,refresh_seconds:60};
+const policy={version:"0.9.14",enabled:true,after_ms:60000,refresh_seconds:60};
 const connection={connected:true,socket:{},
   subscribeMessage(callback,message) { sent.push(message);publish=callback;callback({idle:policy});return Promise.resolve(()=>{}); },
   sendMessagePromise(message) {sent.push(message);return Promise.resolve(null);},
 };
 const app=document.createElement("home-assistant");app.hass={connection};document.body.append(app);
 const source=readFileSync(new URL("../custom_components/loona/frontend/panel-context.js",import.meta.url),"utf8")
-  .replace('import "./resource-loading.js?v=0.9.13";',readFileSync(new URL("../custom_components/loona/frontend/resource-loading.js",import.meta.url),"utf8"))
+  .replace('import "./resource-loading.js?v=0.9.14";',readFileSync(new URL("../custom_components/loona/frontend/resource-loading.js",import.meta.url),"utf8"))
   .replaceAll("import.meta.url",JSON.stringify("http://ha.test/loona/panel-context.js?poll=0"));
 vm.runInContext(source,vm.createContext({window,document,location:window.location,URL,Date:{now:()=>now},customElements:window.customElements,console}));
 await new Promise(setImmediate);

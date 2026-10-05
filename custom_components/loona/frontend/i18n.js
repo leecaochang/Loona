@@ -90,7 +90,7 @@ const chinese = {
   "Compares native Home Assistant with your saved Loona settings on this tab, using two warm-ups and three alternating pairs. Allow about four minutes. Page reloads are automatic.": "在此选项卡上，用两轮预热和三组交替测试，比较原生 Home Assistant 与你保存的 Loona 设置。请预留约四分钟，页面会自动刷新。",
   "Keep the page in the foreground without scrolling, interacting or resizing. Put this card near the top with another card visible.": "测试期间请让页面保持在前台，不要滚动、操作或调整窗口大小。请把此卡片放在靠近顶部的位置，并保持另一张卡片可见。",
   "The benchmark measures reloads with the browser cache, not cold-cache loads or a guaranteed hard refresh.": "基准测试测量的是使用浏览器缓存的重新加载，不是无缓存加载，也不保证是强制刷新。",
-  "Readiness covers known visible card elements and loading indicators. Cameras, charts and custom content may still be loading.": "就绪指的是已知的可见卡片元素和加载指示器。摄像头、图表和自定义内容可能仍在加载。",
+  "Readiness waits for visible cards and icons to render, visible images and fonts to load, and pending native requests to finish. Cameras, charts and custom content may still be loading.": "就绪时间会等待可见卡片和图标渲染完成、可见图片和字体加载完成，以及待完成的原生请求结束。摄像头、图表和自定义内容仍可能在加载。",
   "JSON sizes are logical UTF-8 message sizes, before network compression. File sizes cover observed registered resource entry files, not every imported dependency.": "JSON 大小是网络压缩前的 UTF-8 逻辑消息大小。文件大小只涵盖观察到的已注册资源入口文件，不包括每一个被导入的依赖项。",
   "Browser blocking uses Long Animation Frames. It does not measure total CPU, GPU, memory, battery or all response delays.": "浏览器阻塞基于 Long Animation Frames 测量，不代表总 CPU、GPU、内存、电池消耗或全部响应延迟。",
   "Each mode gets a warm-up, then three alternating pairs. Live activity can differ between passes. Overlapping timing ranges are inconclusive.": "两种模式各先预热一轮，再交替进行三组测试。各轮的实时活动可能不同。时间范围重叠时，结果不确定。",

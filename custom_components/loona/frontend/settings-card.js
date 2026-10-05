@@ -1,12 +1,12 @@
 /* Prefilled administrator settings using native Loona validation and storage. */
-import { language, text, translate, renderVersion, markHtml, markStyles, hideBrokenMark, icon, makeButton, buttonStyles, saveCardPreferences, setText, confirmAction, cancelConfirmation, createHelp, closeHelp, helpStyles } from "./i18n.js?v=0.9.13";
+import { language, text, translate, renderVersion, markHtml, markStyles, hideBrokenMark, icon, makeButton, buttonStyles, saveCardPreferences, setText, confirmAction, cancelConfirmation, createHelp, closeHelp, helpStyles } from "./i18n.js?v=0.9.14";
 
 const groups = {
   controls: "Filters and performance", dashboards: "Dashboards", targets: "Accounts",
   idle: "Idle timing",
   rules: "Entity rules", resources: "Card files", cards: "Loona dashboard cards",
 };
-const cardVersion = "0.9.13";
+const cardVersion = "0.9.14";
 const labels = {
   enabled: "Enabled", entity_filtering: "Entity filtering", registry_filtering: "Device and area filtering",
   current_dashboard_updates: "Live updates for current tab only",

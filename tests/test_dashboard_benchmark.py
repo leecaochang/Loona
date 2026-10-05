@@ -125,6 +125,6 @@ def test_bounded_readings_and_shipped_card():
     for patch in ({"duration_ms": float("nan")}, {"updates": True}, {"resources": [{"source": "x" * 513, "bytes": None, "cached": False, "before_ready": False}]}):
         with pytest.raises(vol.Invalid):
             _SAMPLE({**sample(), **patch})
-    for script in ("dashboard_benchmark.mjs", "dashboard_benchmark_cache.mjs"):
+    for script in ("dashboard_benchmark.mjs", "dashboard_benchmark_cache.mjs", "dashboard_benchmark_readiness.mjs"):
         result = subprocess.run(["node", str(Path(__file__).with_name(script))], capture_output=True, text=True, timeout=30)
         assert result.returncode == 0, result.stdout + result.stderr
