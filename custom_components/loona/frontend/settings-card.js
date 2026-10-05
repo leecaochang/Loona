@@ -144,7 +144,7 @@ function install() {
           </div></div>
           <p id="action-status" role="status"></p></div></ha-card>`;
       hideBrokenMark(this.shadowRoot);
-      for (const [key,message] of Object.entries({rescan:"Editing a dashboard normally triggers this automatically; press this button to force a rescan now.",reset_live_statistics:"Clears the live counters and recent page-load records. Your Loona settings and Home Assistant's recorded history are untouched.",restore_defaults:"Restores Loona back to default settings, as if you had installed it fresh. Also removes the Loona dashboard (if you have not edited it). You will need to select dashboards and accounts again before filtering resumes. You will be asked to confirm."})) {
+      for (const [key,message] of Object.entries({rescan:"Editing a dashboard normally triggers this automatically; press this button to force a rescan now.",reset_live_statistics:"Clears the live counters, recent page-load records and browser readings. Your Loona settings and Home Assistant's recorded history are untouched.",restore_defaults:"Restores Loona back to default settings, as if you had installed it fresh. Also removes the Loona dashboard (if you have not edited it). You will need to select dashboards and accounts again before filtering resumes. You will be asked to confirm."})) {
         const button=this.shadowRoot.querySelector(`[data-action="${key}"]`), wrapper=make("span",undefined,"action-help");
         button.replaceWith(wrapper); wrapper.append(button,createHelp(this._hass,button.querySelector("[data-i18n]").dataset.i18n,message));
       }

@@ -2,6 +2,8 @@
 
 [English](README.md) | 简体中文
 
+[![CI](https://github.com/leecaochang/Loona/actions/workflows/compatibility.yml/badge.svg)](https://github.com/leecaochang/Loona/actions/workflows/compatibility.yml) [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz) [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.6%2B-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io)
+
 Loona 帮助你的 Home Assistant Lovelace 仪表盘更轻量地加载和运行。Loona 的工作对你是透明的：你的仪表盘、登录方式和 Home Assistant 地址都保持不变。支持任何设备，只要浏览器是较新的版本。无需代理，也无需额外软件。几秒钟即可安装。**设置好就不用管了。**
 
 ## Loona 是如何工作的？
@@ -74,7 +76,7 @@ Loona 的开发由一位人类软件工程师主导，并借助了大语言模�
 | 按钮 | 作用 |
 | --- | --- |
 | 重新扫描仪表盘 | 编辑仪表盘后通常会自动触发扫描；点击此按钮可立即强制重新扫描。 |
-| 重置实时统计 | 清除实时计数和最近的页面加载记录。你的 Loona 设置和 Home Assistant 的历史记录不受影响。 |
+| 重置实时统计 | 清除实时计数、最近的页面加载记录和浏览器读数。你的 Loona 设置和 Home Assistant 的历史记录不受影响。 |
 | 恢复默认设置 | 将 Loona 恢复为默认设置，就像刚安装时一样。同时会移除 Loona 仪表盘（如果你没有编辑过它）。你需要重新选择仪表盘和用户，筛选才会恢复。你编辑过的 Loona 仪表盘、自己放置的 Loona 卡片以及历史记录都会保留。 |
 | 刷新页面 | 仅当仪表盘卡片的版本与集成的版本不一致时才会显示。 |
 

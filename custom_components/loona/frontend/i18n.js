@@ -303,7 +303,7 @@ const chinese = {
   "Live update rate": "实时更新速率",
   "Totals and entities": "总计与实体",
   "Editing a dashboard normally triggers this automatically; press this button to force a rescan now.": "编辑仪表盘后通常会自动触发扫描；点击此按钮可立即强制重新扫描。",
-  "Clears the live counters and recent page-load records. Your Loona settings and Home Assistant's recorded history are untouched.": "清除实时计数和最近的页面加载记录。你的 Loona 设置和 Home Assistant 的历史记录不受影响。",
+  "Clears the live counters, recent page-load records and browser readings. Your Loona settings and Home Assistant's recorded history are untouched.": "清除实时计数、最近的页面加载记录和浏览器读数。你的 Loona 设置和 Home Assistant 的历史记录不受影响。",
   "Charts show up to 15 minutes of history and refresh along with the statistics. Chart history is kept only in memory and clears on reset or restart. Sent and filtered out share one scale.": "图表最多显示 15 分钟的历史数据，并随统计一起刷新。图表历史只保存在内存中，重置或重启后会清空。“已发送”和“已筛除”使用同一刻度。",
   "{minutes} min history": "{minutes} 分钟历史",
   "No history yet": "暂无历史",

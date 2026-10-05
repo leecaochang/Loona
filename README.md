@@ -1,5 +1,9 @@
 # Loona
 
+English | [简体中文](README.zh-Hans.md)
+
+[![CI](https://github.com/leecaochang/Loona/actions/workflows/compatibility.yml/badge.svg)](https://github.com/leecaochang/Loona/actions/workflows/compatibility.yml) [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz) [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.6%2B-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io)
+
 Loona helps your Home Assistant Lovelace dashboards load and run lighter. Loona acts transparently - your dashboards, login, and Home Assistant URL all stay exactly the same. Works on any device with a current browser. No proxies - no extra software. Installs in seconds. **Set it and forget it.**
 
 ## How does Loona work?
@@ -72,7 +76,7 @@ All cards require an administrator account to be installed or viewed. Reload you
 | Button | What it does |
 | --- | --- |
 | Rescan dashboards | Editing a dashboard normally triggers this automatically; press this button to force a rescan now. |
-| Reset live statistics | Clears the live counters and recent page-load records. Your Loona settings and Home Assistant's recorded history are untouched. |
+| Reset live statistics | Clears the live counters, recent page-load records and browser readings. Your Loona settings and Home Assistant's recorded history are untouched. |
 | Restore defaults | Restores Loona back to default settings, as if you had installed it fresh. Also removes the Loona dashboard (if you have not edited it). You will need to select dashboards and accounts again before filtering resumes. An edited Loona dashboard, Loona cards you placed yourself, and recorded history are kept. |
 | Reload page | Visible only when the dashboard card version and the integration version differ. |
 

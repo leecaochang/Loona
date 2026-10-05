@@ -267,8 +267,13 @@ function install() {
           button:focus-visible,summary:focus-visible {
             outline:2px solid var(--primary-color); outline-offset:2px; }
           ::selection { background:var(--primary-color); color:var(--text-primary-color,#fff); }
+          /* One continuous wash: the hero holds the deepest tint, Totals carries it on and fades into the card. */
+          ha-card { --loona-wash-deep:color-mix(in srgb,var(--primary-color) 8%,color-mix(in srgb,var(--secondary-background-color) 60%,var(--card-background-color)));
+            --loona-wash-mid:color-mix(in srgb,var(--primary-color) 5%,color-mix(in srgb,var(--secondary-background-color) 35%,var(--card-background-color))); }
           .hero { position:relative; margin:20px -24px 0; padding:20px 24px 12px; font-variant-numeric:tabular-nums;
-            background:color-mix(in srgb,var(--primary-color) 5%,color-mix(in srgb,var(--secondary-background-color) 55%,var(--card-background-color))); }
+            background:linear-gradient(180deg,var(--loona-wash-deep),var(--loona-wash-mid)); }
+          .totals { margin:0 -24px; padding:4px 24px 18px; border-top:1px solid color-mix(in srgb,var(--primary-color) 12%,transparent);
+            background:linear-gradient(180deg,var(--loona-wash-mid),var(--card-background-color)); }
           .hero-top,.totals-visual { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); align-items:start; gap:8px 0; }
           .hero-top { align-items:center; }
           .totals-visual { margin:12px 0 0; }
@@ -296,7 +301,7 @@ function install() {
           .row dt { flex:0 1 auto; min-width:0; color:var(--primary-text-color); }
           .row .leader { flex:1 1 16px; min-width:16px; align-self:end; margin-bottom:5px; border-bottom:1px dotted var(--secondary-text-color); opacity:.5; }
           .row dd { flex:none; margin:0; text-align:end; font-weight:500; }
-          .fact-heading { margin:24px 0 0; }
+          .fact-heading { margin:16px 0 0; }
           .fact-heading h3 { margin:0; font-size:15px; font-weight:500; }
           .actions { display:flex; justify-content:space-between; align-items:center; gap:12px;
             border-top:1px solid var(--divider-color); padding-top:12px; margin-top:16px; }
@@ -315,7 +320,7 @@ function install() {
           .loona-notices .notice-items { max-height:160px; overflow:auto; overflow-wrap:anywhere; font-size:12px; scrollbar-color:var(--divider-color) transparent; }
           #error { color:var(--error-color); overflow-wrap:anywhere; }
           [hidden] { display:none !important; }
-          @media(max-width:480px) { ha-card { padding:16px; } .hero { margin-inline:-16px; padding-inline:16px; }
+          @media(max-width:480px) { ha-card { padding:16px; } .hero,.totals { margin-inline:-16px; padding-inline:16px; }
             .rate dd { font-size:26px; } .gauge-text .big { font-size:34px; }
             .actions { align-items:center; } }
         </style>
@@ -338,7 +343,7 @@ function install() {
                 <div id="stream-chart" class="metric-chart" hidden></div>
               </div>
             </div>
-            <div class="section-heading fact-heading"><h3 data-i18n="Totals and entities">Totals and entities</h3><span id="scope-help"></span></div>
+            <section class="totals"><div class="section-heading fact-heading"><h3 data-i18n="Totals and entities">Totals and entities</h3><span id="scope-help"></span></div>
             <div id="totals-visual" class="totals-visual" hidden><div id="estimate-chart" class="metric-chart"></div><div id="feeds-chart" class="metric-chart"></div></div>
             <div class="metric-tools"><label class="chart-choice"><input id="show-charts" type="checkbox"><span data-i18n="Show statistics charts">Show statistics charts</span></label><span id="rates-help"></span></div>
             <dl class="ledger">
@@ -347,7 +352,7 @@ function install() {
               <div class="row" id="subscriptions-row"><dt id="subscriptions-label" data-i18n="Connections filtered / total">Connections filtered / total</dt><i class="leader"></i><dd id="subscriptions"></dd></div>
               <div class="row"><dt data-i18n="Entities currently included">Entities currently included</dt><i class="leader"></i><dd id="scope"></dd></div>
               <div class="row" id="estimate-row"><dt data-i18n="Estimated entities trimmed">Estimated entities trimmed</dt><i class="leader"></i><dd id="estimate"></dd></div>
-            </dl>
+            </dl></section>
             <div class="actions"><p id="reset-time"></p><span class="action-help"><button id="reset" class="btn small" type="button">${icon("reset")}<span data-i18n="Reset live statistics">Reset live statistics</span></button><span id="reset-help"></span></span></div>
             <details id="loads"><summary class="section-summary"><span data-i18n="Recent page loads">Recent page loads</span> <span id="load-count"></span><span id="loads-help"></span></summary>
               <ul id="load-rows" class="rows"></ul>
@@ -364,7 +369,7 @@ function install() {
       this._get("scope-help").append(createHelp(this._hass,"Totals and entities","A live connection is the link a dashboard tab keeps open to Home Assistant. Each open tab usually has one connection, sometimes more. 'Connections filtered / total' shows how many of them Loona is filtering. 'Estimated entities trimmed' is the percentage of Home Assistant's entities outside Loona's configured inclusion set. It describes potential entity reduction, not measured update reduction, and remains visible when filtering is off."));
       this._get("loads-help").append(createHelp(this._hass,"Recent page loads","Shows how many entities and card files were sent versus available for each dashboard's latest recorded page load. It does not measure loading time."));
       this._get("performance-help").append(createHelp(this._hass,"Browser performance","Lists the 20 entities with the most updates sent since reset, alongside browser reports of slow frames, script work and event subscriptions that may bypass filtering. These reports cover only part of the browser's work. Items marked 'before measuring' happened before Loona started watching."));
-      this._get("reset-help").append(createHelp(this._hass,"Reset live statistics","Clears the live counters and recent page-load records. Your Loona settings and Home Assistant's recorded history are untouched."));
+      this._get("reset-help").append(createHelp(this._hass,"Reset live statistics","Clears the live counters, recent page-load records and browser readings. Your Loona settings and Home Assistant's recorded history are untouched."));
       this._get("refresh").addEventListener("click", () => this._fetch());
       this._get("reset").addEventListener("click", () => this._reset());
       this._get("show-charts").addEventListener("change", () => {
