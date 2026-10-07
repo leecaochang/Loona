@@ -102,6 +102,7 @@ async def test_options_preserve_unrelated_fields_and_stale_labels(
         "rules",
         "resource_preview",
         "cards",
+        "done",
     }
     result = await flow.async_step_dashboards()
     selector = next(iter(result["data_schema"].schema.values()))
@@ -112,7 +113,8 @@ async def test_options_preserve_unrelated_fields_and_stale_labels(
         choice["value"] == "removed-user" for choice in selectors[1].config["options"]
     )
     result = await flow.async_step_dashboards({"dashboards": ["wall-panel"]})
-    assert result["data"] == {
+    assert result["type"] == "menu" and result["step_id"] == "init"
+    assert dict(entry.options) == {
         "dashboards": ["wall-panel"],
         "extra_entities": ["sensor.future"],
         "exclude_globs": ["sensor.hidden*"],
@@ -128,8 +130,8 @@ async def test_rules_and_extra_entities_validate(loona_hass, make_entry):
     result = await flow.async_step_rules({"include_globs": ["sensor.["]})
     assert result["errors"]["base"] == "invalid_selection"
     loona_hass.states.async_set("sensor.future", "1")
-    result = await flow.async_step_rules({"extra_entities": ["sensor.future"]})
-    assert result["data"]["extra_entities"] == ["sensor.future"]
+    await flow.async_step_rules({"extra_entities": ["sensor.future"]})
+    assert entry.options["extra_entities"] == ["sensor.future"]
     result = await flow.async_step_rules({"extra_entities": ["bad value"]})
     assert result["errors"]["base"] == "invalid_selection"
     result = await flow.async_step_filters({"entity_filtering": False})
@@ -165,16 +167,16 @@ async def test_rules_select_known_entities_domains_and_preserve_saved_patterns(
     values = form["data_schema"]({"include_domains": ["retired", "light"],
         "include_globs": ["sensor.room_*", registered.entity_id],
         "exclude_globs": ["sensor.*"]})
-    result = await flow.async_step_rules(values)
-    assert result["data"] == {**values, "extra_entities": ["sensor.future"]}
+    await flow.async_step_rules(values)
+    assert dict(entry.options) == {**values, "extra_entities": ["sensor.future"]}
     # Rebuild against current entities at submission, while retaining saved rules.
     loona_hass.states.async_remove("sensor.room_temperature")
     result = await flow.async_step_rules({"include_globs": ["sensor.room_temperature"]})
     assert result["errors"]["base"] == "invalid_selection"
-    result = await flow.async_step_rules({"include_globs": ["sensor.room_*"]})
-    assert result["data"]["include_globs"] == ["sensor.room_*"]
-    result = await flow.async_step_rules({"include_domains": [], "include_globs": [], "exclude_globs": []})
-    assert result["data"] == {"extra_entities": ["sensor.future"], "include_domains": [],
+    await flow.async_step_rules({"include_globs": ["sensor.room_*"]})
+    assert entry.options["include_globs"] == ["sensor.room_*"]
+    await flow.async_step_rules({"include_domains": [], "include_globs": [], "exclude_globs": []})
+    assert dict(entry.options) == {"extra_entities": ["sensor.future"], "include_domains": [],
                               "include_globs": [], "exclude_globs": []}
 
 
@@ -206,8 +208,11 @@ async def test_restore_initial_choices_and_empty_exceptions_preserves_other_opti
     )
     flow = LoonaOptionsFlow(entry.entry_id)
     flow.hass, flow.handler = loona_hass, entry.entry_id
-    result = flow.finish({"dashboards": ["wall-panel"], "always_forward_resources": []})
-    assert result["data"] == {"extra_entities": ["sensor.future"]}
+    result = await flow.finish({"dashboards": ["wall-panel"], "always_forward_resources": []})
+    assert result["step_id"] == "init"
+    assert dict(entry.options) == {"extra_entities": ["sensor.future"]}
+    result = await flow.async_step_done()
+    assert result["type"] == "create_entry" and result["data"] == {"extra_entities": ["sensor.future"]}
 
 
 @pytest.mark.parametrize("cards", [[], ["statistics"], ["settings"], ["statistics", "settings"], ["benchmark"], ["settings", "statistics", "benchmark"]])
@@ -241,4 +246,4 @@ async def test_native_options_dashboard_removal_confirmation(loona_hass, make_en
     assert result["errors"] == {"base": "confirmation_required"}
     assert entry.data["dashboard_cards"] == ["settings"]
     result = await flow.async_step_confirm_remove_dashboard({"confirm": True})
-    assert result["type"] == "create_entry" and result["data"]["dashboard_cards"] == []
+    assert result["type"] == "menu" and entry.options["dashboard_cards"] == []

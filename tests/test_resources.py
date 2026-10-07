@@ -343,8 +343,7 @@ async def test_preview_exceptions_dashboard_edits_and_redaction(resources_runtim
     assert not runtime.controls["resource_filtering"]
     form = await flow.async_step_resource_preview()
     assert form["data_schema"]({}) == {"resource_filtering": False, "always_forward_resources": []}
-    result = await flow.async_step_resource_preview({"always_forward_resources": ["/local/button-card.js"]})
-    runtime.hass.config_entries.async_update_entry(runtime.entry, options=result["data"])
+    await flow.async_step_resource_preview({"always_forward_resources": ["/local/button-card.js"]})
     await runtime.async_scan()
     assert (await runtime.async_resource_preview())["resources"][-1]["forwarded"]
     board = runtime.hass.data[LOVELACE_DATA].dashboards["wall-panel"]
@@ -374,10 +373,9 @@ async def test_native_optional_checkboxes_required_rows_and_master(
     }
     assert form["data_schema"]({})["always_forward_resources"] == []
     assert "/local/shared.css" in form["description_placeholders"]["required"]
-    result = await flow.async_step_resource_preview({
+    await flow.async_step_resource_preview({
         "resource_filtering": True, "always_forward_resources": ["/local/button-card.js"],
     })
-    runtime.hass.config_entries.async_update_entry(runtime.entry, options=result["data"])
     await runtime.async_scan()
     assert runtime.controls["resource_filtering"]
     assert len((await request(runtime.hass, connection, output))["result"]) == 4
@@ -385,8 +383,7 @@ async def test_native_optional_checkboxes_required_rows_and_master(
     assert form["data_schema"]({})["always_forward_resources"] == ["/local/button-card.js"]
     assert runtime.resource_preview["resources"][-1]["status"] == "unclassified"
     # Optional resources remain editable after being enabled.
-    result = await flow.async_step_resource_preview({"always_forward_resources": []})
-    runtime.hass.config_entries.async_update_entry(runtime.entry, options=result["data"])
+    await flow.async_step_resource_preview({"always_forward_resources": []})
     await runtime.async_scan()
     reduced = (await request(runtime.hass, connection, output))["result"]
     assert {row["url"] for row in reduced} == {
@@ -412,8 +409,8 @@ async def test_required_transitions_preserve_explicit_choices_and_new_optional_d
     # A required module is never a checkbox, even with a saved optional choice.
     picker = next(value for value in form["data_schema"].schema.values() if getattr(value, "selector_type", None) == "select")
     assert "/local/button-card.js" not in {item["value"] for item in picker.config["options"]}
-    result = await flow.async_step_resource_preview({"always_forward_resources": []})
-    assert result["data"]["always_forward_resources"] == ["/local/button-card.js"]
+    await flow.async_step_resource_preview({"always_forward_resources": []})
+    assert runtime.entry.options["always_forward_resources"] == ["/local/button-card.js"]
     await board.async_save({"cards": [{"type": "entity", "entity": "sensor.wall"}]})
     await runtime.async_scan()
     new = await collection.async_create_item({"url": "/local/new-optional.js", "res_type": "module"})
@@ -422,8 +419,7 @@ async def test_required_transitions_preserve_explicit_choices_and_new_optional_d
     assert selected == ["/local/button-card.js"]
     assert new["url"] not in selected
     # Clearing optional choices cannot turn off shared required styling.
-    result = await flow.async_step_resource_preview({"always_forward_resources": []})
-    runtime.hass.config_entries.async_update_entry(runtime.entry, options=result["data"])
+    await flow.async_step_resource_preview({"always_forward_resources": []})
     await runtime.async_scan()
     assert [row["url"] for row in runtime.resource_preview["resources"] if row["forwarded"]] == ["/local/shared.css", "/local/helper.js", "/local/new-optional.js"]
 

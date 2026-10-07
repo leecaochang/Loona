@@ -52,7 +52,7 @@ async def test_native_platforms_and_dashboard_selection_cleanup(
     result = await flow.async_step_filters(
         {"entity_filtering": False, "registry_filtering": True, "visible_first_graphs": True, "pause_animations_during_loading": True}
     )
-    assert result["data"] == {}
+    assert result["step_id"] == "init"
     assert not runtime.controls["entity_filtering"]
     assert runtime.controls["registry_filtering"]
     assert runtime.controls["visible_first_graphs"]

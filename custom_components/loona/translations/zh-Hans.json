@@ -49,7 +49,8 @@
           "rules": "实体规则",
           "resource_preview": "卡片文件",
           "cards": "Loona 仪表盘卡片",
-          "idle": "空闲时间设置"
+          "idle": "空闲时间设置",
+          "done": "完成"
         }
       },
       "dashboards": {

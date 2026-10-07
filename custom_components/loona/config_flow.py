@@ -275,15 +275,20 @@ class LoonaOptionsFlow(OptionsFlow):
         """Read current values after the options manager initializes the flow."""
         return {**self.config_entry.data, **self.config_entry.options}
 
-    def finish(self, changes: dict[str, Any]) -> ConfigFlowResult:
-        """Do not reset unrelated fields or duplicate persisted switch states."""
+    async def finish(self, changes: dict[str, Any]) -> ConfigFlowResult:
+        """Save now and return to the menu so several categories can be edited in one visit."""
         data = {**self.config_entry.options, **changes}
         for key, value in changes.items():
             if (key in self.config_entry.data and value == self.config_entry.data[key]) or (
                 key == CONF_ALWAYS_FORWARD and not value and key not in self.config_entry.data
             ):
                 data.pop(key, None)
-        return self.async_create_entry(title="", data=data)
+        self.hass.config_entries.async_update_entry(self.config_entry, options=data)
+        return await self.async_step_init()
+
+    async def async_step_done(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Close the dialog; every change was already saved by its own step."""
+        return self.async_create_entry(title="", data=dict(self.config_entry.options))
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -299,6 +304,7 @@ class LoonaOptionsFlow(OptionsFlow):
                 "rules",
                 "resource_preview",
                 "cards",
+                "done",
             ],
         )
 
@@ -311,7 +317,7 @@ class LoonaOptionsFlow(OptionsFlow):
             if error := validate_dashboards(self.hass, user_input):
                 errors["base"] = error
             else:
-                return self.finish(user_input)
+                return await self.finish(user_input)
         return self.async_show_form(
             step_id="dashboards",
             data_schema=dashboard_schema(self.hass, self.settings),
@@ -327,7 +333,7 @@ class LoonaOptionsFlow(OptionsFlow):
             if error := await validate_targets(self.hass, user_input):
                 errors["base"] = error
             else:
-                return self.finish(user_input)
+                return await self.finish(user_input)
         return self.async_show_form(
             step_id="targets",
             data_schema=await target_schema(self.hass, self.settings),
@@ -349,7 +355,7 @@ class LoonaOptionsFlow(OptionsFlow):
                     errors["base"] = "invalid_selection"
                 else:
                     await runtime.async_set_controls(user_input)
-                    return self.finish({})
+                    return await self.finish({})
         return self.async_show_form(
             step_id="filters", errors=errors,
             data_schema=vol.Schema(
@@ -372,7 +378,7 @@ class LoonaOptionsFlow(OptionsFlow):
             except ValueError:
                 errors["base"] = "invalid_selection"
             else:
-                return self.finish(values)
+                return await self.finish(values)
         return self.async_show_form(step_id="idle", errors=errors, data_schema=vol.Schema({
             vol.Required(CONF_IDLE_AFTER, default=self.settings.get(CONF_IDLE_AFTER, IDLE_AFTER_MINUTES)):
                 selector.NumberSelector(selector.NumberSelectorConfig(min=1, max=IDLE_AFTER_MAX, step=1, mode=selector.NumberSelectorMode.BOX, unit_of_measurement="min")),
@@ -409,7 +415,7 @@ class LoonaOptionsFlow(OptionsFlow):
                 if any(len(items) != len(set(items)) or not set(items) <= set(choices[key]) for key, items in values.items()):
                     errors["base"] = "invalid_selection"
                 else:
-                    return self.finish(values)
+                    return await self.finish(values)
         return self.async_show_form(
             step_id="rules",
             errors=errors,
@@ -454,7 +460,7 @@ class LoonaOptionsFlow(OptionsFlow):
                 if user_input:
                     errors["base"] = "invalid_selection"
                 else:
-                    return self.finish({})
+                    return await self.finish({})
             elif CONTROL_RESOURCES in user_input and not isinstance(user_input[CONTROL_RESOURCES], bool):
                 errors["base"] = "invalid_selection"
             else:
@@ -463,7 +469,7 @@ class LoonaOptionsFlow(OptionsFlow):
                 # Preserve prior explicit choices while they are required. They
                 # become editable again if the dashboard stops requiring them.
                 saved = (set(selected) - required) | (set(current) & required)
-                return self.finish({CONF_ALWAYS_FORWARD: sorted(saved)})
+                return await self.finish({CONF_ALWAYS_FORWARD: sorted(saved)})
         fixed = [
             f"- `{row['url']}` ({row['type']})"
             for row in report["resources"] if row["status"] != "unused"
@@ -515,7 +521,7 @@ class LoonaOptionsFlow(OptionsFlow):
                 if self.settings.get(CONF_DASHBOARD_CARDS) and not values[CONF_DASHBOARD_CARDS]:
                     self._pending_cards = values
                     return await self.async_step_confirm_remove_dashboard()
-                return self.finish(values)
+                return await self.finish(values)
         return self.async_show_form(step_id="cards", data_schema=schema, errors=errors)
 
     async def async_step_confirm_remove_dashboard(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
@@ -524,7 +530,7 @@ class LoonaOptionsFlow(OptionsFlow):
             return await self.async_step_cards()
         if user_input and user_input.get("confirm") is True:
             values, self._pending_cards = self._pending_cards, None
-            return self.finish(values)
+            return await self.finish(values)
         return self.async_show_form(
             step_id="confirm_remove_dashboard",
             data_schema=vol.Schema({vol.Required("confirm", default=False): selector.BooleanSelector()}),

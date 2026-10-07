@@ -506,7 +506,10 @@ async def check(hass: HomeAssistant) -> None:
         assert dr.async_get(hass).async_get(old_device) is None
         board_form = await options.async_init(entry.entry_id)
         board_form = await options.async_configure(board_form["flow_id"], {"next_step_id": "dashboards"})
-        await options.async_configure(board_form["flow_id"], {"dashboards": ["wall-panel"]})
+        saved = await options.async_configure(board_form["flow_id"], {"dashboards": ["wall-panel"]})
+        assert saved["type"] == "menu" and saved["step_id"] == "init"
+        closed = await options.async_configure(saved["flow_id"], {"next_step_id": "done"})
+        assert closed["type"] == "create_entry"
         await hass.async_block_till_done()
         assert "sensor.other" in snapshot(output)
         await wall.async_save({"cards": []})
