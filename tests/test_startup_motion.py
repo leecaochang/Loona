@@ -42,6 +42,7 @@ def test_browser_uses_validated_ci_executable(monkeypatch, tmp_path):
         _browser_executable()
 
 
+@pytest.mark.enable_socket
 async def test_native_browser_startup_motion(tmp_path):
     """Keep actual Animation ownership, restoration, and HA propagation observable."""
     browser = _browser_executable()

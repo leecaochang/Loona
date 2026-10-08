@@ -134,6 +134,7 @@ async def test_unparseable_core_bypasses(loona_hass, make_entry, dashboards):
     await runtime.async_stop()
 
 
+@pytest.mark.enable_socket
 async def test_native_static_asset_and_module_reload(loona_hass, frontend_http):
     url = f"/loona/graph-loading.js?v={VERSION}"
     manager = loona_hass.data[frontend.DATA_EXTRA_MODULE_URL]
