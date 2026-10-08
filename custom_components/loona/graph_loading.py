@@ -4,7 +4,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-import voluptuous as vol
 
 from homeassistant.components import frontend, websocket_api
 from homeassistant.components.websocket_api import commands
@@ -13,6 +12,7 @@ from homeassistant.core import HomeAssistant, callback
 from .compatibility import (
     CompatibilityError, probe_error, HandlerEntry, ProbeConnection, inspect_native_command, probe_sync,
 )
+from .schema import vol
 from .const import (
     CONF_DASHBOARDS,
     CONF_TARGET_MODE,

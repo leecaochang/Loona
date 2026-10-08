@@ -3,12 +3,12 @@
 from typing import Any
 import math
 
-import voluptuous as vol
 
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 
+from .schema import vol
 from .const import (VERSION, DOMAIN, METRIC_SECONDS, PAGE_LOAD_COMMAND, PAGE_LOAD_LIMIT,
                     BROWSER_REPORT_COMMAND, BROWSER_REPORT_LIMIT, BROWSER_SCRIPT_LIMIT,
                     BROWSER_SUBSCRIPTION_LIMIT)

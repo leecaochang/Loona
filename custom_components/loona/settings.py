@@ -5,13 +5,13 @@ import json
 import logging
 from typing import Any
 
-import voluptuous as vol
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
 from .compatibility import CompatibilityError
 from .config_flow import entity_rule_choices, human_accounts, validate_dashboards, validate_targets, validate_idle_settings
+from .schema import vol
 from .const import (
     CONF_ALWAYS_FORWARD, CONF_DASHBOARDS, CONF_EXTRA_ENTITIES,
     CONF_TARGET_MODE, CONF_USER_IDS, DOMAIN, TARGET_SELECTED, CONTROL_RESOURCES, CONTROL_DEFAULTS,

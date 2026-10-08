@@ -2,8 +2,6 @@
 
 from typing import Any
 
-import voluptuous as vol
-
 from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
@@ -13,6 +11,7 @@ from homeassistant.config_entries import (
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er, selector
 
+from .schema import vol
 from .const import (
     CONTROL_DASHBOARD_LIVE,
     CONF_DASHBOARDS,

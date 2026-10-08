@@ -10,7 +10,6 @@ from secrets import token_hex
 from time import monotonic
 from typing import Any, TYPE_CHECKING
 
-import voluptuous as vol
 
 from homeassistant.components import websocket_api
 from homeassistant.components.lovelace.dashboard import LovelaceStorage
@@ -19,6 +18,7 @@ from homeassistant.const import __version__ as CORE_VERSION
 from homeassistant.helpers.event import async_call_later
 from homeassistant.util import dt as dt_util
 
+from .schema import vol
 from .const import (DOMAIN, VERSION, BENCHMARK_COMMAND, BENCHMARK_PAIRS,
                     BENCHMARK_SECONDS, BENCHMARK_READY_MS, BENCHMARK_CACHE_READ_MS, BENCHMARK_SESSION_SECONDS,
                     BENCHMARK_SESSION_LIMIT, BENCHMARK_RESOURCE_LIMIT, BENCHMARK_WARMUP_SECONDS,

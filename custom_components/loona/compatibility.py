@@ -7,7 +7,6 @@ from types import SimpleNamespace
 from typing import Any, Literal, cast
 
 from awesomeversion import AwesomeVersion
-import voluptuous as vol
 
 from homeassistant import const as ha_const
 from homeassistant.auth.models import Group, User
@@ -19,6 +18,7 @@ from homeassistant.core import Event, HomeAssistant, State, callback
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.util.json import json_loads_object
 
+from .schema import vol
 from .const import MIN_CORE_VERSION, SUBSCRIBE_ENTITIES
 
 type HandlerEntry = tuple[WebSocketCommandHandler, vol.Schema | Literal[False]]

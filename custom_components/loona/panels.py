@@ -5,13 +5,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import voluptuous as vol
 
 from homeassistant.components import frontend, websocket_api
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_call_later
 
 from .compatibility import CompatibilityError, probe_error, HandlerEntry
+from .schema import vol
 from .const import PANEL_ASSET, PANEL_COMMAND, PANEL_SUBSCRIBE, PANEL_POLL_MS, VERSION, BROWSER_MEASURE_MS
 
 

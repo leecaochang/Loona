@@ -14,9 +14,13 @@ Normally, whenever you open a dashboard, Home Assistant sends your browser the s
 
 **Less data does not guarantee a faster-feeling dashboard.** It helps, but how *fast* a page feels also depends on your browser, your device, and your network. Try it on your own setup and compare before you rely on it - Loona has a benchmark tool if you want to know the cold hard facts. If anything looks wrong, you can switch Loona off with the **Enabled** setting and Home Assistant goes back to normal.
 
+## Dashboard screenshots
+
+<p align="center"><img src="https://raw.githubusercontent.com/leecaochang/Loona/main/assets/settings.png" width="30%" alt="Settings" align="top"> <img src="https://raw.githubusercontent.com/leecaochang/Loona/main/assets/statistics.png" width="30%" alt="Statistics" align="top"> <img src="https://raw.githubusercontent.com/leecaochang/Loona/main/assets/benchmark.png" width="30%" alt="Benchmark" align="top"></p>
+
 ## Requirements
 
-- Home Assistant (HA) 2024.6.0 or newer. The HACS minimum is the same.
+- Home Assistant (HA) 2024.6.0 or newer.
 - A current Chrome, Edge, Firefox or Safari browser, or the Home Assistant Companion app.
 
 Certain features are not supported on older versions of Home Assistant; it is recommended to use the latest Home Assistant release for full compatibility. Loona tests what your Home Assistant supports each time it loads and activates features accordingly, quietly falling back to normal Home Assistant behavior for any unsupported features.
@@ -41,7 +45,7 @@ The Loona setup and Configure screens and the Loona dashboard cards are availabl
 
 ## Developed with AI
 
-Loona development is led by a human software engineer with the assistance of an LLM. If you have any reservations about the quality or safety of this software, I encourage you to point your favorite LLM to the Loona repo and request a code audit.
+Loona development is led by a human software engineer with the assistance of an LLM. If you have any reservations about the quality or safety of this software, I encourage you to point your favorite LLM at the Loona repo and request a code audit.
 
 ## Using dashboard cards vs Settings
 
@@ -316,7 +320,7 @@ venv/bin/python -m pyflakes custom_components/loona/ tests/
 venv/bin/python -m mypy custom_components/loona/
 ```
 
-The full development suite is pinned to Core 2026.9.4 and needs Python 3.14.2 or newer. Loona itself only needs the Python version your Home Assistant requires.
+The full development suite is pinned to Core 2026.10.0 and needs Python 3.14.2 or newer. Loona itself only needs the Python version your Home Assistant requires.
 
 ## License
 

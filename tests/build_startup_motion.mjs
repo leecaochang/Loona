@@ -1,7 +1,7 @@
 // Compile the pinned native HA card container with real Lit for browser tests.
 import { build } from "esbuild";
 const boundaries = `
-export const ConditionalListenerMixin = (base) => class extends base { _conditionContext = {}; };
+export const ConditionalListenerMixin = (base) => class extends base { _conditionContext = {}; _conditionsVisible() { return true; } };
 export const fireEvent = (node, type, detail) => node.dispatchEvent(new CustomEvent(type, {detail, bubbles:true, composed:true}));
 export const computeCardSize = (node) => node.getCardSize();
 export const computeRTLDirection = () => 'ltr';

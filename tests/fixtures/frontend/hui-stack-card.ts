@@ -1,5 +1,5 @@
-// Verbatim Home Assistant frontend 20260826.7 source, Apache-2.0.
-// https://github.com/home-assistant/frontend/blob/20260826.7/src/panels/lovelace/cards/hui-stack-card.ts
+// Verbatim Home Assistant frontend 20260930.2 source, Apache-2.0.
+// https://github.com/home-assistant/frontend/blob/20260930.2/src/panels/lovelace/cards/hui-stack-card.ts
 import type { PropertyValues } from "lit";
 import { LitElement, css, html, nothing } from "lit";
 import { property, state } from "lit/decorators";

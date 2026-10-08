@@ -56,7 +56,7 @@ globalThis.loonaNativeFactory = (config) => {
   return card;
 };
 const nativeImports = `
-export const ConditionalListenerMixin = (base) => class extends base { _conditionContext = {}; };
+export const ConditionalListenerMixin = (base) => class extends base { _conditionContext = {}; _conditionsVisible() { return !this.config?.visibility || checkConditionsMet(this.config.visibility, this.hass); } };
 export const fireEvent = (node, type, detail) => node.dispatchEvent(new CustomEvent(type, {detail, bubbles:true, composed:true}));
 export const computeCardSize = (node) => node.getCardSize();
 export const computeRTLDirection = () => 'ltr';

@@ -14,9 +14,13 @@ Loona 帮助你的 Home Assistant Lovelace 仪表盘更轻量地加载和运行�
 
 **数据量更少，并不保证仪表盘用起来更快。** 它确实有帮助，但页面*感觉*有多快，还取决于你的浏览器、设备和网络。请先在你自己的环境中试用并对比，再决定是否依赖它。如果你想看确凿的数据，Loona 自带基准测试工具。如果发现任何异常，你可以通过 **启用** 设置关闭 Loona，Home Assistant 就会恢复正常。
 
+## 仪表盘截图
+
+<p align="center"><img src="https://raw.githubusercontent.com/leecaochang/Loona/main/assets/settings.png" width="30%" alt="设置" align="top"> <img src="https://raw.githubusercontent.com/leecaochang/Loona/main/assets/statistics.png" width="30%" alt="统计" align="top"> <img src="https://raw.githubusercontent.com/leecaochang/Loona/main/assets/benchmark.png" width="30%" alt="基准测试" align="top"></p>
+
 ## 系统要求
 
-- Home Assistant (HA) 2024.6.0 或更高版本。HACS 的最低要求相同。
+- Home Assistant (HA) 2024.6.0 或更高版本。
 - 较新版本的 Chrome、Edge、Firefox 或 Safari 浏览器，或 Home Assistant Companion 应用。
 
 较旧版本的 Home Assistant 不支持部分功能，建议使用最新的 Home Assistant 版本以获得完整兼容性。Loona 每次加载时都会检测你的 Home Assistant 支持哪些功能，并据此启用相应功能；对于不支持的功能，会悄悄回退到 Home Assistant 的正常行为。
@@ -314,7 +318,7 @@ venv/bin/python -m pyflakes custom_components/loona/ tests/
 venv/bin/python -m mypy custom_components/loona/
 ```
 
-完整的开发测试套件固定使用 Core 2026.9.4，并要求 Python 3.14.2 或更高版本。Loona 本身只需要你的 Home Assistant 所要求的 Python 版本。
+完整的开发测试套件固定使用 Core 2026.10.0，并要求 Python 3.14.2 或更高版本。Loona 本身只需要你的 Home Assistant 所要求的 Python 版本。
 
 ## 许可证
 
