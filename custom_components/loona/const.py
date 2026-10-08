@@ -67,7 +67,7 @@ RESOURCE_CARDS: Final = {
     "layout-card.js": ("layout-card", "gap-card", "layout-break", "grid-layout", "horizontal-layout", "vertical-layout", "masonry-layout"),
     "mushroom.js": ("mushroom-",),
     "yet-another-media-player.js": ("yet-another-media-player",),
-    "battery-state-card.js": ("battery-state-card",),
+    "battery-state-card.js": ("battery-state-card", "battery-state-entity"),
     "plotly-graph-card.js": ("plotly-graph",),
     "my-cards.js": ("my-button", "my-slider", "my-slider-v2"),
     "swipe-card.js": ("swipe-card",),
@@ -89,8 +89,58 @@ RESOURCE_CARDS: Final = {
         "nodalia-news-card", "nodalia-camera-card", "nodalia-room-summary-card",
         "nodalia-lock-card", "nodalia-go2rtc-player",
     ),
+    # Popular HACS packages; names verified against each release's own registrations.
+    "advanced-camera-card.js": ("advanced-camera-card", "frigate-card"),
+    "atomic-calendar-revive.js": ("atomic-calendar-revive",),
+    "banner-card.js": ("banner-card",),
+    "better-thermostat-ui-card.js": ("better-thermostat-mini-climate-card", "better-thermostat-normal-climate-card"),
+    "clock-weather-card.js": ("clock-weather-card",),
+    "custom-sonos-card.js": ("sonos-card",),
+    "decluttering-card.js": ("decluttering-card",),
+    "easy-floorplan-card.js": ("easy-floorplan-card",),
+    "flex-horseshoe-card.js": ("flex-horseshoe-card",),
+    "floor3d-card.js": ("floor3d-card",),
+    "floorplan.js": ("floorplan-card",),
+    "fold-entity-row.js": ("fold-entity-row",),
+    "HA-Firemote.js": ("firemote-card",),
+    "ha-sankey-chart.js": ("sankey-chart",),
+    "helios.js": ("helios-card",),
+    "hourly-weather.js": ("hourly-weather",),
+    "hue-like-light-card.js": ("hue-like-light-card",),
+    "lg-remote-control.js": ("lg-remote-control",),
+    "mini-climate-card-bundle.js": ("mini-climate",),
+    "navbar-card.js": ("navbar-card",),
+    "paper-buttons-row.js": ("paper-buttons-row",),
+    "power-flow-card-plus.js": ("power-flow-card-plus",),
+    "purifier-card.js": ("purifier-card",),
+    "simple-weather-card-bundle.js": ("simple-weather-card",),
+    "slider-entity-row.js": ("slider-entity-row",),
+    "state-switch.js": ("state-switch",),
+    "swiss-army-knife-card.js": ("swiss-army-knife-card",),
+    "thermostat-dark-card.js": ("thermostat-dark-card",),
+    "timer-bar-card.js": ("timer-bar-card", "timer-bar-entity-row", "timer-bar-mushroom-row"),
+    "trashcard.js": ("trash-card",),
+    "ultra-vehicle-card.js": ("ultra-vehicle-card",),
+    "upcoming-media-card.js": ("upcoming-media-card",),
+    "uptime-card.js": ("uptime-card",),
+    "vacuum-card.js": ("vacuum-card",),
+    "weather-chart-card.js": ("weather-chart-card",),
+    "weather-radar-card.js": ("weather-radar-card",),
+    "week-planner-card.js": ("week-planner-card",),
+    "xiaomi-vacuum-map-card.js": ("xiaomi-vacuum-map-card",),
+    "zigbee2mqtt-networkmap.js": ("zigbee2mqtt-networkmap",),
     "loona-deferred-card.js": ("loona-deferred-card",),
 }
+# Core renders Jinja in these display fields through render_template, so the browser
+# needs none of the template's entities, however broadly the template reads states.
+SERVER_TEMPLATE_FIELDS: Final = {
+    "markdown": frozenset({"content"}),
+    "custom:mushroom-template-card": frozenset({"icon", "icon_color", "color", "primary", "secondary", "picture", "badge_icon", "badge_color", "badge_text"}),
+    "custom:mushroom-template-badge": frozenset({"icon", "color", "label", "content", "picture"}),
+    "custom:mushroom-title-card": frozenset({"title", "subtitle"}),
+}
+# Mushroom template chips are typed "template" inside a chips card.
+SERVER_TEMPLATE_CHIP_FIELDS: Final = frozenset({"content", "icon", "icon_color", "picture"})
 # card-mod also applies theme styles and patches native cards globally.
 RESOURCE_SHARED: Final = frozenset({"card-mod.js", "kiosk-mode.js"})
 # Only these fields are known to produce scalar display values or CSS.

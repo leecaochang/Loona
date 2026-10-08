@@ -77,7 +77,7 @@ from .dashboard import (
     load_dashboard,
     protected_entities,
 )
-from .dependencies import DiscoveryResult, discover, discover_views
+from .dependencies import DiscoveryResult, describe_problem, discover, discover_views
 from .const import SETTINGS_DEFAULTS
 from .resources import (ResourceAdapter, ResourceDependencies, async_resource_rows,
                         resource_dependencies, resource_view_dependencies, resource_report)
@@ -87,6 +87,8 @@ from .statistics import LiveStatistics
 from .statistics_card import StatisticsCard, StatisticsCardError
 
 _LOGGER = logging.getLogger(__name__)
+# Reasons for one blocked card, most specific first.
+_BLOCKER_PRIORITY = ("load", "auto_entities", "strategy", "template", "other")
 
 
 class LoonaRuntime:
@@ -106,6 +108,10 @@ class LoonaRuntime:
         self.unresolved: dict[str, frozenset[str]] = {}
         self.missing_extra_entities: frozenset[str] = frozenset()
         self.problems: tuple[str, ...] = ()
+        # Readable dashboard / view / card labels for scan problems, with a reason code each.
+        self.scan_blockers: dict[str, str] = {}
+        # Selected dashboards Loona cannot read; they are served in full while the rest stay filtered.
+        self.unfiltered_dashboards: tuple[str, ...] = ()
         self.warnings: tuple[str, ...] = ()
         self.entity_compatibility_problem: str | None = None
         self.panel_compatibility_problem: str | None = None
@@ -486,7 +492,10 @@ class LoonaRuntime:
             warnings: list[str] = []
             reasons: dict[str, set[str]] = {}
             excluded: dict[str, tuple[str, ...]] = {}
+            blockers: dict[str, str] = {}
+            titles = dashboard_titles(self.hass)
             for key in settings.get(CONF_DASHBOARDS, ()):
+                title = titles.get(key, key)
                 try:
                     config = await load_dashboard(self.hass, key, force=force)
                     configs.append(config)
@@ -495,8 +504,17 @@ class LoonaRuntime:
                     result = discover(config, context)
                     if result.complete:
                         view_entities[key] = discover_views(config, context)
+                    for problem in result.problems:
+                        place, reason = describe_problem(config, problem)
+                        label = " / ".join(part for part in (title, place) if part)
+                        # One card can raise several problems; keep the most specific reason.
+                        if _BLOCKER_PRIORITY.index(reason) < _BLOCKER_PRIORITY.index(blockers.get(label, "other")):
+                            blockers[label] = reason
+                        else:
+                            blockers.setdefault(label, reason)
                     self._failed_dashboards.discard(key)
                 except Exception as err:
+                    blockers[title] = "load"
                     # Failed boards are retained as incomplete, never silently dropped.
                     if key not in self._failed_dashboards:
                         _LOGGER.warning("Dashboard load failed (%s); filtering is bypassed", type(err).__name__)
@@ -511,8 +529,16 @@ class LoonaRuntime:
                         (),
                     )
                 results[key] = result
-                problems.extend(result.problems)
                 warnings.extend(result.warnings)
+            # Each connection reports its dashboard, so an unreadable dashboard is served in full
+            # like an unselected one while the readable ones keep their union. Only a selection
+            # with nothing readable stops filtering everywhere.
+            readable = {key: result for key, result in results.items() if result.complete}
+            included = readable or results
+            unfiltered = tuple(sorted(set(results) - set(readable))) if readable else ()
+            if results and not readable:
+                problems.extend(problem for result in results.values() for problem in result.problems)
+            for key, result in included.items():
                 for entity_id, locations in result.reasons.items():
                     reasons.setdefault(entity_id, set()).update(
                         f"{key}:{location}" for location in locations
@@ -535,7 +561,7 @@ class LoonaRuntime:
                     for pattern in settings.get(CONF_EXCLUDE_GLOBS, ())
                 ):
                     if any(
-                        entity_id in result.entity_ids for result in results.values()
+                        entity_id in result.entity_ids for result in included.values()
                     ):
                         warnings.append("An exclusion removes a dashboard dependency")
                     excluded[entity_id] = tuple(sorted(reasons.pop(entity_id)))
@@ -597,7 +623,7 @@ class LoonaRuntime:
             self.view_live_entities = {key: {route: frozenset((entities | pinned) & self.entity_ids)
                                              for route, entities in views.items()}
                                        for key, views in view_entities.items()}
-            self.registry_scope = registry_scope(self.hass, self.entity_ids, results.values())
+            self.registry_scope = registry_scope(self.hass, self.entity_ids, included.values())
             self.resource_dependencies = resource_dependencies(resource_configs)
             self.dashboard_resources = dashboard_resources
             self.view_resources = view_resources
@@ -609,6 +635,8 @@ class LoonaRuntime:
                 tuple(sorted(set(problems))),
                 tuple(sorted(set(warnings))),
             )
+            self.scan_blockers = blockers
+            self.unfiltered_dashboards = unfiltered
             self.scan_duration = round((perf_counter() - started) * 1000, 2)
             if not self.problems:
                 self.last_scan = dt_util.utcnow()
@@ -658,6 +686,10 @@ class LoonaRuntime:
             complete=self.resource_complete if control == CONTROL_RESOURCES else not self.problems,
         )
 
+    def filtered_dashboards(self) -> tuple[str, ...]:
+        """Selected dashboards Loona filters; unreadable ones behave as unselected."""
+        return tuple(key for key in self._policy_settings.get(CONF_DASHBOARDS, ()) if key not in self.unfiltered_dashboards)
+
     def _dashboard_active(self, connection: websocket_api.ActiveConnection) -> bool:
         """Native benchmark passes bypass only their own connection."""
         return self.panel_context.active(connection) and not self.benchmark.native(connection)
@@ -680,7 +712,7 @@ class LoonaRuntime:
                      for control, adapter in ((CONTROL_ENTITIES, self.adapter),
                                               (CONTROL_REGISTRIES, self.registry_adapter),
                                               (CONTROL_RESOURCES, self.resource_adapter)))
-        paths = self._policy_settings.get(CONF_DASHBOARDS, ())
+        paths = self.filtered_dashboards()
         useful |= bool(self.resource_adapter is not None and self.resource_complete
                        and self.controls[CONTROL_MASTER]
                        and (self.controls[CONTROL_RESOURCE_DELAY] or self.controls[CONTROL_RESOURCE_PRELOAD]))
@@ -733,7 +765,7 @@ class LoonaRuntime:
             except CompatibilityError as err:
                 self.resource_adapter.fail(err)
 
-        self.panel_context.set_dashboards(frozenset(self._policy_settings.get(CONF_DASHBOARDS, ())))
+        self.panel_context.set_dashboards(frozenset(self.filtered_dashboards()))
 
     @callback
     def _registry_failed(self, error: CompatibilityError) -> None:
@@ -817,16 +849,18 @@ class LoonaRuntime:
         """Describe detected conditions without publishing HA notifications."""
         notices: list[dict[str, Any]] = []
 
-        def add(code: str, active: Any, *, severity: str = "warning", items: Any = ()) -> None:
+        def add(code: str, active: Any, *, severity: str = "warning", items: Any = (), **extra: Any) -> None:
             if active:
-                notices.append({"code": code, "severity": severity, "items": sorted(set(items))})
+                notices.append({"code": code, "severity": severity, "items": sorted(set(items)), **extra})
 
         for feature in ("entity", "panel", "bootstrap", "registry", "graph", "resource"):
             add(feature + "_compatibility", getattr(self, feature + "_compatibility_problem"))
         add("card_installation", self.statistics_card_problem)
         filtering = self.controls[CONTROL_MASTER] and (
             self.controls[CONTROL_ENTITIES] or self.controls[CONTROL_REGISTRIES])
-        add("scan_incomplete", filtering and self.problems)
+        add("scan_incomplete", filtering and self.problems, items=self.scan_blockers, reasons=dict(self.scan_blockers))
+        add("unfiltered_dashboards", filtering and self.unfiltered_dashboards, items=self.scan_blockers,
+            reasons=dict(self.scan_blockers))
         missing = set().union(*self.unresolved.values()) if self.unresolved else set()
         missing.update(self.missing_extra_entities)
         add("missing_entities", missing, items=missing)

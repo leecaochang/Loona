@@ -1,13 +1,12 @@
 """Discover dashboard dependencies without evaluating templates or card code."""
 
 from dataclasses import dataclass, field
-from fnmatch import fnmatchcase
 import re
 from typing import Any
 
 from homeassistant.core import valid_entity_id
 
-from .const import ENTITY_KEYS, TARGET_KEYS
+from .const import ENTITY_KEYS, SERVER_TEMPLATE_CHIP_FIELDS, SERVER_TEMPLATE_FIELDS, TARGET_KEYS
 from .templates import template_dependencies
 
 
@@ -18,6 +17,7 @@ class DiscoveryContext:
     entity_ids: frozenset[str] = frozenset()
     groups: dict[str, frozenset[str]] = field(default_factory=dict)
     targets: dict[str, dict[str, frozenset[str]]] = field(default_factory=dict)
+    area_names: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -57,6 +57,29 @@ def valid_glob(pattern: str) -> bool:
                 return False
             depth = 0
     return not depth and not pattern.startswith(".") and not pattern.endswith(".")
+
+
+_AUTO_GLOB = re.compile(r"[A-Za-z0-9_.*?\[\]!\- ]+")
+# Rules that bound the candidates; attribute and state filters only narrow them in the browser.
+_AUTO_NARROWING = ("entity_id", "domain", "area")
+_AUTO_RULE_KEYS = frozenset(_AUTO_NARROWING) | {"attributes", "state", "options"}
+
+
+def auto_entities_matcher(value: Any) -> Any:
+    """Mirror auto-entities for plain values and * globs; None means it cannot be bounded."""
+    if (not isinstance(value, str) or not value or value.startswith(("$$", "/", "<", ">", "=", "!"))
+            or re.search(r"[mhd]\s+ago\s*$", value, re.IGNORECASE)):
+        return None
+    if "*" not in value:
+        return lambda candidate: candidate == value
+    if not _AUTO_GLOB.fullmatch(value):
+        return None
+    # auto-entities anchors the glob as a regular expression with only * rewritten.
+    try:
+        expression = re.compile(value.replace("*", ".*"))
+    except re.error:
+        return None
+    return lambda candidate: isinstance(candidate, str) and expression.fullmatch(candidate) is not None
 
 
 def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResult:
@@ -105,32 +128,28 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
             problems.add(f"{location}: invalid auto-entities include filters")
             return
         for index, rule in enumerate(includes):
-            if not isinstance(rule, dict) or set(rule) - {
-                "entity_id",
-                "domain",
-                "options",
-            }:
+            if (not isinstance(rule, dict) or set(rule) - _AUTO_RULE_KEYS
+                    or not any(key in rule for key in _AUTO_NARROWING)):
                 problems.add(f"{location}: unsupported auto-entities filter")
                 continue
-            pattern = rule.get("entity_id", "*.*")
-            domain = rule.get("domain", "*")
-            if (
-                not isinstance(pattern, str)
-                or not valid_glob(pattern)
-                or not isinstance(domain, str)
-                or not re.fullmatch(r"[a-z0-9_*?]+", domain)
-            ):
+            matchers = {key: auto_entities_matcher(rule[key]) for key in _AUTO_NARROWING if key in rule}
+            if None in matchers.values():
                 problems.add(f"{location}: unsupported auto-entities pattern")
                 continue
             candidates = set(context.entity_ids)
-            if valid_entity_id(pattern):
-                candidates.add(pattern)
+            if isinstance(rule.get("entity_id"), str) and valid_entity_id(rule["entity_id"]):
+                candidates.add(rule["entity_id"])
+            if "area" in matchers:
+                # auto-entities matches the entity's area, else its device's, by name or ID.
+                areas = context.targets.get("area_id", {})
+                matched = {area_id for area_id in set(areas) | set(context.area_names)
+                           if matchers["area"](area_id) or matchers["area"](context.area_names.get(area_id))}
+                candidates &= set().union(*(areas.get(area_id, ()) for area_id in matched))
             for entity_id in candidates:
-                if fnmatchcase(entity_id, pattern) and fnmatchcase(
-                    entity_id.split(".")[0], domain
-                ):
+                if all(matchers[key](entity_id if key == "entity_id" else entity_id.split(".")[0])
+                       for key in ("entity_id", "domain") if key in matchers):
                     add(entity_id, f"{location}.filter.include[{index}]")
-        # Exclude filters cannot remove dependencies from the safe superset.
+        # Exclude, attribute and state filters cannot remove dependencies from the safe superset.
 
     def walk(
         node: Any,
@@ -138,12 +157,15 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
         card_type: str = "",
         entity_id: str | None = None,
         dependency_value: bool = False,
+        parent_type: str = "",
+        server_rendered: bool = False,
     ) -> None:
         nonlocal unknown_cards
         if isinstance(node, list):
             for index, item in enumerate(node):
                 walk(
-                    item, f"{location}[{index}]", card_type, entity_id, dependency_value
+                    item, f"{location}[{index}]", card_type, entity_id, dependency_value,
+                    parent_type, server_rendered,
                 )
             return
         if isinstance(node, str):
@@ -153,7 +175,9 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
                 )
                 for identifier in result.entity_ids:
                     add(identifier, location)
-                if dependency_value or not result.complete:
+                # Core renders display Jinja itself; only browser JavaScript needs bounded inputs.
+                rendered_by_core = server_rendered and "[[[" not in node
+                if dependency_value or not (result.complete or rendered_by_core):
                     problems.add(f"{location}: template dependencies cannot be scoped")
             return
         if not isinstance(node, dict):
@@ -162,7 +186,8 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
             problems.add(f"{location}: dashboard strategy cannot be scoped")
         node_type = node.get("type")
         if isinstance(node_type, str):
-            card_type = node_type
+            # A nested configuration starts a new context, even below styles.
+            parent_type, card_type, server_rendered = card_type, node_type, False
             entity_id = node.get("entity")
             if not isinstance(entity_id, str) or not valid_entity_id(entity_id):
                 entity_id = None
@@ -185,6 +210,9 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
                 target(key, value, path)
             if card_type == "area" and key == "area":
                 target("area_id", value, path)
+            display = (key in {"card_mod", "uix"} or key in SERVER_TEMPLATE_FIELDS.get(card_type, ())
+                       or card_type == "template" and parent_type == "custom:mushroom-chips-card"
+                       and key in SERVER_TEMPLATE_CHIP_FIELDS)
             walk(
                 value,
                 path,
@@ -193,6 +221,8 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
                 key in ENTITY_KEYS | TARGET_KEYS | {"type"}
                 or card_type == "area"
                 and key == "area",
+                parent_type,
+                server_rendered or display,
             )
 
     walk(config, "dashboard")
@@ -204,6 +234,34 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
         {key: frozenset(values) for key, values in targets.items()},
         unknown_cards,
     )
+
+
+_PROBLEM_REASONS = (("auto-entities", "auto_entities"), ("template", "template"), ("strategy", "strategy"))
+
+
+def describe_problem(config: Any, problem: str) -> tuple[str, str]:
+    """Name the view and top-level card behind a discovery problem, plus a reason code."""
+    location, _, message = problem.partition(": ")
+    reason = next((code for needle, code in _PROBLEM_REASONS if needle in message), "other")
+    steps = [name or int(index) for name, index in re.findall(r"\.([A-Za-z_]\w*)|\[(\d+)\]", location.removeprefix("dashboard"))]
+    places: list[str] = []
+    node: Any = config
+    try:
+        if steps[:1] == ["views"] and isinstance(steps[1], int):
+            node = config["views"][steps[1]]
+            places.append(str(node.get("title") or node.get("path") or f"#{steps[1] + 1}"))
+            rest = steps[2:]
+            # A card sits directly in the view or in one of its sections.
+            if rest[:1] == ["sections"] and len(rest) > 1 and isinstance(rest[1], int):
+                node, rest = node["sections"][rest[1]], rest[2:]
+            if rest[:1] in (["cards"], ["badges"]) and len(rest) > 1 and isinstance(rest[1], int):
+                card = node[rest[0]][rest[1]]
+                title = card.get("title") if isinstance(card, dict) else None
+                kind = card.get("type", "card") if isinstance(card, dict) else "card"
+                places.append(f"{kind} \"{title}\"" if isinstance(title, str) and title else str(kind))
+    except (KeyError, IndexError, TypeError, AttributeError):
+        pass
+    return " / ".join(places), reason
 
 
 def saved_view_routes(config: dict[str, Any]) -> dict[str, int]:

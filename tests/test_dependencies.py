@@ -4,6 +4,7 @@ import pytest
 
 from custom_components.loona.dependencies import (
     DiscoveryContext,
+    describe_problem,
     discover,
     valid_glob,
 )
@@ -141,8 +142,8 @@ def test_visibility_condition_entities_stay_in_scope():
             {
                 "cards": [
                     {
-                        "type": "markdown",
-                        "content": "{{ states('sensor.one') }} {{ states(states('input_text.source')) }}",
+                        "type": "custom:example",
+                        "text": "{{ states('sensor.one') }} {{ states(states('input_text.source')) }}",
                     }
                 ]
             },
@@ -158,6 +159,83 @@ def test_dynamic_constructs_keep_literals_but_bypass(config, literal):
     result = discover(config, DiscoveryContext())
     assert literal in result.entity_ids
     assert not result.complete
+
+
+def test_core_rendered_display_templates_need_no_browser_entities():
+    # Core renders these through render_template, so enumerating states cannot hide data.
+    lights = "{{ states.light | selectattr('state', 'eq', 'on') | list | count }} on"
+    result = discover(
+        {"views": [{"cards": [
+            {"type": "markdown", "content": lights + " {{ states('sensor.literal') }}"},
+            {"type": "custom:mushroom-template-card", "entity": "light.host", "primary": lights},
+            {"type": "custom:mushroom-chips-card", "chips": [{"type": "template", "content": lights, "icon": "mdi:lightbulb"}]},
+            {"type": "tile", "entity": "light.styled", "card_mod": {"style": "ha-card { --x: {{ states.light | count }}; }"}},
+        ]}]},
+        DiscoveryContext(),
+    )
+    assert result.complete, result.problems
+    assert result.entity_ids == {"sensor.literal", "light.host", "light.styled"}
+
+
+@pytest.mark.parametrize(
+    "card",
+    [
+        {"type": "custom:other-chips", "chips": [{"type": "template", "content": "{{ states.light | count }}"}]},
+        {"type": "markdown", "content": "[[[ return Object.keys(hass.states).length ]]]"},
+        {"type": "markdown", "entity": "{{ states.light | first }}"},
+    ],
+)
+def test_browser_or_reference_templates_still_bypass(card):
+    assert not discover({"cards": [card]}, DiscoveryContext()).complete
+
+
+def test_auto_entities_area_attribute_and_state_rules_use_safe_supersets():
+    context = DiscoveryContext(
+        frozenset({"light.studio", "sensor.studio", "light.hall", "binary_sensor.door", "binary_sensor.motion", "light.lama", "light.lamp_a"}),
+        targets={"area_id": {"studio": frozenset({"light.studio", "sensor.studio"}), "hall": frozenset({"light.hall"})}},
+        area_names={"studio": "Studio", "hall": "Hall", "empty": "Empty"},
+    )
+    result = discover(
+        {"views": [{"cards": [
+            {"type": "custom:auto-entities", "filter": {"include": [{"area": "Studio"}], "exclude": [{"domain": "sensor"}]}},
+            {"type": "custom:auto-entities", "filter": {"include": [{"area": "hall", "domain": "light"}]}},
+            {"type": "custom:auto-entities", "filter": {"include": [{"domain": "binary_sensor", "attributes": {"device_class": "door"}}]}},
+            {"type": "custom:auto-entities", "filter": {"include": [{"domain": "light", "state": "on", "entity_id": "light.lamp?a*"}]}},
+            {"type": "custom:auto-entities", "filter": {"include": [{"area": "Empty"}]}},
+        ]}]},
+        context,
+    )
+    assert result.complete, result.problems
+    # With a *, auto-entities reads "lamp?a*" as a regular expression (optional "p"), not as a glob.
+    assert result.entity_ids == {"light.studio", "sensor.studio", "light.hall", "binary_sensor.door", "binary_sensor.motion", "light.lama"}
+
+
+@pytest.mark.parametrize(
+    "rule",
+    [{"state": "on"}, {"attributes": {"device_class": "door"}}, {"area": "/stud/"}, {"domain": "light", "device": "x"}, {"area": "<3"}],
+)
+def test_auto_entities_rules_without_bounds_still_bypass(rule):
+    assert not discover({"type": "custom:auto-entities", "filter": {"include": [rule]}}, DiscoveryContext()).complete
+
+
+@pytest.mark.parametrize(
+    "problem, expected",
+    [
+        ("dashboard.views[0].sections[0].cards[1].chips[2].content: template dependencies cannot be scoped", ("Living / custom:mushroom-chips-card", "template")),
+        ("dashboard.views[1].cards[0].filter: auto-entities template filter cannot be scoped", ('stats / custom:auto-entities "Rooms"', "auto_entities")),
+        ("dashboard.views[1].badges[0].entity: template dependencies cannot be scoped", ("stats / entity", "template")),
+        ("dashboard.views[2]: dashboard strategy cannot be scoped", ("#3", "strategy")),
+        ("dashboard: dashboard strategy cannot be scoped", ("", "strategy")),
+        ("dashboard.views[9].cards[0].text: template dependencies cannot be scoped", ("", "template")),
+    ],
+)
+def test_problems_name_their_view_and_top_level_card(problem, expected):
+    config = {"views": [
+        {"title": "Living", "sections": [{"cards": [{"type": "tile"}, {"type": "custom:mushroom-chips-card", "chips": [{}, {}, {}]}]}]},
+        {"path": "stats", "cards": [{"type": "custom:auto-entities", "title": "Rooms"}], "badges": [{"type": "entity"}]},
+        {"strategy": {"type": "custom:unknown"}},
+    ]}
+    assert describe_problem(config, problem) == expected
 
 
 def test_unknown_custom_card_reports_warning_without_blanket_bypass():

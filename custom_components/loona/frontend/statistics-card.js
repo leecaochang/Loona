@@ -330,7 +330,6 @@ function install() {
             <button id="refresh" class="btn icon-only" type="button" aria-label="Refresh" title="Refresh">${icon("refresh")}</button></header>
           <p id="error" role="alert" hidden></p>
           <div id="content" hidden>
-            <div id="notices"></div>
             <div class="hero">
               <div class="hero-top">
                 <div class="gauge">
@@ -355,6 +354,7 @@ function install() {
               <div class="row" id="estimate-row"><dt data-i18n="Estimated entities trimmed">Estimated entities trimmed</dt><i class="leader"></i><dd id="estimate"></dd></div>
             </dl></section>
             <div class="actions"><p id="reset-time"></p><span class="action-help"><button id="reset" class="btn small" type="button">${icon("reset")}<span data-i18n="Reset live statistics">Reset live statistics</span></button><span id="reset-help"></span></span></div>
+            <div id="notices"></div>
             <details id="loads"><summary class="section-summary"><span data-i18n="Recent page loads">Recent page loads</span> <span id="load-count"></span><span id="loads-help"></span></summary>
               <ul id="load-rows" class="rows"></ul>
             </details>

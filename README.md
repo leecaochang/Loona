@@ -1,3 +1,4 @@
+
 # Loona
 
 English | [简体中文](README.zh-Hans.md)
@@ -95,12 +96,13 @@ Loona filters a dashboard only when:
  1. The dashboard is one you selected.
  2. The account viewing the dashboard is covered by your **Selected accounts** or **All accounts** choice.
  3. Loona is enabled, with at least one setting enabled.
+ 4. Loona can read every card on the dashboard.
 
 All other dashboards, and the rest of the Home Assistant UI, remain unaffected.
 
 What gets sent to the dashboard is only what your selected dashboards actually use, plus whatever you add under **Entity rules**.
 
-Person, update and zone entities cannot be excluded, because the Home Assistant interface needs them.
+Person, update and zone entities cannot be excluded, because the Home Assistant interface requires them.
 
 **Entity rules** have two lists, Included and Excluded:
 
@@ -118,16 +120,30 @@ Loona cannot always correctly guess every entity a custom card or pop-up require
 
 Resolve this by adding the missing entities under Entity rules, or switch filtering off while you work.
 
-Loona cannot filter a dashboard that:
-
-- Uses a template Loona cannot read.
-- Uses a dashboard strategy.
-- Has an auto-entities rule that Loona cannot read.
-- Is an unsaved auto-generated Overview.
-
-In such cases, Loona will disable entity, device, and area filtering for all of your selected dashboards rather than risk breaking something. It is recommended you save generated dashboards and check for dynamic cards.
-
 Cards that ask for specific entities in an unusual way, or that listen to raw events, can still receive everything.
+
+### Why a dashboard is not filtered
+
+Loona filters a dashboard only when it can work out every entity that dashboard needs. If it cannot read a card, Loona sends that dashboard every entity, as if you had not selected it, and keeps filtering your other selected dashboards. The statistics card then shows **Some dashboards are not filtered** under **Warnings and checks**, listing each card that caused it by dashboard, view and card, with the reason.
+
+If none of your selected dashboards can be read, or a selected account no longer exists, Loona stops filtering everywhere and shows **Dashboard scan is incomplete** instead.
+
+| Cause | Example | How to fix |
+| --- | --- | --- |
+| The dashboard or account is not selected | Viewing a dashboard you did not select | Select the dashboard and account in Configure. |
+| A template that works out which entities to read as it runs | A button-card template such as `hass.states[variables.room]` | Add those entities in Configure, or move the calculation into a template sensor and show that sensor. |
+| An auto-entities rule Loona cannot read | A `template` filter, a `/regex/` pattern, or a rule that filters only by `state` or `attributes` | Add a `domain`, `entity_id` or `area` to the rule. |
+| A dashboard strategy | The Map dashboard, or a dashboard built by a custom strategy | Do not select it, or edit it and save its cards. |
+| An unsaved auto-generated Overview | The default Overview before you edit it | Edit the Overview and save its cards. |
+| A selected dashboard or account no longer exists | A dashboard you deleted after selecting it | Update your dashboard and account choices again in Configure. |
+
+These do not stop filtering:
+
+- Templates in markdown cards, in Mushroom template cards, chips, badges and titles, and in card-mod or UIX styles. Home Assistant fills these in itself, so your browser does not need their entities.
+- auto-entities rules that filter by `domain`, `entity_id` or `area`, even if they also filter by `state` or `attributes`.
+- button-card templates that name their entities directly, such as `states['light.kitchen']`.
+
+Missing entity IDs alone do not pause filtering.
 
 ## Card files
 
@@ -290,7 +306,7 @@ Each selected dashboard also has its own Loona device with **Referenced entities
 
 **Nothing seems filtered:** check Enabled, Entity filtering, accounts and dashboard selections. Look at Compatibility, Dashboard scan and any notices in the cards. Refresh your browser after upgrading; short startup hiccups retry automatically.
 
-**Incomplete scan:** check for removed dashboards or accounts, save auto-generated dashboards, and review dynamic cards or templates Loona cannot read. Missing entity IDs alone do not cause this.
+**Incomplete scan or unfiltered dashboards:** open **Warnings and checks** on the statistics card. **Dashboard scan is incomplete** or **Some dashboards are not filtered** lists each card that caused it; "Why a dashboard is not filtered" above explains how to fix each one. Missing entity IDs alone do not cause this.
 
 **Limited compatibility:** check Compatibility and the cards to see which feature fell back. Features that work stay available on 2024.6.0 or newer. Another HA integration may also be interfering with Loona. Temporarily disable it to test.
 

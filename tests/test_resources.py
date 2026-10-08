@@ -16,6 +16,7 @@ from homeassistant.helpers import issue_registry as ir
 from custom_components.loona.compatibility import CompatibilityError
 from custom_components.loona.config_flow import LoonaOptionsFlow
 from custom_components.loona.diagnostics import async_get_config_entry_diagnostics
+from custom_components.loona.const import RESOURCE_CARDS, RESOURCE_SHARED
 from custom_components.loona.resources import (
     ResourceAdapter, resource_dependencies, resource_report,
     resource_view_dependencies,
@@ -242,6 +243,53 @@ def test_common_hacs_bundles_resolve_their_registered_card_types():
     assert [row["status"] for row in report["resources"]] == ["required"] * 4
     unused = resource_report(rows, resource_dependencies([{}]))
     assert [row["status"] for row in unused["resources"]] == ["unused"] * 4
+
+
+def test_core_rendered_display_templates_do_not_make_card_files_dynamic():
+    # Markdown keeps only native tags, and Mushroom/card-mod templates render to text or CSS.
+    lights = "{{ states.light | selectattr('state', 'eq', 'on') | list | count }}"
+    configs = [{"views": [{"cards": [
+        {"type": "markdown", "content": lights + " lights are on"},
+        {"type": "custom:mushroom-chips-card", "chips": [{"type": "template", "content": lights}]},
+        {"type": "custom:mushroom-template-card", "secondary": lights},
+        {"type": "tile", "card_mod": {"style": "ha-card { opacity: {{ 1 if is_state('sun.sun', 'above_horizon') else 0.5 }}; }"}},
+    ]}]}]
+    assert not resource_dependencies(configs).dynamic
+
+
+@pytest.mark.parametrize("card", [
+    {"type": "markdown", "content": "<my-card>{{ states.light | count }}</my-card>"},
+    {"type": "markdown", "content": "[[[ return 'x' ]]]"},
+    {"type": "custom:other-chips", "chips": [{"type": "template", "content": "{{ states.light | count }}"}]},
+    {"type": "{{ 'custom:' ~ states('input_text.card') }}"},
+])
+def test_constructible_or_browser_templates_keep_card_files_dynamic(card):
+    assert resource_dependencies([{"views": [{"cards": [card]}]}]).dynamic
+
+
+def test_card_table_never_lets_two_files_claim_one_type():
+    # A type claimed twice could mark its real provider unused and skip a needed file.
+    owners = {}
+    for filename, names in RESOURCE_CARDS.items():
+        for name in names:
+            assert name not in owners, (name, owners.get(name), filename)
+            owners[name] = filename
+    prefixes = {name: filename for name, filename in owners.items() if name.endswith("-")}
+    for name, filename in owners.items():
+        assert not any(name.startswith(prefix) and other != filename for prefix, other in prefixes.items() if prefix != name), name
+
+
+@pytest.mark.parametrize("filename", sorted(RESOURCE_CARDS))
+def test_every_card_table_entry_resolves_its_declared_types(filename):
+    rows = [{"url": f"/hacsfiles/package/{filename}?hacstag=1", "type": "module"}]
+    for name in RESOURCE_CARDS[filename]:
+        card_type = name + "template-card" if name.endswith("-") else name
+        report = resource_report(rows, resource_dependencies([{"views": [{"cards": [{"type": "custom:" + card_type}]}]}]))
+        assert not report["unresolved_custom_types"], (filename, card_type)
+        assert report["resources"][0]["status"] == "required", (filename, card_type)
+    # Shared helpers such as card-mod stay loaded even when no dashboard names their card.
+    expected = "required" if filename in RESOURCE_SHARED else "unused"
+    assert resource_report(rows, resource_dependencies([{}]))["resources"][0]["status"] == expected
 
 
 def test_helper_mapping_does_not_trust_remote_names_or_wrong_resource_kinds():

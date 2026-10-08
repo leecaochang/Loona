@@ -37,4 +37,6 @@ class LoonaProblem(LoonaEntity, BinarySensorEntity):
 
     @property
     def is_on(self) -> bool:
-        return bool(getattr(self.runtime, self.key))
+        # Dashboard scan also reports dashboards served in full while others stay filtered.
+        partial = self.key == "scope_problem" and bool(self.runtime.unfiltered_dashboards)
+        return bool(getattr(self.runtime, self.key)) or partial

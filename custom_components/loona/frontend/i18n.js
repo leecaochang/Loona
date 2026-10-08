@@ -238,7 +238,7 @@ const chinese = {
   "{count} selected": "已选择 {count} 项",
   "What gets sent to the dashboard is only what your selected dashboards actually use, plus whatever you add under Entity rules. You can add single entities, a whole entity type (like sensor or light), or patterns such as sensor.kitchen_*, which means every sensor whose name starts with kitchen_.": "发送到仪表盘的，只有你所选仪表盘实际用到的实体，加上你在“实体规则”中添加的内容。你可以添加单个实体、整个实体类型（例如 sensor 或 light），或形如 sensor.kitchen_* 的匹配规则，它表示名称以 kitchen_ 开头的所有 sensor。",
   "Always keep these, even if no dashboard uses them.": "即使没有仪表盘用到，也始终保留这些实体。",
-  "The Excluded list takes precedence over Included. Person, update and zone entities cannot be excluded, because the Home Assistant interface needs them. Cards that use excluded entities may show no data.": "“排除”列表的优先级高于“包含”列表。person、update 和 zone 实体无法被排除，因为 Home Assistant 界面需要它们。使用了被排除实体的卡片可能没有数据。",
+  "The Excluded list takes precedence over Included. Person, update and zone entities cannot be excluded, because the Home Assistant interface requires them. Cards that use excluded entities may show no data.": "“排除”列表的优先级高于“包含”列表。person、update 和 zone 实体无法被排除，因为 Home Assistant 界面需要它们。使用了被排除实体的卡片可能没有数据。",
   "The master switch. Turning it off resumes Home Assistant's normal behavior. Your settings are kept as-is. Reload your browser to bring back any skipped card files.": "总开关。关闭后，Home Assistant 将恢复正常行为，你的设置会原样保留。请刷新浏览器，以恢复被跳过的卡片文件。",
   "Sends only the entities your chosen dashboards use, plus any specific entities you added under Entity rules.": "只发送你所选仪表盘用到的实体，以及你在“实体规则”中添加的指定实体。",
   "Trims the entity, device, area, floor and label lists.": "精简实体、设备、区域、楼层和标签列表。",
@@ -251,6 +251,11 @@ const chinese = {
   "Warning": "警告",
   "Check": "检查",
   "Affected items ({count})": "相关项目（{count}）",
+  "A template reads entities Loona cannot determine in advance.": "模板读取的实体无法预先确定。",
+  "An auto-entities rule Loona cannot read.": "Loona 无法读取的 auto-entities 规则。",
+  "A dashboard strategy builds its cards at runtime.": "仪表盘策略会在运行时生成卡片。",
+  "The dashboard could not be loaded.": "无法加载该仪表盘。",
+  "Loona cannot read part of this card.": "Loona 无法读取此卡片的部分内容。",
   "Entity filtering is unavailable": "实体筛选无法使用",
   "Home Assistant is still sending all entity updates as usual. One of Loona's compatibility checks failed. See Loona's diagnostics, then reload Loona and refresh your browser.": "Home Assistant 仍在正常发送全部实体更新。Loona 有一项兼容性检查未通过。请查看 Loona 的诊断信息，然后重新加载 Loona 并刷新浏览器。",
   "Loona cannot tell which dashboard is open": "Loona 无法识别当前打开的仪表盘",
@@ -266,7 +271,9 @@ const chinese = {
   "The Loona dashboard could not be created": "无法创建 Loona 仪表盘",
   "Check whether another dashboard already uses the address loona-statistics, and see Loona's diagnostics. Your other dashboards are untouched. Reload Loona once it is fixed.": "请检查是否已有仪表盘使用了地址 loona-statistics，并查看 Loona 的诊断信息。你的其他仪表盘不受影响。问题解决后，请重新加载 Loona。",
   "Dashboard scan is incomplete": "仪表盘扫描不完整",
-  "Loona has disabled entity, device, and area filtering for all of your selected dashboards rather than risk breaking something. Check for removed dashboards or accounts, save auto-generated dashboards, and review dynamic cards or templates Loona cannot read, then press Rescan dashboards. Missing entity IDs alone do not cause this. Filtering resumes after a full scan.": "为避免出错，Loona 已对你所选的全部仪表盘关闭实体、设备和区域筛选。请检查是否有已删除的仪表盘或用户，保存自动生成的仪表盘，并检查 Loona 无法读取的动态卡片或模板，然后点击“重新扫描仪表盘”。仅仅是实体 ID 不存在，不会导致这种情况。完整扫描后会恢复筛选。",
+  "Some dashboards are not filtered": "部分仪表盘未被筛选",
+  "Loona cannot read every card on these dashboards, so it sends them all entities, as if they were not selected. Your other selected dashboards are still filtered. Affected items lists each card that caused this. Fix those cards, then press Rescan dashboards.": "Loona 无法读取这些仪表盘上的每张卡片，因此会像未选择它们一样向其发送全部实体。你所选的其他仪表盘仍会被筛选。“相关项目”列出了导致问题的每张卡片。请修正这些卡片，然后点击“重新扫描仪表盘”。",
+  "Loona has disabled entity, device, and area filtering for all of your selected dashboards rather than risk breaking something. Affected items lists each card that caused this. Fix those cards, or check for removed dashboards or accounts and unsaved auto-generated dashboards, then press Rescan dashboards. Missing entity IDs alone do not cause this. Filtering resumes after a full scan.": "为避免出错，Loona 已对你所选的全部仪表盘关闭实体、设备和区域筛选。“相关项目”列出了导致问题的每张卡片。请修正这些卡片，或检查是否有已删除的仪表盘或用户以及尚未保存的自动生成仪表盘，然后点击“重新扫描仪表盘”。仅仅是实体 ID 不存在，不会导致这种情况。完整扫描后会恢复筛选。",
   "Some entities your dashboards use do not exist": "你的仪表盘用到了一些不存在的实体",
   "Check these IDs for typos or deleted entities. Some may come back later. Missing entity IDs alone do not pause filtering.": "请检查这些 ID 是否拼写错误，或对应的实体已被删除。有些实体可能稍后恢复。仅仅是实体 ID 不存在，不会暂停筛选。",
   "Excluded entities are used by cards": "被排除的实体正在被卡片使用",
@@ -556,9 +563,13 @@ const notices = {
     "The Loona dashboard could not be created",
     "Check whether another dashboard already uses the address loona-statistics, and see Loona's diagnostics. Your other dashboards are untouched. Reload Loona once it is fixed."
   ],
+  "unfiltered_dashboards": [
+    "Some dashboards are not filtered",
+    "Loona cannot read every card on these dashboards, so it sends them all entities, as if they were not selected. Your other selected dashboards are still filtered. Affected items lists each card that caused this. Fix those cards, then press Rescan dashboards."
+  ],
   "scan_incomplete": [
     "Dashboard scan is incomplete",
-    "Loona has disabled entity, device, and area filtering for all of your selected dashboards rather than risk breaking something. Check for removed dashboards or accounts, save auto-generated dashboards, and review dynamic cards or templates Loona cannot read, then press Rescan dashboards. Missing entity IDs alone do not cause this. Filtering resumes after a full scan."
+    "Loona has disabled entity, device, and area filtering for all of your selected dashboards rather than risk breaking something. Affected items lists each card that caused this. Fix those cards, or check for removed dashboards or accounts and unsaved auto-generated dashboards, then press Rescan dashboards. Missing entity IDs alone do not cause this. Filtering resumes after a full scan."
   ],
   "resource_scan": [
     "Card file scan is incomplete",
@@ -632,6 +643,14 @@ export function renderVersion(root, hass, version, cardVersion, blocked = false)
   const reload = makeButton(hass, "Reload page", "refresh", "primary small"); reload.disabled = blocked;
   reload.addEventListener("click", () => window.location.reload()); root.append(message, reload);
 }
+const blockerReasons = {
+  template: "A template reads entities Loona cannot determine in advance.",
+  auto_entities: "An auto-entities rule Loona cannot read.",
+  strategy: "A dashboard strategy builds its cards at runtime.",
+  load: "The dashboard could not be loaded.",
+  other: "Loona cannot read part of this card.",
+};
+
 export function renderNotices(root, hass, items, labels = {}) {
   const source = items;
   if (window.__loonaResourceLoading?.failed) items = [...items, {code:"resource_loading_failure", severity:"warning"}];
@@ -650,7 +669,7 @@ export function renderNotices(root, hass, items, labels = {}) {
   root.replaceChildren();
   if (visible.length) {
     const section=document.createElement("details"); section.className="loona-notices"; section.open=Boolean(open);
-    const summary=document.createElement("summary"); summary.textContent=text(hass,"Warnings and checks ({count})",{count:visible.length}); section.append(summary);
+    const summary=document.createElement("summary"); summary.className="section-summary"; summary.textContent=text(hass,"Warnings and checks ({count})",{count:visible.length}); section.append(summary);
     const list=document.createElement("ul");
     for (const item of visible) {
       const message=notices[item.code];
@@ -667,6 +686,10 @@ export function renderNotices(root, hass, items, labels = {}) {
             const name=document.createElement("span"); name.textContent=label;
             const id=document.createElement("small"); id.textContent=value; line.append(name,id);
           } else line.textContent=value;
+          // Scan blockers name the card in the label and explain why in a translated reason.
+          if (item.reasons?.[value] && blockerReasons[item.reasons[value]]) {
+            const reason=document.createElement("small"); reason.textContent=text(hass,blockerReasons[item.reasons[value]]); line.append(reason);
+          }
           values.append(line);
         }
         details.append(heading,values); row.append(details);

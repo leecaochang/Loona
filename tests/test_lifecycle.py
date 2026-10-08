@@ -172,7 +172,8 @@ async def test_fixed_templates_filter_both_categories_and_dynamic_lookups_bypass
     await dashboards["wall-panel"].async_save(
         {
             "cards": [
-                {"type": "markdown", "content": "{{ states(states('" + wall + "')) }}"}
+                # Core renders markdown itself; an unknown card's template output may be an entity reference.
+                {"type": "custom:example", "text": "{{ states(states('" + wall + "')) }}"}
             ]
         }
     )
@@ -417,13 +418,33 @@ async def test_notices_replace_repairs_and_clear_after_recovery(runtime, dashboa
                           translation_key="scope")
     await dashboards["wall-panel"].async_save({"strategy": {"type": "unknown"}})
     await runtime.async_scan()
-    assert "scan_incomplete" in {item["code"] for item in runtime.notice_report()}
+    notice = next(item for item in runtime.notice_report() if item["code"] == "scan_incomplete")
+    assert notice["items"] == ["Wall"] and notice["reasons"] == {"Wall": "strategy"}
     assert runtime.metrics()["warnings"] >= 1
     assert not any(domain == DOMAIN for domain, _ in ir.async_get(runtime.hass).issues)
     await dashboards["wall-panel"].async_save({"cards": [{"entity": "sensor.wall"}]})
     await runtime.async_scan()
     assert "scan_incomplete" not in {item["code"] for item in runtime.notice_report()}
     assert runtime.metrics()["warnings"] == 0
+
+
+async def test_scan_notice_names_each_blocking_card_and_reason(runtime, dashboards):
+    """Admins can find the card behind an incomplete scan without diagnostics."""
+    await dashboards["wall-panel"].async_save({"views": [
+        {"title": "Living", "sections": [{"cards": [
+            {"type": "custom:auto-entities", "filter": {"template": "{{ states.light | list }}"}, "card": {"type": "entities"}},
+            {"type": "markdown", "content": "{{ states.light | count }} lights"},
+        ]}]},
+        {"path": "stats", "cards": [{"type": "custom:example", "title": "Energy", "text": "{{ states(states('input_text.source')) }}"}]},
+    ]})
+    await runtime.async_scan()
+    notice = next(item for item in runtime.notice_report() if item["code"] == "scan_incomplete")
+    assert notice["items"] == ["Wall / Living / custom:auto-entities", 'Wall / stats / custom:example "Energy"']
+    assert notice["reasons"] == {"Wall / Living / custom:auto-entities": "auto_entities", 'Wall / stats / custom:example "Energy"': "template"}
+    await dashboards["wall-panel"].async_save({"cards": [{"entity": "sensor.wall"}, {"type": "markdown", "content": "{{ states.light | count }} lights"}]})
+    await runtime.async_scan()
+    assert "scan_incomplete" not in {item["code"] for item in runtime.notice_report()}
+    assert runtime.scan_blockers == {}
 
 
 async def test_missing_excluded_and_unknown_card_notices(runtime, dashboards):

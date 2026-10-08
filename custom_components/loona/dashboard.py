@@ -116,6 +116,7 @@ def discovery_context(hass: HomeAssistant) -> DiscoveryContext:
             }
             for key, mapping in targets.items()
         },
+        {area.id: area.name for area in areas.async_list_areas()},
     )
 
 

@@ -393,7 +393,7 @@ function install() {
             const panels = make("div", undefined, "rule-groups");
             for (const [kind, title, description, keys, icon] of [
               ["included", "Included", "Always keep these, even if no dashboard uses them.", ["extra_entities", "include_domains", "include_globs"], "mdi:plus-circle-outline"],
-              ["excluded", "Excluded", "The Excluded list takes precedence over Included. Person, update and zone entities cannot be excluded, because the Home Assistant interface needs them. Cards that use excluded entities may show no data.", ["exclude_globs"], "mdi:minus-circle-outline"],
+              ["excluded", "Excluded", "The Excluded list takes precedence over Included. Person, update and zone entities cannot be excluded, because the Home Assistant interface requires them. Cards that use excluded entities may show no data.", ["exclude_globs"], "mdi:minus-circle-outline"],
             ]) {
               const panel = make("fieldset", undefined, "rule-group"); panel.dataset.ruleGroup=kind;
               const legend = make("legend"); const symbol=make("ha-icon"); symbol.setAttribute("icon",icon); symbol.setAttribute("aria-hidden","true");

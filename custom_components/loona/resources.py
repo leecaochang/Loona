@@ -20,7 +20,7 @@ from .const import (
     BUNDLED_CARD_TYPES, RESOURCE_CARDS, RESOURCE_COMMANDS,
     RESOURCE_SHARED, RESOURCE_SHARED_PATHS, RESOURCE_NATIVE_STRATEGIES,
     RESOURCE_VALUE_FIELDS, RESOURCE_SHARED_TYPES,
-    MAX_TEMPLATE_LENGTH,
+    MAX_TEMPLATE_LENGTH, SERVER_TEMPLATE_CHIP_FIELDS, SERVER_TEMPLATE_FIELDS,
 )
 from .templates import template_dependencies
 from .dependencies import saved_view_routes
@@ -62,16 +62,17 @@ def resource_dependencies(configs: Iterable[dict[str, Any]]) -> ResourceDependen
     types: set[str] = set()
     dynamic = False
 
-    def walk(node: Any, card_type: str = "", scalar: bool = False, card_mod: bool = False, entity: str | None = None) -> None:
+    def walk(node: Any, card_type: str = "", scalar: bool = False, card_mod: bool = False, entity: str | None = None,
+             parent_type: str = "", server: bool = False) -> None:
         nonlocal dynamic
         if isinstance(node, list):
             for value in node:
-                walk(value, card_type, scalar, card_mod, entity)
+                walk(value, card_type, scalar, card_mod, entity, parent_type, server)
         elif isinstance(node, dict):
             # A nested configuration starts a new context, even below styles.
             if isinstance(node.get("type"), str):
-                card_type = node["type"]
-                scalar = card_mod = False
+                parent_type, card_type = card_type, node["type"]
+                scalar = card_mod = server = False
                 entity = node.get("entity") if isinstance(node.get("entity"), str) else None
             for key, value in node.items():
                 if key in {"type", "layout_type"} and isinstance(value, str):
@@ -85,8 +86,16 @@ def resource_dependencies(configs: Iterable[dict[str, Any]]) -> ResourceDependen
                 style_context = card_mod or key in {"card_mod", "uix"}
                 value_context = (scalar or key in RESOURCE_VALUE_FIELDS.get(card_type, ())
                                  or style_context and key == "style")
-                walk(value, card_type, value_context and key not in {"type", "layout_type"}, style_context, entity)
+                display = (key in {"card_mod", "uix"} or key in SERVER_TEMPLATE_FIELDS.get(card_type, ())
+                           or card_type == "template" and parent_type == "custom:mushroom-chips-card"
+                           and key in SERVER_TEMPLATE_CHIP_FIELDS)
+                walk(value, card_type, value_context and key not in {"type", "layout_type"}, style_context, entity,
+                     parent_type, server or display)
         elif isinstance(node, str) and any(marker in node for marker in ("{{", "{%", "[[", "${")):
+            # Core renders display Jinja into text or CSS; markdown output keeps only native tags.
+            if (server and ("{{" in node or "{%" in node) and "[[" not in node and "${" not in node
+                    and not re.search(r"<[a-zA-Z][\w]*-[\w-]+", node)):
+                return
             # CSS and known display fields cannot be blanket exemptions for
             # arbitrary JavaScript or strings that construct custom elements.
             safe = scalar and not re.search(r"<[a-zA-Z][\w]*-[\w-]+|['\"`]\s*<", node)

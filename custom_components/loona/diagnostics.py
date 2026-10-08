@@ -39,6 +39,7 @@ async def async_get_config_entry_diagnostics(
             for key in ("entities", "devices", "areas", "floors", "labels")
         },
         "scope_complete": not runtime.problems,
+        "unfiltered_dashboards": len(runtime.unfiltered_dashboards),
         "problems": runtime.problems,
         "warnings": runtime.warnings,
         "dependencies": [

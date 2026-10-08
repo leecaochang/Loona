@@ -86,7 +86,7 @@
       },
       "rules": {
         "title": "Entity rules",
-        "description": "What gets sent to the dashboard is only what your selected dashboards actually use, plus whatever you add under Included. You can add single entities, a whole entity type (like `sensor` or `light`), or patterns such as `sensor.kitchen_*`, which means every sensor whose name starts with `kitchen_`. The Excluded list takes precedence over Included. Person, update and zone entities cannot be excluded, because the Home Assistant interface needs them.",
+        "description": "What gets sent to the dashboard is only what your selected dashboards actually use, plus whatever you add under Included. You can add single entities, a whole entity type (like `sensor` or `light`), or patterns such as `sensor.kitchen_*`, which means every sensor whose name starts with `kitchen_`. The Excluded list takes precedence over Included. Person, update and zone entities cannot be excluded, because the Home Assistant interface requires them.",
         "data": {
           "extra_entities": "Included: entities",
           "include_domains": "Included: entity types",

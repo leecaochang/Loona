@@ -100,6 +100,51 @@ async def test_navigation_and_exceptions_reconcile_existing_feeds_and_registry_c
     assert not any("ai_task.configured" in row.get("event", {}).get("c", {}) for row in wire)
 
 
+async def test_unreadable_dashboard_is_served_in_full_while_others_stay_filtered(
+    loona_hass, make_entry, dashboards, make_user, make_connection
+):
+    registry = er.async_get(loona_hass)
+    for name in ("wall", "other", "overview"):
+        entry = registry.async_get_or_create("sensor", "test", name, suggested_object_id=name)
+        loona_hass.states.async_set(entry.entity_id, "1")
+    # An unknown card's template output could be an entity reference, so Overview is unreadable.
+    await dashboards["lovelace"].async_save({"views": [{"title": "Home", "cards": [
+        {"type": "entity", "entity": "sensor.overview"},
+        {"type": "custom:example", "text": "{{ states(states('sensor.other')) }}"},
+    ]}]})
+    runtime = LoonaRuntime(loona_hass, make_entry({"dashboards": ["wall-panel", "lovelace"], "target_mode": "all"}))
+    runtime.entry.runtime_data = runtime
+    await runtime.async_start()
+    await runtime.async_set_control("registry_filtering", True)
+    everything = {"sensor.wall", "sensor.other", "sensor.overview"}
+    try:
+        assert not runtime.problems and runtime.unfiltered_dashboards == ("lovelace",)
+        assert runtime.entity_ids == {"sensor.wall"}
+        assert runtime.filtered_dashboards() == ("wall-panel",)
+        notices = {item["code"]: item for item in runtime.notice_report()}
+        assert "scan_incomplete" not in notices
+        assert notices["unfiltered_dashboards"]["items"] == ["Overview / Home / custom:example"]
+        tab, wire = make_connection(make_user(admin=True))
+        command(tab, wire, PANEL_SUBSCRIBE, dashboard="wall-panel")
+        command(tab, wire, "subscribe_entities")
+        assert set(snapshot(wire)) == {"sensor.wall"}
+        assert entity_list(tab, wire) == {"sensor.wall"}
+        # The same tab widens on the unreadable dashboard, exactly like an unselected page.
+        command(tab, wire, PANEL_COMMAND, dashboard="lovelace")
+        assert set(snapshot(wire)) == everything
+        assert entity_list(tab, wire) == everything
+        command(tab, wire, PANEL_COMMAND, dashboard="wall-panel")
+        assert set(snapshot(wire)) == {"sensor.wall"}
+        # With nothing readable, filtering stops everywhere as before.
+        await dashboards["wall-panel"].async_save({"strategy": {"type": "unknown"}})
+        await runtime.async_scan()
+        assert runtime.problems and runtime.unfiltered_dashboards == ()
+        assert set(snapshot(wire)) == everything
+        assert "scan_incomplete" in {item["code"] for item in runtime.notice_report()}
+    finally:
+        await runtime.async_stop()
+
+
 async def test_native_permissions_and_explicit_scopes_survive_panel_changes(panel_runtime, make_user, make_connection):
     connection, wire = make_connection(make_user(allowed={"sensor.wall"}))
     command(connection, wire, PANEL_SUBSCRIBE, dashboard="wall-panel")

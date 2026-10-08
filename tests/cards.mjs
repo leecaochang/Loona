@@ -180,6 +180,16 @@ second.remove();
 statistics.notices[0].items.push("sensor.new_missing"); await stats._fetch();
 assert.equal(stats.shadowRoot.querySelector('[data-notice="missing_entities"]'),null,"Dismissed warning types remain hidden when affected items change");
 statistics.notices=[]; await stats._fetch();
+// Scan notices name each blocking card and explain the reason in the viewer's language.
+statistics.notices=[{code:"scan_incomplete",severity:"warning",items:["Wall / Living / markdown"],reasons:{"Wall / Living / markdown":"template"}}]; await stats._fetch();
+const blocker=stats.shadowRoot.querySelector('[data-notice="scan_incomplete"] .notice-items p');
+assert.equal(blocker.firstChild.textContent,"Wall / Living / markdown");
+assert.equal(blocker.querySelector("small").textContent,"A template reads entities Loona cannot determine in advance.");
+statistics.notices=[{code:"unfiltered_dashboards",severity:"warning",items:["Wall / Living / markdown"],reasons:{"Wall / Living / markdown":"auto_entities"}}]; await stats._fetch();
+const partial=stats.shadowRoot.querySelector('[data-notice="unfiltered_dashboards"]');
+assert.ok(partial.querySelector("h3").textContent.endsWith("Some dashboards are not filtered"));
+assert.equal(partial.querySelector(".notice-items small").textContent,"An auto-entities rule Loona cannot read.");
+statistics.notices=[]; await stats._fetch();
 const state=settings.shadowRoot.getElementById("state");
 let announcements=0;
 const observer=new MutationObserver(rows=>announcements+=rows.length);
