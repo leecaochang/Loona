@@ -79,6 +79,9 @@ async def async_setup_entry(
                 ]
                 async_add_entities(children[key])
         for key in set(children) - set(runtime.selected_dashboards) - removing:
+            # An eager removal can finish and re-enter sync() inside this loop.
+            if key in removing or key not in children:
+                continue
             removing.add(key)
             task = hass.async_create_task(
                 remove(key, children[key]), "Remove Loona dashboard statistics"

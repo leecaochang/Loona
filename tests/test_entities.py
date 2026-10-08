@@ -86,6 +86,29 @@ async def test_native_platforms_and_dashboard_selection_cleanup(
     await asyncio.sleep(0)
 
 
+async def test_deselecting_several_dashboards_removes_each_child_once(
+    loona_hass, make_entry, dashboards, frontend_http
+):
+    loona_hass.states.async_set("sensor.wall", "1")
+    entry = make_entry({"dashboards": ["lovelace", "wall-panel"], "target_mode": "all"})
+    async with entry.setup_lock:
+        assert await async_setup_entry(loona_hass, entry)
+    await loona_hass.async_block_till_done()
+    runtime = entry.runtime_data
+    devices = dict(runtime.dashboard_devices)
+    errors = []
+    native_handler = loona_hass.loop.get_exception_handler()
+    loona_hass.loop.set_exception_handler(lambda loop, context: errors.append(context))
+    loona_hass.config_entries.async_update_entry(entry, options={"dashboards": []})
+    await loona_hass.async_block_till_done()
+    loona_hass.loop.set_exception_handler(native_handler)
+    assert not errors
+    assert runtime.selected_dashboards == ()
+    assert all(dr.async_get(loona_hass).async_get(device) is None for device in devices.values())
+    assert await async_unload_entry(loona_hass, entry)
+    await entry._async_process_on_unload(loona_hass)
+
+
 async def test_missing_frontend_api_preserves_native_panel_data(
     loona_hass, make_entry, dashboards, frontend_http, make_user, make_connection
 ):

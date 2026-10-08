@@ -92,6 +92,37 @@ def test_backend_template_sensor_does_not_pull_sources():
     assert result.entity_ids == {"sensor.template_result"}
 
 
+def test_visibility_condition_entities_stay_in_scope():
+    # Frontend 2026.10 seeds the first frame from hass.states; a missing entity
+    # keeps the card hidden until Core's subscribe_condition result arrives.
+    result = discover(
+        {
+            "cards": [
+                {
+                    "type": "tile",
+                    "entity": "light.host",
+                    "visibility": [
+                        {"condition": "state", "state": "on"},
+                        {
+                            "condition": "or",
+                            "conditions": [
+                                {"condition": "state", "entity": "sensor.ui", "state": "a"},
+                                {
+                                    "condition": "numeric_state",
+                                    "entity_id": "sensor.core",
+                                    "above": 1,
+                                },
+                            ],
+                        },
+                    ],
+                }
+            ]
+        },
+        DiscoveryContext(),
+    )
+    assert result.entity_ids == {"light.host", "sensor.ui", "sensor.core"}
+
+
 @pytest.mark.parametrize(
     "config, literal",
     [

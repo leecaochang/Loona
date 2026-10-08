@@ -500,13 +500,22 @@ async def check(hass: HomeAssistant) -> None:
         old_device = runtime.dashboard_devices["wall-panel"]
         board_form = await options.async_init(entry.entry_id)
         board_form = await options.async_configure(board_form["flow_id"], {"next_step_id": "dashboards"})
-        await options.async_configure(board_form["flow_id"], {"dashboards": ["yaml-panel"]})
+        await options.async_configure(board_form["flow_id"], {"dashboards": ["yaml-panel", "lovelace"]})
         await hass.async_block_till_done()
         assert runtime.adapter is adapter and "sensor.yaml" in snapshot(output)
         assert dr.async_get(hass).async_get(old_device) is None
+        deselected = [runtime.dashboard_devices[key] for key in ("yaml-panel", "lovelace")]
+        task_errors = []
+        native_handler = hass.loop.get_exception_handler()
+        hass.loop.set_exception_handler(lambda loop, context: task_errors.append(context))
         board_form = await options.async_init(entry.entry_id)
         board_form = await options.async_configure(board_form["flow_id"], {"next_step_id": "dashboards"})
+        # Deselecting several dashboards at once removes each statistics child exactly once.
         saved = await options.async_configure(board_form["flow_id"], {"dashboards": ["wall-panel"]})
+        await hass.async_block_till_done()
+        hass.loop.set_exception_handler(native_handler)
+        assert not task_errors, task_errors
+        assert all(dr.async_get(hass).async_get(device) is None for device in deselected)
         assert saved["type"] == "menu" and saved["step_id"] == "init"
         closed = await options.async_configure(saved["flow_id"], {"next_step_id": "done"})
         assert closed["type"] == "create_entry"
