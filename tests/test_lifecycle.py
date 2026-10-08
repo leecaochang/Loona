@@ -103,6 +103,8 @@ async def test_metrics_do_not_invalidate_on_value_changes(runtime, loona_hass):
         {"strategy": {"type": "custom:example"}},
         {"cards": []},
         {"cards": [{"name": "{{ states(states('sensor.wall')) }}"}]},
+        {"cards": [{"type": "custom:config-template-card", "entities": ["sensor.wall"], "card": {
+            "type": "entity", "entity": "${states['sensor.wall'].state === '1' ? 'sensor.other' : 'sensor.wall'}"}}]},
     ],
 )
 async def test_empty_or_dynamic_scopes_bypass_entire_union(

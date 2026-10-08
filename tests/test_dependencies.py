@@ -213,6 +213,20 @@ def test_unbounded_bubble_expressions_bypass(card):
     assert not result.complete
 
 
+@pytest.mark.parametrize("card", [
+    # config-template-card fills watched entities and nested cards from ${} JavaScript.
+    {"type": "custom:config-template-card", "entities": ["sensor.mode", "${states['sensor.mode'].state === 'on' ? 'light.kitchen' : 'light.hall'}"],
+     "card": {"type": "entity", "entity": "${states['sensor.mode'].state === 'on' ? 'light.kitchen' : 'light.hall'}"}},
+    {"type": "custom:config-template-card", "entities": ["sensor.mode"],
+     "card": {"type": "markdown", "content": "${states['sensor.mode'].state}"}},
+])
+def test_other_dollar_brace_templates_bypass_but_keep_literals(card):
+    result = discover({"views": [{"cards": [card]}]}, DiscoveryContext())
+    assert not result.complete
+    assert "sensor.mode" in result.entity_ids
+    assert resource_dependencies([card]).dynamic
+
+
 def test_reusable_button_card_templates_take_the_using_card_context():
     config = {
         "button_card_templates": {

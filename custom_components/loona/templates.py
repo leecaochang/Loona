@@ -385,6 +385,11 @@ def template_dependencies(
     return TemplateDependencies(frozenset(found), True)
 
 
+def unparsed_dependencies(source: str) -> TemplateDependencies:
+    """Keep literal IDs from browser template syntax that Loona does not parse."""
+    return TemplateDependencies(frozenset(_literals(source)), False)
+
+
 _BUBBLE_EXPRESSION = re.compile(r"\$\{([^{}]*)\}")
 _BUBBLE_ICON = re.compile(r"\s*icon\.setAttribute\(\s*(['\"])icon\1\s*,(.*)\)\s*", re.DOTALL)
 

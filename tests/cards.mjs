@@ -24,7 +24,7 @@ let current={
   paged_choices:{extra_entities:true,include_globs:false,exclude_globs:false},required_resources:[],resources_editable:true,action_entities:{},notices:[],
 };
 const copy=value=>JSON.parse(JSON.stringify(value));
-let conflict=false, holdSave=false, held;
+let conflict=false, holdSave=false, held, holdRead=false, heldRead;
 const requests=[];
 const services=[];
 const statistics={version:"1.0.0",controls:{enabled:true,entity_filtering:true},complete:true,metrics:{current_scope:1,filtered_subscriptions:1,managed_subscriptions:1,forwarded_rate:1,avoided_rate:2,update_reduction:3,forwarded_updates:4,avoided_updates:5,reduction_estimate:6},reset_at:"2026-10-02T01:00:00Z",rate_history:[{at:"2026-10-02T01:00:30Z",seconds:30,sent:0,filtered:0},{at:"2026-10-02T01:01:00Z",seconds:30,sent:.5,filtered:3},{at:"2026-10-02T01:01:30Z",seconds:30,sent:1,filtered:2}],page_loads:[],notices:[],interval_seconds:30};
@@ -38,6 +38,7 @@ const hass={user:{id:"admin",is_admin:true},language:"en",connection:Object.assi
       if(holdSave) return new Promise((resolve,reject)=>{ held={request,resolve,reject}; });
       current.values[request.group]=copy(request.values); return copy(current);
     }
+    if(holdRead && request.type==="loona/settings") return new Promise(resolve=>{ heldRead=()=>resolve(copy(current)); });
     return copy(current);
   },async callService(...args) { services.push(args); },
 };
@@ -97,8 +98,20 @@ assert.equal(streamPlot.getAttribute("aria-valuenow"),"1");
 assert.equal(streamPlot.getAttribute("aria-valuetext"),readout());
 stats.hass=hass;
 assert.ok(readout().startsWith("1 min ago · Sent"),"A selected sample is read again in the new language");
+// A pointer leaving keeps the focused selection; Escape returns to the latest sample, where the keys start.
+streamPlot.dispatchEvent(new window.Event("pointerleave"));
+assert.equal(streamPlot.getAttribute("aria-valuenow"),"1");
+streamPlot.dispatchEvent(new window.KeyboardEvent("keydown",{key:"ArrowLeft"}));
+assert.equal(streamPlot.getAttribute("aria-valuenow"),"0");
+streamPlot.dispatchEvent(new window.KeyboardEvent("keydown",{key:"Escape"}));
+assert.equal(streamPlot.getAttribute("aria-valuenow"),"2");
+assert.ok(streamPlot.getAttribute("aria-valuetext").startsWith("Now · Sent"));
+assert.equal(streamPlot.querySelector('[data-part="scrub"]').style.display,"none");
+streamPlot.dispatchEvent(new window.KeyboardEvent("keydown",{key:"ArrowLeft"}));
+assert.equal(streamPlot.getAttribute("aria-valuenow"),"1");
 streamPlot.dispatchEvent(new window.Event("blur"));
 assert.equal(streamPlot.querySelector('[data-part="scrub"]').style.display,"none");
+assert.equal(streamPlot.getAttribute("aria-valuenow"),"2");
 stats._render({...copy(statistics),rate_history:[],metrics:{...statistics.metrics,forwarded_rate:0,avoided_rate:0}});
 assert.equal(stats.shadowRoot.querySelectorAll(".metric-chart svg").length,4,"Idle and initial readings still have chart geometry");
 assert.ok(stats.shadowRoot.getElementById("stream-chart").textContent.includes("No history yet"));
@@ -313,6 +326,23 @@ assert.equal(settings._saving,undefined);
 assert.ok(settings._drafts.controls && !settings._conflicts.has("controls"),"A failed save keeps the draft for another attempt");
 assert.ok(!settings.shadowRoot.querySelector('[data-save="controls"]').disabled);
 settings.shadowRoot.querySelector('[data-cancel="controls"]').click();
+// Reattaching before a detached save settles keeps the card busy, then reads once the save does.
+const saveCount=()=>requests.filter(row=>row.type==="loona/save_settings").length;
+settings._edit("controls","enabled",!current.values.controls.enabled);
+detachedSave=settings._save("controls");
+settings.remove(); document.body.append(settings); await new Promise(setImmediate);
+assert.equal(settings._saving,"controls","The pending save still owns the card");
+assert.ok(settings.shadowRoot.querySelector('[data-save="controls"]').disabled);
+holdRead=true;
+current.values.controls=copy(held.request.values); held.resolve(copy(current)); await detachedSave;
+assert.ok(settings._loading && settings._saving===undefined,"The settings read starts once the save settles");
+assert.ok(settings.shadowRoot.querySelector('[data-save="controls"]').disabled,"No save while the read owns the card");
+const savesBefore=saveCount(); await settings._save("controls"); assert.equal(saveCount(),savesBefore);
+holdRead=false; heldRead(); await new Promise(setImmediate);
+assert.equal(settings._loading,false); assert.equal(settings._drafts.controls,undefined);
+const refresh=settings.shadowRoot.getElementById("refresh");
+assert.ok(!refresh.disabled && !refresh.hasAttribute("data-busy"));
+assert.ok(!settings.shadowRoot.querySelector('[data-action="restore_defaults"]').disabled);
 holdSave=false;
 // Account changes cancel an outstanding approval before any request is sent.
 const beforeAccount = requests.length;

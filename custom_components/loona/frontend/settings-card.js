@@ -176,6 +176,7 @@ function install() {
         cancelConfirmation(this); closeHelp(this.shadowRoot);
         this._sequence++; this._data = undefined; this._drafts = {}; this._conflicts.clear();
         this._searches = {}; this._limits = {}; this._loading = false; this._saving = undefined; this._error = undefined; this._saved = undefined; this._rendered = false; this._acting = undefined; this._actionStatus = undefined;
+        this._operation = undefined; this._reconcile = false;
         this.shadowRoot.getElementById("sections").replaceChildren();
         this.shadowRoot.getElementById("version").textContent = "";
         this.shadowRoot.getElementById("error").hidden = true;
@@ -192,9 +193,16 @@ function install() {
       cancelConfirmation(this); closeHelp(this.shadowRoot);
       this._versionConnection?.removeEventListener?.("ready", this._versionListener);
       this._versionConnection = undefined;
-      // A pending save or action may still finish on the server; reconcile on return.
-      if (this._saving || this._acting) this._reconcile = true;
-      this._sequence++; this._loading = false; this._saving = undefined; this._acting = undefined;
+      // Replies become stale, but a pending save or action stays busy until it settles.
+      this._sequence++; this._loading = false;
+    }
+    _begin() { this._operation = {sequence: ++this._sequence}; return this._operation; }
+    _settle(operation) {
+      if (this._operation !== operation) return;
+      this._operation = undefined; this._saving = undefined; this._acting = undefined;
+      // A detach made the reply stale; read what the server now holds once the card is back.
+      if (operation.sequence !== this._sequence) { this._reconcile = true; this._fetch(); }
+      this._sync();
     }
     _watchConnection() {
       const connection = this.isConnected ? this._hass?.connection : undefined;
@@ -251,23 +259,23 @@ function install() {
       const account = this._hass.user.id;
       if (key === "reset_live_statistics" && !await confirmAction(this, "Reset live statistics?",
           "Clear the live counters, recent page-load records and browser readings? Your Loona settings and Home Assistant's recorded history are untouched.", "Reset live statistics")) return;
-      if (this._hass?.user?.id !== account || !this._hass.user.is_admin || this._acting || this._saving || !this.isConnected) return;
-      const sequence = ++this._sequence; this._acting = key; this._actionStatus = "Working..."; this._error = undefined; this._sync();
+      if (this._hass?.user?.id !== account || !this._hass.user.is_admin || this._acting || this._saving || this._loading || !this.isConnected) return;
+      const operation = this._begin(); this._acting = key; this._actionStatus = "Working..."; this._error = undefined; this._sync();
       try {
         await this._hass.callService("button", "press", { entity_id: entity });
-        if (sequence === this._sequence) {
+        if (operation.sequence === this._sequence) {
           this._actionStatus = key === "rescan" ? "Dashboards rescanned" : "Live statistics reset";
           const report = await this._hass.callWS({type:"loona/statistics"});
-          if (sequence !== this._sequence || !this._hass?.user?.is_admin) return;
+          if (operation.sequence !== this._sequence || !this._hass?.user?.is_admin) return;
           this._data.notices = report.notices;
           window.dispatchEvent(new Event("loona-statistics-reset"));
         }
       } catch {
-        if (sequence === this._sequence) { this._actionStatus = undefined; this._error = "Action failed. Check that Loona is running, then try again."; }
-      } finally { if (sequence === this._sequence) { this._acting = undefined; this._sync(); } }
+        if (operation.sequence === this._sequence) { this._actionStatus = undefined; this._error = "Action failed. Check that Loona is running, then try again."; }
+      } finally { this._settle(operation); }
     }
     async _save(group) {
-      if (!this._drafts[group] || this._saving || this._acting || this._conflicts.has(group) || !this._hass?.user?.is_admin) return;
+      if (!this._drafts[group] || this._saving || this._acting || this._loading || this._conflicts.has(group) || !this._hass?.user?.is_admin) return;
       const revision = this._data.revision;
       const values = JSON.parse(JSON.stringify(this._drafts[group]));
       let confirmed = false;
@@ -275,20 +283,20 @@ function install() {
         confirmed = await confirmAction(this, "Remove the Loona dashboard?",
           "Remove the Loona dashboard, along with its cards? An edited Loona dashboard is kept. To get it back, choose Loona dashboard cards again.", "Remove dashboard");
         if (!confirmed || !this._hass?.user?.is_admin || !this.isConnected || revision !== this._data?.revision
-            || JSON.stringify(values) !== JSON.stringify(this._drafts[group])) return;
+            || JSON.stringify(values) !== JSON.stringify(this._drafts[group]) || this._saving || this._acting || this._loading) return;
       }
-      const sequence = ++this._sequence; this._saving = group; this._error = undefined; this._sync();
+      const operation = this._begin(); this._saving = group; this._error = undefined; this._sync();
       try {
         const data = await this._hass.callWS({type:"loona/save_settings", group, revision, values, confirmed});
-        if (sequence !== this._sequence || !this._hass?.user?.is_admin) return;
+        if (operation.sequence !== this._sequence || !this._hass?.user?.is_admin) return;
         this._replace(data, group); this._saved = group;
       } catch (error) {
-        if (sequence !== this._sequence) return;
+        if (operation.sequence !== this._sequence) return;
         this._error = error.code === "conflict" ? "Settings changed elsewhere. Cancel your edits and refresh before saving."
           : ["invalid_selection","no_dashboards","no_accounts"].includes(error.code) ? "Some choices are no longer available. Cancel your edits and refresh the lists."
           : "Could not save. Your edits are still here. Cancel them and refresh to check the saved settings.";
         if (error.code === "conflict") this._conflicts.add(group);
-      } finally { if (sequence === this._sequence) { this._saving = undefined; this._sync(); } }
+      } finally { this._settle(operation); }
     }
     async _restore() {
       if (!this._data || !this._hass?.user?.is_admin || this._acting || this._saving || this._loading) return;
@@ -296,20 +304,21 @@ function install() {
       const account = this._hass.user.id;
       if (!await confirmAction(this, "Restore defaults?",
           "Restores Loona back to default settings, as if you had installed it fresh. Also removes the Loona dashboard (if you have not edited it). You will need to select dashboards and accounts again before filtering resumes. An edited Loona dashboard, Loona cards you placed yourself, and recorded history are kept.", "Restore defaults")) return;
-      if (this._hass?.user?.id !== account || !this._hass.user.is_admin || !this.isConnected || revision !== this._data?.revision) return;
-      const sequence = ++this._sequence; this._acting = "restore_defaults"; this._error = undefined; this._sync();
+      if (this._hass?.user?.id !== account || !this._hass.user.is_admin || !this.isConnected || revision !== this._data?.revision
+          || this._acting || this._saving || this._loading) return;
+      const operation = this._begin(); this._acting = "restore_defaults"; this._error = undefined; this._sync();
       try {
         const data = await this._hass.callWS({type:"loona/restore_defaults", revision, confirmed:true});
-        if (sequence !== this._sequence || !this._hass?.user?.is_admin) return;
+        if (operation.sequence !== this._sequence || !this._hass?.user?.is_admin) return;
         this._drafts = {}; this._conflicts.clear(); this._saved = undefined; this._replace(data);
         saveCardPreferences(this._hass, {}, true);
         this._actionStatus = "Defaults restored. You will need to select dashboards and accounts again before filtering resumes, then reload your browser.";
         window.dispatchEvent(new Event("loona-statistics-reset"));
       } catch (error) {
-        if (sequence === this._sequence) this._error = error.code === "conflict"
+        if (operation.sequence === this._sequence) this._error = error.code === "conflict"
           ? "Settings changed elsewhere. Cancel your edits and refresh before saving."
           : "Could not restore defaults. Refresh and check the current settings.";
-      } finally { if (sequence === this._sequence) { this._acting = undefined; this._sync(); } }
+      } finally { this._settle(operation); }
     }
     _sync() {
       const admin = this._hass?.user?.is_admin;
@@ -327,7 +336,7 @@ function install() {
       const idle=this._drafts.idle || this._data?.values.idle;
       const validIdle=idle && Number.isInteger(idle.idle_after_minutes) && idle.idle_after_minutes>=1 && idle.idle_after_minutes<=60
         && Number.isInteger(idle.idle_refresh_seconds) && idle.idle_refresh_seconds>=0 && idle.idle_refresh_seconds<=60;
-      for (const element of this.shadowRoot.querySelectorAll("[data-save]")) element.disabled = !admin || element.dataset.save !== "controls" && !controls?.enabled || !this._drafts[element.dataset.save] || Boolean(this._saving) || Boolean(this._acting) || this._conflicts.has(element.dataset.save)
+      for (const element of this.shadowRoot.querySelectorAll("[data-save]")) element.disabled = !admin || element.dataset.save !== "controls" && !controls?.enabled || !this._drafts[element.dataset.save] || this._loading || Boolean(this._saving) || Boolean(this._acting) || this._conflicts.has(element.dataset.save)
         || element.dataset.save==="idle" && (!validIdle || !controls?.idle_updates || !controls?.entity_filtering);
       for (const element of this.shadowRoot.querySelectorAll("[data-cancel]")) element.disabled = !this._drafts[element.dataset.cancel] || Boolean(this._saving) || Boolean(this._acting);
       for (const element of this.shadowRoot.querySelectorAll("[data-status]")) setText(element, this._conflicts.has(element.dataset.status)

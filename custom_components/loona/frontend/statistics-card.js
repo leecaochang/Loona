@@ -202,18 +202,25 @@ function streamChart(root,hass,history,metrics,max) {
       let best=0; rows.forEach((row,index)=>{ if (Math.abs(row.x-x)<Math.abs(rows[best].x-x)) best=index; });
       select(best);
     };
-    const hide=()=>{ plot.__index=undefined; plot.querySelector('[data-part="scrub"]').style.display="none"; };
-    plot.__select=select;
+    // Without a selection the slider reads the latest sample, which is where the keys start.
+    const release=()=>{
+      plot.__index=undefined; plot.querySelector('[data-part="scrub"]').style.display="none";
+      const rows=plot.__rows || [];
+      plot.setAttribute("aria-valuenow",String(Math.max(0,rows.length-1))); plot.setAttribute("aria-valuetext",rows.at(-1)?.readout || plot.__caption || "");
+    };
+    plot.__select=select; plot.__release=release;
     plot.style.touchAction="pan-y";
     for (const name of ["pointerdown","pointermove"]) plot.addEventListener(name,show);
-    for (const name of ["pointerleave","pointercancel","blur"]) plot.addEventListener(name,hide);
+    // A pointer leaving keeps the focused slider's selection; Escape and blur release it.
+    for (const name of ["pointerleave","pointercancel"]) plot.addEventListener(name,()=>{ if (!plot.__focused) release(); });
+    plot.addEventListener("blur",()=>{ plot.__focused=false; release(); });
     // Arrow keys step through the same samples as pointer scrubbing, starting from the latest.
-    plot.addEventListener("focus",()=>{ if (plot.__index===undefined) select(Infinity); });
+    plot.addEventListener("focus",()=>{ plot.__focused=true; if (plot.__index===undefined) select(Infinity); });
     plot.addEventListener("keydown",event=>{
       const rows=plot.__rows; if (!rows?.length) return;
       const index=plot.__index ?? rows.length-1;
       const next={ArrowLeft:index-1,ArrowDown:index-1,ArrowRight:index+1,ArrowUp:index+1,Home:0,End:rows.length-1}[event.key];
-      if (event.key==="Escape") hide();
+      if (event.key==="Escape") release();
       else if (next!==undefined) { event.preventDefault(); select(next); }
     });
     root.append(plot);
@@ -242,12 +249,8 @@ function streamChart(root,hass,history,metrics,max) {
   part("history").textContent=caption; part("now").textContent=history.length ? text(hass,"Now") : "";
   const rates={sent:number(metrics.forwarded_rate),filtered:number(metrics.avoided_rate)}, unit=text(hass,"updates/s");
   plot.setAttribute("aria-label",`${text(hass,"Sent")}: ${rates.sent} ${unit}. ${text(hass,"Filtered out")}: ${rates.filtered} ${unit}. ${caption}`);
-  plot.setAttribute("aria-valuemax",String(Math.max(0,history.length-1)));
-  if (plot.__index!==undefined && history.length) plot.__select(plot.__index);
-  else {
-    plot.__index=undefined; part("scrub").style.display="none";
-    plot.setAttribute("aria-valuenow",String(Math.max(0,history.length-1))); plot.setAttribute("aria-valuetext",plot.__rows.at(-1)?.readout || caption);
-  }
+  plot.setAttribute("aria-valuemax",String(Math.max(0,history.length-1))); plot.__caption=caption;
+  if (plot.__index!==undefined && history.length) plot.__select(plot.__index); else plot.__release();
   if (!root.__revealed && history.length>1) {
     root.__revealed=true; const reveal=part("reveal");
     tween(plot,0,width,value=>reveal.setAttribute("width",String(fixed(value))),1100);

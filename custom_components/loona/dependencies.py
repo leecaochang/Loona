@@ -7,7 +7,7 @@ from typing import Any
 from homeassistant.core import valid_entity_id
 
 from .const import ENTITY_KEYS, MAX_RULE_PATTERN_LENGTH, SERVER_TEMPLATE_CHIP_FIELDS, SERVER_TEMPLATE_FIELDS, TARGET_KEYS
-from .templates import bubble_dependencies, template_dependencies
+from .templates import bubble_dependencies, template_dependencies, unparsed_dependencies
 
 
 @dataclass(frozen=True)
@@ -181,9 +181,12 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
                 )
             return
         if isinstance(node, str):
-            # Bubble Card runs ${} JavaScript in the browser; card-mod display fields do not.
-            if card_type == "custom:bubble-card" and "${" in node and not server_rendered:
+            # ${} runs in the browser: Bubble Card's is parsed, other cards' (such as
+            # config-template-card, which also fills nested cards) is unreadable.
+            if card_type == "custom:bubble-card" and "${" in node:
                 result = bubble_dependencies(node, entity_id)
+            elif "${" in node:
+                result = unparsed_dependencies(node)
             elif any(marker in node for marker in ("{{", "{%", "[[[")):
                 result = template_dependencies(
                     node, card_type=card_type, entity_id=entity_id, inherited_entity=inherited
@@ -193,7 +196,7 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
             for identifier in result.entity_ids:
                 add(identifier, location)
             # Core renders display Jinja itself; only browser JavaScript needs bounded inputs.
-            rendered_by_core = server_rendered and "[[[" not in node
+            rendered_by_core = server_rendered and "[[[" not in node and "${" not in node
             if dependency_value or not (result.complete or rendered_by_core):
                 problems.add(f"{location}: template dependencies cannot be scoped")
             return
