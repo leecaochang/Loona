@@ -10,7 +10,7 @@ Loona helps your Home Assistant Lovelace dashboards load and run lighter. Loona 
 
 Normally, whenever you open a dashboard, Home Assistant sends your browser the state of every entity (an entity is anything Home Assistant tracks, like a light or a sensor), and then keeps sending live updates for all of them. Most dashboards only need or show a small slice of that. Loona figures out which entities your chosen dashboards actually use and sends only those. Additionally, Loona can trim the entity, device, area, floor and label lists, skip loading card files you never use, delay drawing graphs that are off-screen, and pause animations while a page is busy.
 
-## This is experimental!
+## Results vary
 
 **Less data does not guarantee a faster-feeling dashboard.** It helps, but how *fast* a page feels also depends on your browser, your device, and your network. Try it on your own setup and compare before you rely on it - Loona has a benchmark tool if you want to know the cold hard facts. If anything looks wrong, you can switch Loona off with the **Enabled** setting and Home Assistant goes back to normal.
 
@@ -109,7 +109,7 @@ Person, update and zone entities cannot be excluded, because the Home Assistant 
 
 ### Caveats
 
-Sometimes, something might break. Loona cannot always correctly guess every entity a custom card or pop-up requires. Examples of things that may only see the filtered data:
+Loona cannot always correctly guess every entity a custom card or pop-up requires. Examples of things that may only see the filtered data:
 
 - A quick-bar search.
 - Pop-ups.
@@ -325,4 +325,3 @@ The full development suite is pinned to Core 2026.10.0 and needs Python 3.14.2 o
 ## License
 
 [MIT](LICENSE).
-
