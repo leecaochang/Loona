@@ -226,6 +226,24 @@ def test_configured_helpers_popups_features_and_exact_bundle_tags():
     assert nested["resources"][3]["status"] == "required"
 
 
+def test_common_hacs_bundles_resolve_their_registered_card_types():
+    # Names come from each bundle's own registration, including decorator and variable forms.
+    configs = [{"views": [{"cards": [
+        {"type": "custom:mini-media-player"}, {"type": "custom:scheduler-card"},
+        {"type": "custom:weather-card"}, {"type": "custom:nodalia-lock-card"},
+    ]}]}]
+    urls = ["/hacsfiles/mini-media-player/mini-media-player-bundle.js?hacstag=1",
+            "/hacsfiles/scheduler-card/scheduler-card.js?hacstag=2",
+            "/hacsfiles/weather-card/weather-card.js?hacstag=3",
+            "/hacsfiles/nodalia-cards/nodalia-cards.js?hacstag=4"]
+    rows = [{"url": url, "type": "module"} for url in urls]
+    report = resource_report(rows, resource_dependencies(configs))
+    assert not report["unresolved_custom_types"]
+    assert [row["status"] for row in report["resources"]] == ["required"] * 4
+    unused = resource_report(rows, resource_dependencies([{}]))
+    assert [row["status"] for row in unused["resources"]] == ["unused"] * 4
+
+
 def test_helper_mapping_does_not_trust_remote_names_or_wrong_resource_kinds():
     rows = [{"url": url, "type": kind} for url, kind in [
         ("https://example.invalid/browser_mod.js", "module"),

@@ -55,6 +55,9 @@ RESOURCE_CARDS: Final = {
     "bubble-card.js": ("bubble-card",),
     "button-card.js": ("button-card",),
     "mini-graph-card-bundle.js": ("mini-graph-card",),
+    "mini-media-player-bundle.js": ("mini-media-player",),
+    "scheduler-card.js": ("scheduler-card",),
+    "weather-card.js": ("weather-card",),
     "apexcharts-card.js": ("apexcharts-card",),
     "sunsynk-power-flow-card.js": ("sunsynk-power-flow-card",),
     "lovelace-horizon-card.js": ("horizon-card",),
@@ -84,6 +87,7 @@ RESOURCE_CARDS: Final = {
         "nodalia-person-card", "nodalia-scenes-card", "nodalia-weather-card",
         "nodalia-calendar-card", "nodalia-notifications-card", "nodalia-vacuum-card",
         "nodalia-news-card", "nodalia-camera-card", "nodalia-room-summary-card",
+        "nodalia-lock-card", "nodalia-go2rtc-player",
     ),
     "loona-deferred-card.js": ("loona-deferred-card",),
 }
