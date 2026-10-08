@@ -129,6 +129,34 @@ async def test_page_load_counts_are_per_socket_and_only_server_observed(preview_
     assert runtime.live_statistics.page_loads == {}
 
 
+async def test_page_load_reported_before_card_files_gets_them_later(preview_runtime, make_user, make_connection):
+    # The statistics module reports as soon as states arrive, before the dashboard asks for its card files.
+    runtime = preview_runtime
+    connection, _ = make_connection(make_user(admin=True))
+    connection.async_handle({'id': 1, 'type': 'loona/subscribe_panel', 'dashboard': 'wall-panel'})
+    connection.async_handle({'id': 2, 'type': 'subscribe_entities'})
+    connection.async_handle({'id': 3, 'type': 'loona/page_load', 'dashboard': 'wall-panel'})
+    assert runtime.live_statistics.page_loads['wall-panel']['resources'] is None
+    runtime._observe_resource_load(connection, 9, 4)
+    assert runtime.live_statistics.page_loads['wall-panel']['resources'] == {'available': 9, 'sent': 4}
+    # Later lists on the same page never replace the first counts.
+    runtime._observe_resource_load(connection, 9, 9)
+    assert runtime.live_statistics.page_loads['wall-panel']['resources'] == {'available': 9, 'sent': 4}
+    # A newer load of the same dashboard is never overwritten with an older page's counts.
+    late, _ = make_connection(make_user(admin=True))
+    late.async_handle({'id': 1, 'type': 'loona/subscribe_panel', 'dashboard': 'wall-panel'})
+    late.async_handle({'id': 2, 'type': 'subscribe_entities'})
+    late.async_handle({'id': 3, 'type': 'loona/page_load', 'dashboard': 'wall-panel'})
+    newer, _ = make_connection(make_user(admin=True))
+    newer.async_handle({'id': 1, 'type': 'loona/subscribe_panel', 'dashboard': 'wall-panel'})
+    newer.async_handle({'id': 2, 'type': 'subscribe_entities'})
+    newer.async_handle({'id': 3, 'type': 'loona/page_load', 'dashboard': 'wall-panel'})
+    runtime._observe_resource_load(late, 9, 8)
+    assert runtime.live_statistics.page_loads['wall-panel']['resources'] is None
+    runtime._observe_resource_load(newer, 9, 3)
+    assert runtime.live_statistics.page_loads['wall-panel']['resources'] == {'available': 9, 'sent': 3}
+
+
 async def test_optional_dashboard_failure_keeps_filtering_alive(preview_runtime, monkeypatch, make_user, make_connection):
     runtime = preview_runtime
 

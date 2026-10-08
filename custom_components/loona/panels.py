@@ -76,6 +76,9 @@ class _Panel:
     idle_settings: dict[str, Any] | None = None
     timer: Callable[[], None] | None = None
     refresh_seconds: int = 0
+    # The page's first card-file counts, and a page-load record written before they arrived.
+    resource_counts: dict[str, int] | None = None
+    pending_page_load: tuple[str, dict[str, Any]] | None = None
 
 
 class PanelContext:
@@ -232,6 +235,25 @@ class PanelContext:
         """Ask the stock client to replay the original, lossless requests."""
         if panel := self._connections.get(connection):
             connection.send_event(panel.msg_id, {"resubscribe": True})
+
+    def note_resources(self, connection: websocket_api.ActiveConnection, counts: dict[str, int]) -> tuple[str, dict[str, Any]] | None:
+        """Keep the page's first card-file counts and hand back a page load waiting for them."""
+        panel = self._connections.get(connection)
+        if panel is None:
+            return None
+        if panel.resource_counts is None:
+            panel.resource_counts = counts
+        pending, panel.pending_page_load = panel.pending_page_load, None
+        return pending
+
+    def resource_counts(self, connection: websocket_api.ActiveConnection) -> dict[str, int] | None:
+        panel = self._connections.get(connection)
+        return panel.resource_counts if panel else None
+
+    def await_resources(self, connection: websocket_api.ActiveConnection, path: str, row: dict[str, Any]) -> None:
+        """The page-load report usually arrives before the dashboard requests its card files."""
+        if panel := self._connections.get(connection):
+            panel.pending_page_load = (path, row)
 
     def set_dashboards(self, dashboards: frozenset[str]) -> None:
         """Changing selected dashboards also reconciles already open panels."""

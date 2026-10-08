@@ -223,14 +223,18 @@ class _ResourceConnection:
             return
         try:
             self.adapter.check_ownership()
+            available = None
             if self.adapter.targets_connection(self.connection):
                 validate_resource_rows(result)
                 report = self.adapter.report(result)
                 available = len(result)
                 result = [row for row, item in zip(result, report["resources"], strict=True)
                           if item["forwarded"]]
-                if self.adapter.observe is not None:
-                    self.adapter.observe(self.connection, available, len(result))
+            elif isinstance(result, list):
+                # Nothing is skipped for this page, but its page load still has a count.
+                available = len(result)
+            if self.adapter.observe is not None and available is not None:
+                self.adapter.observe(self.connection, available, len(result))
         except (CompatibilityError, ValueError, TypeError, KeyError) as err:
             self.adapter.fail(CompatibilityError(str(err)))
         self.connection.send_result(msg_id, result)
@@ -325,7 +329,8 @@ class ResourceAdapter:
             self.check_ownership()
         except CompatibilityError as err:
             self.fail(err)
-        if self._table is not None and self.targets_connection(connection):
+        # Every owned reply is counted; the reply itself still rechecks whether to filter.
+        if self._table is not None:
             connection = cast(websocket_api.ActiveConnection, _ResourceConnection(self, connection))
         native(hass, connection, msg)
 

@@ -333,6 +333,16 @@ async def resources_runtime(loona_hass, dashboards, make_entry):
     await runtime.async_stop()
 
 
+async def test_unfiltered_pages_still_record_card_file_counts(resources_runtime, make_user, make_connection):
+    runtime, collection = resources_runtime
+    await runtime.async_set_control("resource_filtering", True)
+    connection, output = make_connection(make_user(admin=True))
+    connection.async_handle({"id": 1, "type": "loona/subscribe_panel", "dashboard": "lovelace"})
+    full = (await request(runtime.hass, connection, output, "lovelace/resources"))["result"]
+    assert full == collection.async_items()
+    assert runtime.panel_context.resource_counts(connection) == {"available": len(full), "sent": len(full)}
+
+
 async def test_native_storage_aliases_live_changes_master_and_unload(
     resources_runtime, make_user, make_connection,
 ):

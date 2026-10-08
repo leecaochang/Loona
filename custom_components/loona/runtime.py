@@ -402,6 +402,11 @@ class LoonaRuntime:
     def _observe_resource_load(self, connection: Any, available: int, sent: int) -> None:
         if self.adapter is not None:
             self.adapter.observe_resources(connection, available, sent)
+        pending = self.panel_context.note_resources(connection, {"available": available, "sent": sent})
+        rows = self.live_statistics.page_loads
+        # Fill a page load recorded before its card files, unless a newer load replaced it.
+        if pending and rows.get(pending[0]) is pending[1]:
+            pending[1]["resources"] = self.panel_context.resource_counts(connection)
 
     @callback
     def _resources_failed(self, error: CompatibilityError) -> None:

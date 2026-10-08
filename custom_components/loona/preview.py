@@ -134,9 +134,13 @@ def websocket_page_load(hass: HomeAssistant, connection: websocket_api.ActiveCon
     if initial is not None:
         rows = runtime.live_statistics.page_loads
         rows.pop(path, None)
+        at = dt_util.utcnow().isoformat()
+        resources = (runtime.adapter.resource_counts(connection) if runtime.adapter else None) \
+            or runtime.panel_context.resource_counts(connection)
         rows[path] = {"dashboard": path, "title": dashboard_titles(hass).get(path, path),
-                      "at": dt_util.utcnow().isoformat(), "entities": initial,
-                      "resources": runtime.adapter.resource_counts(connection) if runtime.adapter else None}
+                      "at": at, "entities": initial, "resources": resources}
+        if resources is None:
+            runtime.panel_context.await_resources(connection, path, rows[path])
         while len(rows) > PAGE_LOAD_LIMIT:
             rows.pop(next(iter(rows)))
     connection.send_result(msg["id"], None)
