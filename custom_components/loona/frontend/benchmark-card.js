@@ -5,8 +5,12 @@ const ns="http://www.w3.org/2000/svg";
 const finite=value=>typeof value==="number" && Number.isFinite(value) && value>=0;
 const median=values=>{ const rows=values.filter(finite).sort((a,b)=>a-b); return rows.length ? (rows[Math.floor((rows.length-1)/2)]+rows[Math.floor(rows.length/2)])/2 : null; };
 const route=()=>{ try { const parts=location.pathname.split("/").filter(Boolean).map(decodeURIComponent); return {dashboard:parts[0]||"lovelace",view:parts[1]||""}; } catch { return null; } };
-const read=(storage,key)=>{ try { return JSON.parse(storage.getItem(key)); } catch { return null; } };
-const stored=()=>read(sessionStorage,RESULT);
+// Blocked site data makes even reading the storage objects throw.
+const get=(storage,key)=>{ try { return storage().getItem(key); } catch { return null; } };
+const read=(storage,key)=>{ try { return JSON.parse(get(storage,key)); } catch { return null; } };
+const forget=(storage,key)=>{ try { storage().removeItem(key); } catch { /* Nothing could have been stored. */ } };
+const session=()=>sessionStorage, local=()=>localStorage;
+const stored=()=>read(session,RESULT);
 const matches=(a,b)=>a && b && a.dashboard===b.dashboard && a.view===b.view;
 const svgNode=(tag,attrs={},value)=>{ const el=document.createElementNS(ns,tag); for (const [key,v] of Object.entries(attrs)) el.setAttribute(key,String(v)); if(value!==undefined) el.textContent=value; return el; };
 const fmt=(hass,value,digits=1)=>finite(value) ? new Intl.NumberFormat(language(hass),{maximumFractionDigits:digits}).format(value) : text(hass,"Unavailable");
@@ -234,10 +238,11 @@ function install() {
     const target=route(), latest=stored();
     this._report=matches(target,latest) && latest.owner===this._hass?.user?.id ? latest.report : null;
     const historyKey=this._historyKey();
-    if(sessionStorage.getItem(ERROR)) {this._report=this._errorReport(sessionStorage.getItem(ERROR));return;}
+    const error=get(session,ERROR);
+    if(error) {this._report=this._errorReport(error);return;}
     if(this._hass?.user?.is_admin && historyKey) {
-      if(this._report) { try { const history=read(localStorage,`${RESULT}.history.${this._hass.user.id}`)||[];const keys=[historyKey,...history.filter(key=>key!==historyKey)].slice(0,this._report.history_limit||1);for(const key of history) if(!keys.includes(key)) localStorage.removeItem(key);localStorage.setItem(`${RESULT}.history.${this._hass.user.id}`,JSON.stringify(keys));localStorage.setItem(historyKey,JSON.stringify(this._report)); } catch { /* Session result remains available. */ } }
-      else this._report=read(localStorage,historyKey);
+      if(this._report) { try { const history=read(local,`${RESULT}.history.${this._hass.user.id}`)||[];const keys=[historyKey,...history.filter(key=>key!==historyKey)].slice(0,this._report.history_limit||1);for(const key of history) if(!keys.includes(key)) localStorage.removeItem(key);localStorage.setItem(`${RESULT}.history.${this._hass.user.id}`,JSON.stringify(keys));localStorage.setItem(historyKey,JSON.stringify(this._report)); } catch { /* Session result remains available. */ } }
+      else this._report=read(local,historyKey);
     }
   }
   _historyKey() { const target=route();return this._hass?.user?.id && target ? `${RESULT}.${this._hass.user.id}.${target.dashboard}.${target.view}` : null; }
@@ -344,10 +349,13 @@ function install() {
     }).catch(()=>{if(sequence===this._drawSequence) this._message(text(this._hass,"PNG export failed. Start over and try again."));});
   }
   async _start() {
-    if(this._busy) return;this._busy=true;this._error=null;sessionStorage.removeItem(ERROR);this._render();
+    if(this._busy) return;this._busy=true;this._error=null;forget(session,ERROR);this._render();
     const target=route();let result;
     try {
       if(!target || document.hidden) throw new Error(text(this._hass,"Keep the benchmark tab visible before starting."));
+      // Every pass reloads the page, so check storage before the server opens a run.
+      try { sessionStorage.setItem(KEY,"null"); sessionStorage.removeItem(KEY); }
+      catch { throw new Error(text(this._hass,"The benchmark needs browser storage. Allow this site to store data, then try again.")); }
       result=await this._hass.callWS({type:"loona/benchmark",action:"start",...target});
       sessionStorage.setItem(KEY,JSON.stringify({...target,token:result.token,owner:this._hass.user.id,index:0,viewport:[innerWidth,innerHeight],expires:Date.now()+result.session_seconds*1000}));
       // The default HA route can be '/'. Use its explicit dashboard route for all passes.
@@ -357,7 +365,7 @@ function install() {
       this._error=text(this._hass,err.message||err.code||"Benchmark could not start. Refresh and try again.");this._busy=false;this._render();
     }
   }
-  _startOver() { this._clearPreview();this._closeCopyTip();if(window.loonaBenchmark && ["error","cancelled","complete"].includes(window.loonaBenchmark.status)) delete window.loonaBenchmark;this._report=null;this._error=null;this._busy=false;this._png=null;this._pngReport=null;this.shadowRoot.querySelector("#disclosure").open=false;this.shadowRoot.querySelector("#details").scrollTop=0;sessionStorage.removeItem(RESULT);sessionStorage.removeItem(ERROR);const key=this._historyKey();if(key) localStorage.removeItem(key);this._render(); }
+  _startOver() { this._clearPreview();this._closeCopyTip();if(window.loonaBenchmark && ["error","cancelled","complete"].includes(window.loonaBenchmark.status)) delete window.loonaBenchmark;this._report=null;this._error=null;this._busy=false;this._png=null;this._pngReport=null;this.shadowRoot.querySelector("#disclosure").open=false;this.shadowRoot.querySelector("#details").scrollTop=0;forget(session,RESULT);forget(session,ERROR);const key=this._historyKey();if(key) forget(local,key);this._render(); }
   async _remove() {
     if(!await confirmAction(this,"Remove benchmark card?","Remove this benchmark card from this tab? Saved PNGs are kept.","Remove")) return;
     try { await this._hass.callWS({type:"loona/benchmark",action:"remove",...route(),card:this._config}); }

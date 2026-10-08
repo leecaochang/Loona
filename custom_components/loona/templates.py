@@ -199,7 +199,9 @@ class _Jinja:
 class _JavaScript:
     """Parse scalar expressions, declarations, returns, and conditional branches."""
 
-    def __init__(self, source: str, entity_id: str | None, found: set[str]) -> None:
+    def __init__(
+        self, source: str, entity_id: str | None, found: set[str], *, inherited: bool = False, bubble: bool = False
+    ) -> None:
         self.tokens: list[str] = []
         position = 0
         while position < len(source):
@@ -214,7 +216,9 @@ class _JavaScript:
             raise ValueError("Template is too complex")
         self.position = 0
         self.entity_id, self.found = entity_id, found
-        self.variables: dict[str, _Value] = {}
+        self.inherited, self.bubble = inherited, bubble
+        # Bubble Card also passes the configured entity's state string.
+        self.variables: dict[str, _Value] = {"state": _Value()} if bubble else {}
 
     def peek(self) -> str:
         return self.tokens[self.position] if self.position < len(self.tokens) else ""
@@ -282,6 +286,12 @@ class _JavaScript:
             value = _Value("literal")
         elif token in self.variables:
             value = self.variables[token]
+        elif token == "entity" and self.bubble:
+            # Bubble Card passes the configured entity ID, not its state object.
+            value = _Value("literal", self.entity_id)
+        elif token == "entity" and self.inherited and self.entity_id is None:
+            # A reusable template reads the entity of the card using it, which is scanned there.
+            value = _Value("record")
         elif token == "entity":
             value = _entity(self.entity_id, self.found)
         elif token in {"states", "hass", "Math"}:
@@ -344,16 +354,17 @@ class _JavaScript:
         return value
 
 
+def _literals(source: str) -> set[str]:
+    return {next(group for group in match.groups() if group) for match in _LITERAL.finditer(source)}
+
+
 def template_dependencies(
-    source: str, *, card_type: str = "", entity_id: str | None = None
+    source: str, *, card_type: str = "", entity_id: str | None = None, inherited_entity: bool = False
 ) -> TemplateDependencies:
     """Reject unsupported operations while retaining recognizable literal IDs."""
     if len(source) > MAX_TEMPLATE_LENGTH:
         return TemplateDependencies(frozenset(), False)
-    found = {
-        next(group for group in match.groups() if group)
-        for match in _LITERAL.finditer(source)
-    }
+    found = _literals(source)
     try:
         if "[[[" in source:
             code = source.strip()
@@ -363,7 +374,7 @@ def template_dependencies(
                 or not code.endswith("]]]")
             ):
                 raise ValueError("Unsupported JavaScript template context")
-            _JavaScript(code[3:-3], entity_id, found).parse()
+            _JavaScript(code[3:-3], entity_id, found, inherited=inherited_entity).parse()
         else:
             tree = _JINJA.parse(source)
             if sum(1 for _ in tree.find_all(nodes.Node)) > MAX_TEMPLATE_NODES:
@@ -372,3 +383,27 @@ def template_dependencies(
     except (ValueError, SyntaxError, TemplateSyntaxError, RecursionError):
         return TemplateDependencies(frozenset(found), False)
     return TemplateDependencies(frozenset(found), True)
+
+
+_BUBBLE_EXPRESSION = re.compile(r"\$\{([^{}]*)\}")
+_BUBBLE_ICON = re.compile(r"\s*icon\.setAttribute\(\s*(['\"])icon\1\s*,(.*)\)\s*", re.DOTALL)
+
+
+def bubble_dependencies(source: str, entity_id: str | None) -> TemplateDependencies:
+    """Bound Bubble Card's ${} JavaScript and any Jinja around it in one style string."""
+    if len(source) > MAX_TEMPLATE_LENGTH:
+        return TemplateDependencies(frozenset(), False)
+    expressions = _BUBBLE_EXPRESSION.findall(source)
+    rest = template_dependencies(_BUBBLE_EXPRESSION.sub("", source), card_type="custom:bubble-card", entity_id=entity_id)
+    found = _literals(source) | rest.entity_ids
+    # Nested braces would hide part of an expression from the scan.
+    complete = rest.complete and len(expressions) == source.count("${")
+    for expression in expressions:
+        # Setting the icon is the one element change Bubble's documentation relies on.
+        if (icon := _BUBBLE_ICON.fullmatch(expression)) is not None:
+            expression = icon[2]
+        try:
+            _JavaScript(f"return ({expression});", entity_id, found, bubble=True).parse()
+        except (ValueError, SyntaxError, RecursionError):
+            complete = False
+    return TemplateDependencies(frozenset(found), complete)

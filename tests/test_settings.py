@@ -134,6 +134,9 @@ async def test_prefilled_choices_and_private_dispatch(settings_runtime, make_use
     ('rules', {'extra_entities': ['sensor.invented'], 'include_domains': [], 'include_globs': [], 'exclude_globs': []}, 'invalid_selection'),
     ('rules', {'extra_entities': ['sensor.wall', 'sensor.wall'], 'include_domains': [], 'include_globs': [], 'exclude_globs': []}, 'invalid_selection'),
     ('rules', {'extra_entities': [], 'include_domains': [], 'include_globs': ['sensor.invented'], 'exclude_globs': []}, 'invalid_selection'),
+    ('rules', {'extra_entities': [], 'include_domains': [], 'include_globs': ['sensor.['], 'exclude_globs': []}, 'invalid_selection'),
+    ('rules', {'extra_entities': [], 'include_domains': [], 'include_globs': [], 'exclude_globs': ['sensor.' + 'a' * 250 + '*']}, 'invalid_selection'),
+    ('rules', {'extra_entities': ['sensor.kitchen_*'], 'include_domains': [], 'include_globs': [], 'exclude_globs': []}, 'invalid_selection'),
     ('resources', {'always_forward_resources': ['/local/invented.js']}, 'invalid_selection'),
     ('controls', {'enabled': True}, 'invalid_selection'),
 ])
@@ -175,6 +178,22 @@ async def test_valid_sections_reconcile_without_replacing_subscriptions(settings
     runtime.hass.config_entries.async_update_entry(runtime.entry, options={**runtime.entry.options, 'extra_entities': []})
     response = await request(runtime, client, output, 'loona/save_settings', group='rules', revision=old, values={'extra_entities': ['sensor.other']})
     assert response['error']['code'] == 'conflict'
+
+
+async def test_new_wildcard_patterns_are_offered_saved_and_applied(settings_runtime, make_user, make_connection):
+    from custom_components.loona.settings import entity_choices
+    runtime = settings_runtime
+    runtime.hass.states.async_set('sensor.kitchen_temperature', '20')
+    runtime.hass.states.async_set('sensor.kitchen_humidity', '40')
+    assert [row['value'] for row in entity_choices(runtime, 'include_globs', ' Sensor.Kitchen_* ')['choices']] == ['sensor.kitchen_*']
+    assert '*' not in str(entity_choices(runtime, 'include_globs', 'sensor.kitchen_temperature')['choices'])
+    assert not entity_choices(runtime, 'extra_entities', 'sensor.kitchen_*')['choices']
+    client, output = make_connection(make_user(admin=True))
+    values = {'extra_entities': [], 'include_domains': [], 'include_globs': ['sensor.kitchen_*'], 'exclude_globs': ['sensor.kitchen_h?midity']}
+    response = await request(runtime, client, output, 'loona/save_settings', group='rules', revision=revision(runtime), values=values)
+    assert response['success'], response
+    assert response['result']['values']['rules'] == values
+    assert 'sensor.kitchen_temperature' in runtime.entity_ids and 'sensor.kitchen_humidity' not in runtime.entity_ids
 
 
 async def test_controls_batch_storage_failure_and_resource_fallback(settings_runtime, monkeypatch, make_user, make_connection):

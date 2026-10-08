@@ -7,6 +7,7 @@ import pytest
 
 from homeassistant.components.lovelace.const import LOVELACE_DATA
 from homeassistant.helpers import (
+    area_registry as ar,
     device_registry as dr,
     entity_registry as er,
     issue_registry as ir,
@@ -188,6 +189,39 @@ async def test_fixed_templates_filter_both_categories_and_dynamic_lookups_bypass
     assert other in wire[-2]["event"]["r"]
     connection.async_handle({"id": 5, "type": "config/entity_registry/list"})
     assert {row["entity_id"] for row in wire[-1]["result"]} == {wall, template_only}
+
+
+async def test_area_card_sensors_and_bubble_reads_outside_the_card_are_delivered(
+    runtime, dashboards, make_user, make_connection
+):
+    hass = runtime.hass
+    area = ar.async_get(hass).async_create("Living room")
+    registry = er.async_get(hass)
+    local, temperature, humidity = (
+        registry.async_get_or_create(domain, "test", name, suggested_object_id=name).entity_id
+        for domain, name in (("light", "local"), ("sensor", "hall_temperature"), ("sensor", "hall_humidity"))
+    )
+    registry.async_update_entity(local, area_id=area.id)
+    hass.states.async_set(local, "on")
+    hass.states.async_set(temperature, "20", {"device_class": "temperature"})
+    hass.states.async_set(humidity, "40", {"device_class": "humidity"})
+    hass.states.async_set("sensor.alarm", "off")
+    # Area sensors may live in another area or none; the native area card reads them directly.
+    ar.async_get(hass).async_update(area.id, temperature_entity_id=temperature, humidity_entity_id=humidity)
+    await dashboards["wall-panel"].async_save({"views": [{"cards": [
+        {"type": "area", "area": area.id, "sensor_classes": ["temperature", "humidity"]},
+        {"type": "custom:bubble-card", "card_type": "button", "entity": local,
+         "styles": ".bubble-icon { color: ${hass.states['sensor.alarm'].state === 'on' ? 'red' : 'green'}; }"},
+    ]}]})
+    await runtime.async_scan()
+    assert not runtime.scope_problem
+    connection, wire = make_connection(make_user(admin=True))
+    connection.async_handle({"id": 1, "type": "loona/subscribe_panel", "dashboard": "wall-panel"})
+    connection.async_handle({"id": 2, "type": "subscribe_entities"})
+    assert set(wire[-1]["event"]["a"]) == {local, temperature, humidity, "sensor.alarm"}
+    hass.states.async_set(temperature, "21", {"device_class": "temperature"})
+    await hass.async_block_till_done()
+    assert set(wire[-1]["event"]["c"]) == {temperature}
 
 
 async def test_entity_mapping_updates_existing_state_and_registry_collections(

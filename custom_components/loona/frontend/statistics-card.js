@@ -160,7 +160,7 @@ const STREAM={left:8,top:30,base:108};
 function streamChart(root,hass,history,metrics,max) {
   const width=chartWidth(root), right=width-8, plotRight=width-52;
   if (!root.firstElementChild) {
-    const id=++chartSequence, plot=svg("svg",{viewBox:`0 0 ${width} 148`,role:"img","data-chart":"stream"}); plot.__width=width;
+    const id=++chartSequence, plot=svg("svg",{viewBox:`0 0 ${width} 148`,role:"slider",tabindex:0,"aria-valuemin":0,"data-chart":"stream"}); plot.__width=width;
     const defs=svg("defs"), area=svg("linearGradient",{id:`loona-area-${id}`,x1:0,y1:0,x2:0,y2:1});
     area.append(svg("stop",{offset:0,style:"stop-color:var(--primary-color);stop-opacity:.38"}),svg("stop",{offset:1,style:"stop-color:var(--primary-color);stop-opacity:0"}));
     const clip=svg("clipPath",{id:`loona-reveal-${id}`}); clip.append(svg("rect",{x:0,y:0,width,height:148,"data-part":"reveal"}));
@@ -184,21 +184,38 @@ function streamChart(root,hass,history,metrics,max) {
       svg("circle",{r:4,"data-part":"scrub-filtered",style:`fill:${FILTERED};stroke:var(--card-background-color);stroke-width:1.5`}),
       chartText(STREAM.left,13,12.5,{"data-part":"readout","font-weight":600}));
     plot.append(scrub,svg("rect",{x:0,y:0,width,height:148,fill:"transparent","data-part":"hit"}));
-    const show=event=>{
+    // Rows carry readouts in the current language, so a reused plot never shows an old one.
+    const select=index=>{
       const rows=plot.__rows; if (!rows?.length) return;
-      const box=plot.getBoundingClientRect(), x=(event.clientX-box.left)/Math.max(1,box.width)*width;
-      let best=rows[0]; for (const row of rows) if (Math.abs(row.x-x)<Math.abs(best.x-x)) best=row;
+      plot.__index=Math.max(0,Math.min(rows.length-1,index)); const best=rows[plot.__index];
       const readout=plot.querySelector('[data-part="readout"]'), place=(part,y)=>{ const dot=plot.querySelector(`[data-part="${part}"]`); dot.setAttribute("cx",String(fixed(best.x))); dot.setAttribute("cy",String(fixed(y))); };
       const rule=plot.querySelector('[data-part="rule"]'); rule.setAttribute("x1",String(fixed(best.x))); rule.setAttribute("x2",String(fixed(best.x)));
       place("scrub-sent",best.sentY); place("scrub-filtered",best.filteredY);
-      readout.textContent=`${best.when} · ${text(hass,"Sent")} ${best.sent} · ${text(hass,"Filtered out")} ${best.filtered}`;
+      readout.textContent=best.readout;
       readout.setAttribute("text-anchor",best.x>width/2 ? "end" : "start"); readout.setAttribute("x",String(best.x>width/2 ? right : STREAM.left));
+      plot.setAttribute("aria-valuenow",String(plot.__index)); plot.setAttribute("aria-valuetext",best.readout);
       plot.querySelector('[data-part="scrub"]').style.display="";
     };
-    const hide=()=>{ plot.querySelector('[data-part="scrub"]').style.display="none"; };
+    const show=event=>{
+      const rows=plot.__rows; if (!rows?.length) return;
+      const box=plot.getBoundingClientRect(), x=(event.clientX-box.left)/Math.max(1,box.width)*width;
+      let best=0; rows.forEach((row,index)=>{ if (Math.abs(row.x-x)<Math.abs(rows[best].x-x)) best=index; });
+      select(best);
+    };
+    const hide=()=>{ plot.__index=undefined; plot.querySelector('[data-part="scrub"]').style.display="none"; };
+    plot.__select=select;
     plot.style.touchAction="pan-y";
     for (const name of ["pointerdown","pointermove"]) plot.addEventListener(name,show);
-    for (const name of ["pointerleave","pointercancel"]) plot.addEventListener(name,hide);
+    for (const name of ["pointerleave","pointercancel","blur"]) plot.addEventListener(name,hide);
+    // Arrow keys step through the same samples as pointer scrubbing, starting from the latest.
+    plot.addEventListener("focus",()=>{ if (plot.__index===undefined) select(Infinity); });
+    plot.addEventListener("keydown",event=>{
+      const rows=plot.__rows; if (!rows?.length) return;
+      const index=plot.__index ?? rows.length-1;
+      const next={ArrowLeft:index-1,ArrowDown:index-1,ArrowRight:index+1,ArrowUp:index+1,Home:0,End:rows.length-1}[event.key];
+      if (event.key==="Escape") hide();
+      else if (next!==undefined) { event.preventDefault(); select(next); }
+    });
     root.append(plot);
   }
   const plot=root.firstElementChild, part=name=>plot.querySelector(`[data-part="${name}"]`);
@@ -217,13 +234,20 @@ function streamChart(root,hass,history,metrics,max) {
   part("max").textContent=number(max); part("half").textContent=number(max/2);
   plot.__rows=history.map((row,index)=>{
     const minutes=Math.round((end-Date.parse(row.at))/60000);
-    return {x:sent[index][0],sentY:sent[index][1],filteredY:filtered[index][1],sent:number(row.sent),filtered:number(row.filtered),
-      when:minutes<1 ? text(hass,"Now") : text(hass,"{minutes} min ago",{minutes:formatNumber(hass,minutes)})};
+    const when=minutes<1 ? text(hass,"Now") : text(hass,"{minutes} min ago",{minutes:formatNumber(hass,minutes)});
+    return {x:sent[index][0],sentY:sent[index][1],filteredY:filtered[index][1],
+      readout:`${when} · ${text(hass,"Sent")} ${number(row.sent)} · ${text(hass,"Filtered out")} ${number(row.filtered)}`};
   });
   const caption=history.length ? text(hass,"{minutes} min history",{minutes:formatNumber(hass,span/60000,{maximumFractionDigits:1})}) : text(hass,"No history yet");
   part("history").textContent=caption; part("now").textContent=history.length ? text(hass,"Now") : "";
   const rates={sent:number(metrics.forwarded_rate),filtered:number(metrics.avoided_rate)}, unit=text(hass,"updates/s");
   plot.setAttribute("aria-label",`${text(hass,"Sent")}: ${rates.sent} ${unit}. ${text(hass,"Filtered out")}: ${rates.filtered} ${unit}. ${caption}`);
+  plot.setAttribute("aria-valuemax",String(Math.max(0,history.length-1)));
+  if (plot.__index!==undefined && history.length) plot.__select(plot.__index);
+  else {
+    plot.__index=undefined; part("scrub").style.display="none";
+    plot.setAttribute("aria-valuenow",String(Math.max(0,history.length-1))); plot.setAttribute("aria-valuetext",plot.__rows.at(-1)?.readout || caption);
+  }
   if (!root.__revealed && history.length>1) {
     root.__revealed=true; const reveal=part("reveal");
     tween(plot,0,width,value=>reveal.setAttribute("width",String(fixed(value))),1100);
@@ -265,7 +289,7 @@ function install() {
             padding:8px 12px; background:transparent; color:var(--primary-color); cursor:pointer; transition:background-color .15s; }
           button:hover { background:var(--secondary-background-color); }
           button:disabled { color:var(--disabled-text-color); cursor:default; }
-          button:focus-visible,summary:focus-visible {
+          button:focus-visible,summary:focus-visible,#stream-chart svg:focus-visible {
             outline:2px solid var(--primary-color); outline-offset:2px; }
           ::selection { background:var(--primary-color); color:var(--text-primary-color,#fff); }
           /* One continuous wash: the hero holds the deepest tint, Totals carries it on and fades into the card. */

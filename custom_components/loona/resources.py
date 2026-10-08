@@ -22,8 +22,8 @@ from .const import (
     RESOURCE_VALUE_FIELDS, RESOURCE_SHARED_TYPES,
     MAX_TEMPLATE_LENGTH, SERVER_TEMPLATE_CHIP_FIELDS, SERVER_TEMPLATE_FIELDS,
 )
-from .templates import template_dependencies
-from .dependencies import saved_view_routes
+from .templates import bubble_dependencies, template_dependencies
+from .dependencies import button_card_templates, saved_view_routes
 from .websocket import ScopePolicy
 
 
@@ -35,26 +35,13 @@ class ResourceDependencies:
     dynamic: bool = False
 
 
-def _scalar_template_safe(source: str, card_type: str, entity_id: str | None) -> bool:
+def _scalar_template_safe(source: str, card_type: str, entity_id: str | None, inherited: bool = False) -> bool:
     """Classify scalar expressions, including Bubble's CSS interpolations."""
     if len(source) > MAX_TEMPLATE_LENGTH or "[[" in source.replace("[[[", ""):
         return False
     if "${" in source:
-        if card_type != "custom:bubble-card":
-            return False
-        expressions = re.findall(r"\$\{([^{}]*)\}", source)
-        if len(expressions) != source.count("${"):
-            return False
-        for expression in expressions:
-            icon_value = re.fullmatch(r"\s*icon\.setAttribute\(\s*(['\"])icon\1\s*,(.*)\)\s*", expression, re.DOTALL)
-            if icon_value is not None:
-                expression = icon_value[2]
-            # Bubble exposes state as the configured entity's scalar state.
-            wrapped = "[[[ const state = entity.state; return (" + expression + "); ]]]"
-            if not template_dependencies(wrapped, card_type="custom:button-card", entity_id=entity_id).complete:
-                return False
-        source = re.sub(r"\$\{[^{}]*\}", "", source)
-    return template_dependencies(source, card_type=card_type, entity_id=entity_id).complete
+        return card_type == "custom:bubble-card" and bubble_dependencies(source, entity_id).complete
+    return template_dependencies(source, card_type=card_type, entity_id=entity_id, inherited_entity=inherited).complete
 
 
 def resource_dependencies(configs: Iterable[dict[str, Any]]) -> ResourceDependencies:
@@ -63,16 +50,16 @@ def resource_dependencies(configs: Iterable[dict[str, Any]]) -> ResourceDependen
     dynamic = False
 
     def walk(node: Any, card_type: str = "", scalar: bool = False, card_mod: bool = False, entity: str | None = None,
-             parent_type: str = "", server: bool = False) -> None:
+             parent_type: str = "", server: bool = False, inherited: bool = False) -> None:
         nonlocal dynamic
         if isinstance(node, list):
             for value in node:
-                walk(value, card_type, scalar, card_mod, entity, parent_type, server)
+                walk(value, card_type, scalar, card_mod, entity, parent_type, server, inherited)
         elif isinstance(node, dict):
             # A nested configuration starts a new context, even below styles.
             if isinstance(node.get("type"), str):
                 parent_type, card_type = card_type, node["type"]
-                scalar = card_mod = server = False
+                scalar = card_mod = server = inherited = False
                 entity = node.get("entity") if isinstance(node.get("entity"), str) else None
             for key, value in node.items():
                 if key in {"type", "layout_type"} and isinstance(value, str):
@@ -90,7 +77,7 @@ def resource_dependencies(configs: Iterable[dict[str, Any]]) -> ResourceDependen
                            or card_type == "template" and parent_type == "custom:mushroom-chips-card"
                            and key in SERVER_TEMPLATE_CHIP_FIELDS)
                 walk(value, card_type, value_context and key not in {"type", "layout_type"}, style_context, entity,
-                     parent_type, server or display)
+                     parent_type, server or display, inherited)
         elif isinstance(node, str) and any(marker in node for marker in ("{{", "{%", "[[", "${")):
             # Core renders display Jinja into text or CSS; markdown output keeps only native tags.
             if (server and ("{{" in node or "{%" in node) and "[[" not in node and "${" not in node
@@ -100,12 +87,20 @@ def resource_dependencies(configs: Iterable[dict[str, Any]]) -> ResourceDependen
             # arbitrary JavaScript or strings that construct custom elements.
             safe = scalar and not re.search(r"<[a-zA-Z][\w]*-[\w-]+|['\"`]\s*<", node)
             if safe:
-                safe = _scalar_template_safe(node, card_type, entity)
+                safe = _scalar_template_safe(node, card_type, entity, inherited)
             if not safe:
                 dynamic = True
 
     for config in configs:
+        config, templates = button_card_templates(config)
         walk(config)
+        for definition in templates.values():
+            # A definition's own type is a dashboard-wide declaration, not the context of its fields.
+            if "type" in definition:
+                walk({"type": definition["type"]})
+            body = {key: value for key, value in definition.items() if key != "type"}
+            entity = definition.get("entity")
+            walk(body, "custom:button-card", entity=entity if isinstance(entity, str) else None, inherited=True)
     return ResourceDependencies(frozenset(types), dynamic)
 
 

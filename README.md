@@ -131,7 +131,7 @@ If none of your selected dashboards can be read, or a selected account no longer
 | Cause | Example | How to fix |
 | --- | --- | --- |
 | The dashboard or account is not selected | Viewing a dashboard you did not select | Select the dashboard and account in Configure. |
-| A template that works out which entities to read as it runs | A button-card template such as `hass.states[variables.room]` | Add those entities in Configure, or move the calculation into a template sensor and show that sensor. |
+| A template that works out which entities to read as it runs | A button-card template such as `hass.states[variables.room]` | Name the entities directly in the template, such as `states['light.kitchen']`, or move the calculation into a template sensor and show that sensor. Adding the entities in Configure does not help, because Loona still cannot tell what else the template might read. |
 | An auto-entities rule Loona cannot read | A `template` filter, a `/regex/` pattern, or a rule that filters only by `state` or `attributes` | Add a `domain`, `entity_id` or `area` to the rule. |
 | A dashboard strategy | The Map dashboard, or a dashboard built by a custom strategy | Do not select it, or edit it and save its cards. |
 | An unsaved auto-generated Overview | The default Overview before you edit it | Edit the Overview and save its cards. |
@@ -141,7 +141,7 @@ These do not stop filtering:
 
 - Templates in markdown cards, in Mushroom template cards, chips, badges and titles, and in card-mod or UIX styles. Home Assistant fills these in itself, so your browser does not need their entities.
 - auto-entities rules that filter by `domain`, `entity_id` or `area`, even if they also filter by `state` or `attributes`.
-- button-card templates that name their entities directly, such as `states['light.kitchen']`.
+- button-card and Bubble Card templates that name their entities directly, such as `states['light.kitchen']`.
 
 Missing entity IDs alone do not pause filtering.
 

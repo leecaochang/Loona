@@ -130,7 +130,7 @@ Loona 不一定能准确判断自定义卡片或弹窗所需的每个实体。�
 | 原因 | 示例 | 解决办法 |
 | --- | --- | --- |
 | 未选择该仪表盘或用户 | 查看你未选择的仪表盘 | 在“配置”中选择该仪表盘和用户。 |
-| 在运行时才决定要读取哪些实体的模板 | 例如使用 `hass.states[variables.room]` 的 button-card 模板 | 在“配置”中添加这些实体，或把计算移到模板传感器中，然后显示该传感器。 |
+| 在运行时才决定要读取哪些实体的模板 | 例如使用 `hass.states[variables.room]` 的 button-card 模板 | 在模板中直接写明实体，例如 `states['light.kitchen']`，或把计算移到模板传感器中，然后显示该传感器。在“配置”中添加这些实体无济于事，因为 Loona 仍无法判断该模板还可能读取哪些实体。 |
 | Loona 无法读取的 auto-entities 规则 | `template` 筛选、`/regex/` 模式，或只按 `state` 或 `attributes` 筛选的规则 | 在规则中添加 `domain`、`entity_id` 或 `area`。 |
 | 仪表盘策略 | 地图仪表盘，或由自定义策略生成的仪表盘 | 不要选择它，或编辑它并保存其卡片。 |
 | 尚未保存的自动生成的“概览”仪表盘 | 你编辑之前的默认“概览” | 编辑“概览”并保存其卡片。 |
@@ -140,7 +140,7 @@ Loona 不一定能准确判断自定义卡片或弹窗所需的每个实体。�
 
 - Markdown 卡片、Mushroom 模板卡片、标签、徽章和标题中的模板，以及 card-mod 或 UIX 样式中的模板。这些内容由 Home Assistant 自己填入，因此你的浏览器不需要其中的实体。
 - 按 `domain`、`entity_id` 或 `area` 筛选的 auto-entities 规则，即使同时按 `state` 或 `attributes` 筛选。
-- 直接写明实体的 button-card 模板，例如 `states['light.kitchen']`。
+- 直接写明实体的 button-card 和 Bubble Card 模板，例如 `states['light.kitchen']`。
 
 仅仅是实体 ID 不存在，不会暂停筛选。
 

@@ -17,6 +17,8 @@
     attach, cancel, fail, remaining:0};
   const publish = () => window.dispatchEvent(new Event("loona-benchmark"));
   const write = () => sessionStorage.setItem(key, JSON.stringify(marker));
+  // Storage can fail mid-run; local cleanup must never prevent the server cancellation.
+  const forget = () => { try { sessionStorage.removeItem(key); } catch { /* Session expiry also ends the run. */ } };
   const jsonBytes = value => enc.encode(JSON.stringify(value)).length;
   const source = value => {
     try { const url=new URL(value,location.href); return ((url.origin===location.origin ? "" : url.origin)+url.pathname).slice(0,512); }
@@ -252,14 +254,14 @@
   }
   async function cancel() {
     stop(); state.status="cancelled"; publish();
-    sessionStorage.removeItem(key);
+    forget();
     try { await connection?.sendMessagePromise({type:"loona/benchmark",action:"cancel",token:marker.token}); }
     finally { location.reload(); }
   }
   function fail(reason) {
     stop(); state.status="error"; state.reason=String(reason).slice(0,300); publish();
-    sessionStorage.removeItem(key);
-    sessionStorage.setItem("loona.benchmark.error",state.reason);
     connection?.sendMessagePromise({type:"loona/benchmark",action:"cancel",token:marker.token}).catch(()=>{});
+    forget();
+    try { sessionStorage.setItem("loona.benchmark.error",state.reason); } catch { /* The open card still shows the live reason. */ }
   }
 })();

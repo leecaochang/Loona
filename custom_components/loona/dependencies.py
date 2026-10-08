@@ -6,8 +6,8 @@ from typing import Any
 
 from homeassistant.core import valid_entity_id
 
-from .const import ENTITY_KEYS, SERVER_TEMPLATE_CHIP_FIELDS, SERVER_TEMPLATE_FIELDS, TARGET_KEYS
-from .templates import template_dependencies
+from .const import ENTITY_KEYS, MAX_RULE_PATTERN_LENGTH, SERVER_TEMPLATE_CHIP_FIELDS, SERVER_TEMPLATE_FIELDS, TARGET_KEYS
+from .templates import bubble_dependencies, template_dependencies
 
 
 @dataclass(frozen=True)
@@ -18,6 +18,8 @@ class DiscoveryContext:
     groups: dict[str, frozenset[str]] = field(default_factory=dict)
     targets: dict[str, dict[str, frozenset[str]]] = field(default_factory=dict)
     area_names: dict[str, str] = field(default_factory=dict)
+    # Native area cards read each area's chosen temperature and humidity sensors.
+    area_sensors: dict[str, frozenset[str]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -39,8 +41,8 @@ class DiscoveryResult:
 
 
 def valid_glob(pattern: str) -> bool:
-    """Accept entity globs with balanced character classes and no whitespace."""
-    if not isinstance(pattern, str) or pattern.count(".") != 1:
+    """Accept bounded entity globs with balanced character classes and no whitespace."""
+    if not isinstance(pattern, str) or len(pattern) > MAX_RULE_PATTERN_LENGTH or pattern.count(".") != 1:
         return False
     if not re.fullmatch(r"[a-z0-9_.*?\[\]!\-]+", pattern):
         return False
@@ -63,6 +65,15 @@ _AUTO_GLOB = re.compile(r"[A-Za-z0-9_.*?\[\]!\- ]+")
 # Rules that bound the candidates; attribute and state filters only narrow them in the browser.
 _AUTO_NARROWING = ("entity_id", "domain", "area")
 _AUTO_RULE_KEYS = frozenset(_AUTO_NARROWING) | {"attributes", "state", "options"}
+
+
+def button_card_templates(config: dict[str, Any]) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    """Separate reusable button-card definitions, which take the context of each card using them."""
+    templates = config.get("button_card_templates")
+    if not isinstance(templates, dict):
+        return config, {}
+    rest = {key: value for key, value in config.items() if key != "button_card_templates"}
+    return rest, {name: definition for name, definition in templates.items() if isinstance(definition, dict)}
 
 
 def auto_entities_matcher(value: Any) -> Any:
@@ -159,26 +170,32 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
         dependency_value: bool = False,
         parent_type: str = "",
         server_rendered: bool = False,
+        inherited: bool = False,
     ) -> None:
         nonlocal unknown_cards
         if isinstance(node, list):
             for index, item in enumerate(node):
                 walk(
                     item, f"{location}[{index}]", card_type, entity_id, dependency_value,
-                    parent_type, server_rendered,
+                    parent_type, server_rendered, inherited,
                 )
             return
         if isinstance(node, str):
-            if any(marker in node for marker in ("{{", "{%", "[[[")):
+            # Bubble Card runs ${} JavaScript in the browser; card-mod display fields do not.
+            if card_type == "custom:bubble-card" and "${" in node and not server_rendered:
+                result = bubble_dependencies(node, entity_id)
+            elif any(marker in node for marker in ("{{", "{%", "[[[")):
                 result = template_dependencies(
-                    node, card_type=card_type, entity_id=entity_id
+                    node, card_type=card_type, entity_id=entity_id, inherited_entity=inherited
                 )
-                for identifier in result.entity_ids:
-                    add(identifier, location)
-                # Core renders display Jinja itself; only browser JavaScript needs bounded inputs.
-                rendered_by_core = server_rendered and "[[[" not in node
-                if dependency_value or not (result.complete or rendered_by_core):
-                    problems.add(f"{location}: template dependencies cannot be scoped")
+            else:
+                return
+            for identifier in result.entity_ids:
+                add(identifier, location)
+            # Core renders display Jinja itself; only browser JavaScript needs bounded inputs.
+            rendered_by_core = server_rendered and "[[[" not in node
+            if dependency_value or not (result.complete or rendered_by_core):
+                problems.add(f"{location}: template dependencies cannot be scoped")
             return
         if not isinstance(node, dict):
             return
@@ -187,7 +204,7 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
         node_type = node.get("type")
         if isinstance(node_type, str):
             # A nested configuration starts a new context, even below styles.
-            parent_type, card_type, server_rendered = card_type, node_type, False
+            parent_type, card_type, server_rendered, inherited = card_type, node_type, False, False
             entity_id = node.get("entity")
             if not isinstance(entity_id, str) or not valid_entity_id(entity_id):
                 entity_id = None
@@ -202,7 +219,7 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
                 for name, reference in value.items():
                     mapping_path = f"{path}.{name}"
                     references(reference, mapping_path)
-                    walk(reference, mapping_path, card_type, entity_id, True)
+                    walk(reference, mapping_path, card_type, entity_id, True, inherited=inherited)
                 continue
             if key in ENTITY_KEYS:
                 references(value, path)
@@ -210,6 +227,8 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
                 target(key, value, path)
             if card_type == "area" and key == "area":
                 target("area_id", value, path)
+                for sensor in context.area_sensors.get(value, ()) if isinstance(value, str) else ():
+                    add(sensor, path)
             display = (key in {"card_mod", "uix"} or key in SERVER_TEMPLATE_FIELDS.get(card_type, ())
                        or card_type == "template" and parent_type == "custom:mushroom-chips-card"
                        and key in SERVER_TEMPLATE_CHIP_FIELDS)
@@ -223,9 +242,18 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
                 and key == "area",
                 parent_type,
                 server_rendered or display,
+                inherited,
             )
 
+    config, templates = button_card_templates(config)
     walk(config, "dashboard")
+    for name, definition in templates.items():
+        own = definition.get("entity")
+        walk(
+            {key: value for key, value in definition.items() if key != "type"},
+            f"dashboard.button_card_templates.{name}", "custom:button-card",
+            own if isinstance(own, str) and valid_entity_id(own) else None, inherited=True,
+        )
     return DiscoveryResult(
         frozenset(reasons),
         {key: tuple(sorted(value)) for key, value in reasons.items()},

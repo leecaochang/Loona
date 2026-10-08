@@ -122,6 +122,31 @@ card.hass={user:{id:"guest",is_admin:false},language:"en"};
 assert.equal(card.shadowRoot.querySelector("#report").children.length,0);
 assert.ok(card.shadowRoot.textContent.includes("Sign in as an administrator"));
 card.remove();
+// Blocked site data leaves the card usable and stops a run before the server opens it.
+const browserStorage={sessionStorage:globalThis.sessionStorage,localStorage:globalThis.localStorage};
+for(const name of Object.keys(browserStorage)) Object.defineProperty(globalThis,name,{configurable:true,get(){throw new Error("SecurityError");}});
+const started=[];
+const blocked=document.createElement("loona-benchmark-card");blocked.setConfig({type:"custom:loona-benchmark-card"});document.body.append(blocked);
+blocked.hass={user:{id:"admin",is_admin:true},language:"en",callWS:async request=>{started.push(request);return {token:"t",session_seconds:60};}};
+await blocked._start();
+assert.equal(started.length,0,"No server run without session storage");
+assert.equal(blocked.shadowRoot.querySelector("#message").textContent,"The benchmark needs browser storage. Allow this site to store data, then try again.");
+blocked._startOver();blocked.remove();
+for(const [name,value] of Object.entries(browserStorage)) Object.defineProperty(globalThis,name,{configurable:true,writable:true,value});
+// Storage failing mid-run never skips the server cancellation.
+const runnerMessages=[];let reloads=0;
+const failingStorage={setItem(){throw new Error("QuotaExceededError");},removeItem(){throw new Error("SecurityError");},getItem(){throw new Error("SecurityError");}};
+const failing={benchmark:{index:0,token:"run",viewport:[980,2121]},config:{benchmark_key:"loona.benchmark",benchmark_limits:{requests:500}},
+  window:{dispatchEvent(){},addEventListener(){},removeEventListener(){}},document:{readyState:"loading",hidden:false,addEventListener(){},removeEventListener(){},children:[]},
+  navigator:{userAgent:"Test"},innerWidth:980,innerHeight:2121,TextEncoder,Event,URL,location:{href:"http://ha.test/wall-panel/main",reload(){reloads++;}},
+  performance:{now:()=>100},setTimeout:()=>0,clearTimeout(){},sessionStorage:failingStorage};
+vm.runInNewContext(readFileSync("custom_components/loona/frontend/benchmark-runner.js","utf8"),failing);
+await failing.window.loonaBenchmark.attach({socket:{send(){},addEventListener(){},removeEventListener(){}},sendMessagePromise:async message=>{runnerMessages.push(message);return {resource_urls:[],ready_ms:30000};}});
+failing.window.loonaBenchmark.fail("Interrupted");
+assert.equal(failing.window.loonaBenchmark.status,"error");
+await failing.window.loonaBenchmark.cancel();
+assert.deepEqual(runnerMessages.filter(message=>message.action==="cancel").map(message=>message.token),["run","run"]);
+assert.equal(reloads,1);
 // The early hook sees the mobile default viewport before HA's meta tag applies.
 const callbacks=[], documentState={readyState:"loading",hidden:false,addEventListener(){},removeEventListener(){},children:[]};
 const context={benchmark:{index:0,viewport:[390,844]},config:{benchmark_key:"loona.benchmark",benchmark_limits:{requests:500}},

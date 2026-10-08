@@ -138,6 +138,19 @@ async def test_rules_and_extra_entities_validate(loona_hass, make_entry):
     assert result["errors"]["base"] == "not_loaded"
 
 
+async def test_rules_accept_new_wildcard_patterns_but_not_unknown_ids(loona_hass, make_entry):
+    loona_hass.states.async_set("sensor.kitchen_temperature", "20")
+    entry = make_entry({"dashboards": ["wall-panel"], "target_mode": "all"})
+    flow = LoonaOptionsFlow(entry.entry_id)
+    flow.hass, flow.handler = loona_hass, entry.entry_id
+    for invalid in ("sensor.kitchen_temp", "sensor.[", "kitchen_*", "sensor." + "a" * 250 + "*"):
+        result = await flow.async_step_rules({"include_globs": [invalid]})
+        assert result["errors"] == {"base": "invalid_selection"}, invalid
+    await flow.async_step_rules({"include_globs": ["sensor.kitchen_*"], "exclude_globs": ["sensor.kitchen_h?midity"]})
+    assert entry.options["include_globs"] == ["sensor.kitchen_*"]
+    assert entry.options["exclude_globs"] == ["sensor.kitchen_h?midity"]
+
+
 async def test_rules_select_known_entities_domains_and_preserve_saved_patterns(
     loona_hass, make_entry
 ):
@@ -183,7 +196,7 @@ async def test_rules_select_known_entities_domains_and_preserve_saved_patterns(
 @pytest.mark.parametrize("values", [
     {"include_domains": ["invented"]},
     {"include_globs": ["sensor.invented"]},
-    {"exclude_globs": ["sensor.invented*"]},
+    {"exclude_globs": ["sensor.invented[*"]},
     {"include_domains": ["sensor", "sensor"]},
     {"include_globs": "sensor.live"},
     {"exclude_globs": [None]},

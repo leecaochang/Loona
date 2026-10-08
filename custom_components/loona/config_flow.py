@@ -41,6 +41,7 @@ from .const import (
 )
 from .compatibility import CompatibilityError
 from .dashboard import dashboard_titles
+from .dependencies import valid_glob
 
 
 def validate_idle_settings(values: dict[str, Any]) -> dict[str, int]:
@@ -71,6 +72,18 @@ def entity_rule_choices(
     for key, values in choices.items():
         values.update(current.get(key, []))
     return {key: sorted(values) for key, values in choices.items()}
+
+
+def new_pattern(key: str, value: Any) -> bool:
+    """Pattern lists also take typed wildcard patterns; exact IDs must still be known."""
+    return (key in (CONF_INCLUDE_GLOBS, CONF_EXCLUDE_GLOBS) and isinstance(value, str)
+            and any(character in value for character in "*?[") and valid_glob(value))
+
+
+def unknown_choices(key: str, items: list[Any], choices: list[str]) -> bool:
+    """Reject values outside the current choices, other than new wildcard patterns."""
+    known = set(choices)
+    return any(item not in known and not new_pattern(key, item) for item in items)
 
 
 async def human_accounts(hass: HomeAssistant) -> dict[str, str]:
@@ -388,7 +401,7 @@ class LoonaOptionsFlow(OptionsFlow):
     async def async_step_rules(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Select known entities and domains without accepting arbitrary text."""
+        """Select known entities and domains; pattern lists also take bounded wildcards."""
         errors: dict[str, str] = {}
         choices = entity_rule_choices(self.hass, self.settings)
         schema = vol.Schema(
@@ -411,7 +424,7 @@ class LoonaOptionsFlow(OptionsFlow):
             except vol.Invalid:
                 errors["base"] = "invalid_selection"
             else:
-                if any(len(items) != len(set(items)) or not set(items) <= set(choices[key]) for key, items in values.items()):
+                if any(len(items) != len(set(items)) or unknown_choices(key, items, choices[key]) for key, items in values.items()):
                     errors["base"] = "invalid_selection"
                 else:
                     return await self.finish(values)

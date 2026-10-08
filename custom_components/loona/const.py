@@ -332,3 +332,5 @@ ENTITY_KEYS: Final = frozenset(
 )
 TARGET_KEYS: Final = frozenset({"device_id", "area_id", "floor_id", "label_id"})
 RULE_KEYS: Final = (CONF_INCLUDE_DOMAINS, CONF_INCLUDE_GLOBS, CONF_EXCLUDE_GLOBS)
+# Core's entity ID limit also bounds typed include and exclude patterns.
+MAX_RULE_PATTERN_LENGTH: Final = 255

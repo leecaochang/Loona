@@ -10,7 +10,10 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
 from .compatibility import CompatibilityError
-from .config_flow import entity_rule_choices, human_accounts, validate_dashboards, validate_targets, validate_idle_settings
+from .config_flow import (
+    entity_rule_choices, human_accounts, new_pattern, unknown_choices, validate_dashboards, validate_targets,
+    validate_idle_settings,
+)
 from .schema import vol
 from .const import (
     CONF_ALWAYS_FORWARD, CONF_DASHBOARDS, CONF_EXTRA_ENTITIES,
@@ -39,6 +42,10 @@ def entity_choices(runtime: LoonaRuntime, key: str, query: str = "", offset: int
                 "unavailable": value not in available if key == CONF_EXTRA_ENTITIES else False}
     words = query.casefold().split()
     rows = [row(value) for value in rules[key] if value not in saved]
+    # Offer a typed wildcard pattern so the card can add it like any other choice.
+    pattern = query.strip().lower()
+    if pattern not in rules[key] and new_pattern(key, pattern):
+        rows.append(row(pattern))
     matching = [item for item in rows if all(word in (item["value"] + " " + item["label"]).casefold()
                                            for word in words)]
     matching.sort(key=lambda item: ("*" in item["value"], item["label"].casefold(), item["value"]))
@@ -204,7 +211,7 @@ async def websocket_save_settings(hass: HomeAssistant, connection: websocket_api
                     choices = {CONF_ALWAYS_FORWARD: [row["url"] for row in report["resources"]] + report["stale_exceptions"]}
                 for key, items in values.items():
                     if (not isinstance(items, list) or any(not isinstance(v, str) for v in items)
-                        or len(items) != len(set(items)) or not set(items) <= set(choices[key])):
+                        or len(items) != len(set(items)) or unknown_choices(key, items, choices[key])):
                         raise ValueError("invalid_selection")
                 if group == "resources":
                     required = {row["url"] for row in report["resources"] if row["status"] == "required"}

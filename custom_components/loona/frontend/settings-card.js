@@ -192,7 +192,9 @@ function install() {
       cancelConfirmation(this); closeHelp(this.shadowRoot);
       this._versionConnection?.removeEventListener?.("ready", this._versionListener);
       this._versionConnection = undefined;
-      this._sequence++; this._loading = false; this._acting = undefined;
+      // A pending save or action may still finish on the server; reconcile on return.
+      if (this._saving || this._acting) this._reconcile = true;
+      this._sequence++; this._loading = false; this._saving = undefined; this._acting = undefined;
     }
     _watchConnection() {
       const connection = this.isConnected ? this._hass?.connection : undefined;
@@ -216,18 +218,22 @@ function install() {
     _replace(data, savedGroup) {
       this._searches = {}; this._offsets = {}; this._choiceSequences = {};
       for (const group of Object.keys(this._drafts)) {
-        if (group !== savedGroup && this._data && JSON.stringify(data.values[group]) !== JSON.stringify(this._data.values[group])) this._conflicts.add(group);
+        // A draft the server already holds, such as an interrupted save that finished, is saved.
+        if (group !== savedGroup && JSON.stringify(data.values[group]) === JSON.stringify(this._drafts[group])) {
+          delete this._drafts[group]; this._conflicts.delete(group); this._saved = group;
+        } else if (group !== savedGroup && this._data && JSON.stringify(data.values[group]) !== JSON.stringify(this._data.values[group])) this._conflicts.add(group);
       }
       if (savedGroup) { delete this._drafts[savedGroup]; this._conflicts.delete(savedGroup); }
       this._data = data; this._render();
     }
     async _fetch() {
-      if (!this.isConnected || !this._hass?.user?.is_admin || !this._hass.connection?.connected || Object.keys(this._drafts).length || this._saving || this._acting) return;
+      if (!this.isConnected || !this._hass?.user?.is_admin || !this._hass.connection?.connected
+          || Object.keys(this._drafts).length && !this._reconcile || this._saving || this._acting) return;
       const sequence = ++this._sequence; this._loading = true; this._sync();
       try {
         const data = await this._hass.callWS({ type:"loona/settings" });
         if (sequence !== this._sequence || !this._hass?.user?.is_admin) return;
-        this._error = undefined; this._replace(data);
+        this._error = undefined; this._reconcile = false; this._replace(data);
       } catch { if (sequence === this._sequence) this._error = "Could not load settings. Check that Loona is running, then press Refresh."; }
       finally { if (sequence === this._sequence) { this._loading = false; this._sync(); } }
     }

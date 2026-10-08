@@ -8,6 +8,7 @@ from custom_components.loona.dependencies import (
     discover,
     valid_glob,
 )
+from custom_components.loona.resources import resource_dependencies
 
 
 def test_nested_contexts_groups_targets_and_missing():
@@ -187,6 +188,56 @@ def test_core_rendered_display_templates_need_no_browser_entities():
 )
 def test_browser_or_reference_templates_still_bypass(card):
     assert not discover({"cards": [card]}, DiscoveryContext()).complete
+
+
+def test_bubble_expressions_add_the_entities_they_read():
+    # Bubble Card passes the configured entity ID as entity and its state as state.
+    styles = (".bubble-button-background { background: ${hass.states['sensor.alarm'].state === 'on' ? 'red' : 'green'}; }"
+              " .bubble-name { opacity: ${state === 'on' ? hass.states[entity].attributes.brightness / 255 : 1}; }")
+    result = discover({"views": [{"cards": [
+        {"type": "custom:bubble-card", "card_type": "button", "entity": "light.kitchen", "styles": styles},
+        {"type": "custom:bubble-card", "entity": "light.styled", "card_mod": {"style": "ha-card { --x: ${1}; }"}},
+    ]}]}, DiscoveryContext())
+    assert result.complete, result.problems
+    assert result.entity_ids == {"light.kitchen", "sensor.alarm", "light.styled"}
+
+
+@pytest.mark.parametrize("card", [
+    {"type": "custom:bubble-card", "entity": "light.kitchen", "styles": ".x { color: ${hass.states['sensor.' + name].state}; }"},
+    {"type": "custom:bubble-card", "styles": ".x { color: ${hass.states[entity].state}; }"},
+    {"type": "custom:bubble-card", "entity": "light.kitchen", "styles": ".x { color: ${(() => { return hass.states['sensor.alarm'].state; })()}; }"},
+    {"type": "custom:bubble-card", "entity": "${hass.states['light.kitchen'].entity_id}"},
+])
+def test_unbounded_bubble_expressions_bypass(card):
+    result = discover({"views": [{"cards": [card]}]}, DiscoveryContext())
+    assert not result.complete
+
+
+def test_reusable_button_card_templates_take_the_using_card_context():
+    config = {
+        "button_card_templates": {
+            "named": {"name": "[[[ return states['sensor.alarm'].state ]]]", "label": "[[[ return entity.state ]]]"},
+            "owned": {"type": "custom:button-card", "entity": "sensor.owned",
+                      "styles": {"icon": [{"color": "[[[ return entity.state === 'on' ? 'red' : 'blue' ]]]"}]}},
+        },
+        "views": [{"cards": [{"type": "custom:button-card", "template": ["named", "owned"], "entity": "light.kitchen"}]}],
+    }
+    result = discover(config, DiscoveryContext())
+    assert result.complete, result.problems
+    assert result.entity_ids == {"light.kitchen", "sensor.alarm", "sensor.owned"}
+    assert not resource_dependencies([config]).dynamic
+    assert resource_dependencies([config]).custom_types == {"button-card"}
+
+
+@pytest.mark.parametrize("definition", [
+    {"name": "[[[ return hass.states[variables.room].state ]]]"},
+    # A nested card does not inherit the template's entity binding.
+    {"custom_fields": {"inner": {"card": {"type": "custom:button-card", "label": "[[[ return entity.state ]]]"}}}},
+])
+def test_unbounded_reusable_templates_still_bypass(definition):
+    config = {"button_card_templates": {"room": definition}, "views": []}
+    assert not discover(config, DiscoveryContext()).complete
+    assert resource_dependencies([config]).dynamic
 
 
 def test_auto_entities_area_attribute_and_state_rules_use_safe_supersets():
@@ -386,6 +437,8 @@ def test_auto_entities_unsupported_filter_bypasses(filter_config):
         ("sensor.room *", False),
         ("sensor..x", False),
         ("sensor.[]", False),
+        ("sensor." + "a" * 248, True),
+        ("sensor." + "a" * 249, False),
     ],
 )
 def test_patterns(pattern, valid):

@@ -101,6 +101,7 @@ const chinese = {
   "Browser: {browser}; viewport: {width} x {height}": "浏览器：{browser}；窗口大小：{width} x {height}",
   "Keep the benchmark tab visible before starting.": "开始前请保持基准测试所在的选项卡可见。",
   "Benchmark could not start. Refresh and try again.": "无法开始基准测试。请刷新后重试。",
+  "The benchmark needs browser storage. Allow this site to store data, then try again.": "基准测试需要使用浏览器存储。请允许此网站存储数据，然后重试。",
   "Remove benchmark card?": "移除基准测试卡片？",
   "Remove this benchmark card from this tab? Saved PNGs are kept.": "要从此选项卡移除这张基准测试卡片吗？已保存的 PNG 会保留。",
   "Remove this card manually in the dashboard editor or YAML source.": "请在仪表盘编辑器或 YAML 源码中手动移除此卡片。",

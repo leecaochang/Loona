@@ -24,7 +24,7 @@ let current={
   paged_choices:{extra_entities:true,include_globs:false,exclude_globs:false},required_resources:[],resources_editable:true,action_entities:{},notices:[],
 };
 const copy=value=>JSON.parse(JSON.stringify(value));
-let conflict=false;
+let conflict=false, holdSave=false, held;
 const requests=[];
 const services=[];
 const statistics={version:"1.0.0",controls:{enabled:true,entity_filtering:true},complete:true,metrics:{current_scope:1,filtered_subscriptions:1,managed_subscriptions:1,forwarded_rate:1,avoided_rate:2,update_reduction:3,forwarded_updates:4,avoided_updates:5,reduction_estimate:6},reset_at:"2026-10-02T01:00:00Z",rate_history:[{at:"2026-10-02T01:00:30Z",seconds:30,sent:0,filtered:0},{at:"2026-10-02T01:01:00Z",seconds:30,sent:.5,filtered:3},{at:"2026-10-02T01:01:30Z",seconds:30,sent:1,filtered:2}],page_loads:[],notices:[],interval_seconds:30};
@@ -35,6 +35,7 @@ const hass={user:{id:"admin",is_admin:true},language:"en",connection:Object.assi
     if(request.type==="loona/settings_choices") return {choices:[{value:"sensor.remote",label:"Remote"}],selected:[],more:false};
     if(request.type==="loona/save_settings") {
       if(conflict) throw {code:"conflict"};
+      if(holdSave) return new Promise((resolve,reject)=>{ held={request,resolve,reject}; });
       current.values[request.group]=copy(request.values); return copy(current);
     }
     return copy(current);
@@ -80,6 +81,24 @@ assert.ok(streamPlot.querySelector('[data-part="sent-line"]').getAttribute("d").
 assert.equal(streamPlot.querySelector('[data-part="sent-latest"]').getAttribute("cy"),"82");
 assert.equal(streamPlot.querySelector('[data-part="filtered-latest"]').getAttribute("cy"),"56","Both series must use the same scale");
 assert.ok(streamPlot.getAttribute("aria-label").includes("Sent: 1,0 updates/s"));
+// Chart readouts follow the current language, and the keyboard reaches every sample.
+const readout=()=>streamPlot.querySelector('[data-part="readout"]').textContent;
+stats.hass={...hass,language:"zh-Hans"};
+streamPlot.dispatchEvent(new window.MouseEvent("pointermove",{clientX:0}));
+assert.ok(readout().includes("已发送") && readout().includes("已筛除") && !readout().includes("Sent"),readout());
+streamPlot.dispatchEvent(new window.Event("pointerleave"));
+assert.equal(streamPlot.getAttribute("role"),"slider"); assert.equal(streamPlot.getAttribute("tabindex"),"0");
+streamPlot.dispatchEvent(new window.Event("focus"));
+assert.equal(streamPlot.getAttribute("aria-valuenow"),"2");
+streamPlot.dispatchEvent(new window.KeyboardEvent("keydown",{key:"Home"}));
+assert.equal(streamPlot.getAttribute("aria-valuenow"),"0");
+streamPlot.dispatchEvent(new window.KeyboardEvent("keydown",{key:"ArrowRight"}));
+assert.equal(streamPlot.getAttribute("aria-valuenow"),"1");
+assert.equal(streamPlot.getAttribute("aria-valuetext"),readout());
+stats.hass=hass;
+assert.ok(readout().startsWith("1 min ago · Sent"),"A selected sample is read again in the new language");
+streamPlot.dispatchEvent(new window.Event("blur"));
+assert.equal(streamPlot.querySelector('[data-part="scrub"]').style.display,"none");
 stats._render({...copy(statistics),rate_history:[],metrics:{...statistics.metrics,forwarded_rate:0,avoided_rate:0}});
 assert.equal(stats.shadowRoot.querySelectorAll(".metric-chart svg").length,4,"Idle and initial readings still have chart geometry");
 assert.ok(stats.shadowRoot.getElementById("stream-chart").textContent.includes("No history yet"));
@@ -274,6 +293,27 @@ settings.shadowRoot.querySelector("[data-confirm-accept]").click();
 await restore;
 assert.equal(requests.findLast(row=>row.type==="loona/restore_defaults").confirmed, true);
 assert.equal(Object.keys(settings._drafts).length, 0);
+// Detaching during a save keeps the card usable and reconciles what the server holds on return.
+holdSave=true;
+settings._edit("controls","enabled",!current.values.controls.enabled);
+let detachedSave=settings._save("controls");
+settings.remove();
+current.values.controls=copy(held.request.values); held.resolve(copy(current)); await detachedSave;
+document.body.append(settings); await new Promise(setImmediate);
+assert.equal(settings._saving,undefined);
+assert.equal(settings._drafts.controls,undefined,"A save that finished while detached is no longer a draft");
+assert.equal(settings._saved,"controls");
+assert.ok(!settings.shadowRoot.getElementById("refresh").disabled);
+assert.ok(!settings.shadowRoot.querySelector('[data-control="enabled"]').disabled);
+settings._edit("controls","enabled",!current.values.controls.enabled);
+detachedSave=settings._save("controls");
+settings.remove(); held.reject({code:"save_failed"}); await detachedSave;
+document.body.append(settings); await new Promise(setImmediate);
+assert.equal(settings._saving,undefined);
+assert.ok(settings._drafts.controls && !settings._conflicts.has("controls"),"A failed save keeps the draft for another attempt");
+assert.ok(!settings.shadowRoot.querySelector('[data-save="controls"]').disabled);
+settings.shadowRoot.querySelector('[data-cancel="controls"]').click();
+holdSave=false;
 // Account changes cancel an outstanding approval before any request is sent.
 const beforeAccount = requests.length;
 restore = settings._restore();
