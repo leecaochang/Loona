@@ -90,4 +90,10 @@ async def test_uninstall_removes_both_statistic_tables_and_preserves_foreign_dat
                 set(session.scalars(select(StatisticsMeta.statistic_id).join(table, table.metadata_id == StatisticsMeta.id)))
                 for table in (Statistics, StatisticsShortTerm)
             ]
+    # The Recorder thread can still be committing the queued deletion under a busy suite.
+    for _ in range(50):
+        if await native_recorder.async_add_executor_job(remaining) == [preserved] * 3:
+            break
+        await native_recorder.async_block_till_done()
+        await asyncio.sleep(0.05)
     assert await native_recorder.async_add_executor_job(remaining) == [preserved] * 3
