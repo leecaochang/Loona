@@ -258,6 +258,7 @@ function install() {
           .state { display:flex; align-items:flex-start; gap:8px; margin:6px 0 0; color:var(--primary-text-color); font-size:14px; line-height:1.5; }
           .state::before { content:""; flex-shrink:0; width:9px; height:9px; margin-top:7px; border-radius:50%; background:var(--disabled-text-color); }
           .state[data-tone="active"]::before { background:var(--primary-color); }
+          .state[data-tone="waiting"]::before { background:transparent; box-shadow:inset 0 0 0 2px var(--primary-color); }
           .state[data-tone="problem"]::before { background:var(--error-color); }
           button { font:inherit; color:var(--primary-text-color); }
           button { border:0; border-radius:var(--ha-border-radius,8px); min-height:44px;
@@ -538,12 +539,16 @@ function install() {
       this._renderCharts(data);
       const format = (value) => formatNumber(this._hass, value, { maximumFractionDigits: 1 });
       const problem = data.compatibility_problem || !data.complete;
-      const active = !problem && data.controls.enabled && data.controls.entity_filtering && metrics.filtered_subscriptions > 0;
-      this._get("state").dataset.tone = problem ? "problem" : active ? "active" : "idle";
+      const on = !problem && data.controls.enabled && data.controls.entity_filtering;
+      // A hollow dot means filtering is on but no open dashboard is filtered at this moment.
+      this._get("state").dataset.tone = problem ? "problem" : !on ? "idle" : metrics.filtered_subscriptions > 0 ? "active" : "waiting";
       setText(this._get("state"), data.compatibility_problem ? text(this._hass, "Some features are unavailable. See Loona's diagnostics.")
         : !data.complete ? text(this._hass, "Dashboard scan incomplete. All entities are being sent.")
         : !data.controls.enabled || !data.controls.entity_filtering ? text(this._hass, "Entity filtering is disabled")
-        : metrics.filtered_subscriptions ? text(this._hass, "Entity filtering is active") : text(this._hass, "Nothing is being filtered yet. Open a selected dashboard with a selected account."));
+        : metrics.filtered_subscriptions ? text(this._hass, "Entity filtering is active")
+        // This card usually sits on an unselected dashboard, so earlier filtering must not read as none.
+        : metrics.avoided_updates ? text(this._hass, "Entity filtering is on, but no open dashboard is being filtered right now. The totals include earlier filtering.")
+        : text(this._hass, "Entity filtering is on, but no open dashboard is being filtered right now. Open a selected dashboard with a selected account."));
       for (const [id, key] of [["forwarded", "forwarded_rate"], ["avoided", "avoided_rate"], ["reduction", "update_reduction"],
         ["forwarded-total", "forwarded_updates"], ["avoided-total", "avoided_updates"]]) this._get(id).textContent = key.endsWith("_rate") ? formatNumber(this._hass, metrics[key], {minimumFractionDigits:1, maximumFractionDigits:1}) : format(metrics[key]);
       this._get("interval").textContent = (data.sample_seconds

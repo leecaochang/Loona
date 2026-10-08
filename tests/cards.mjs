@@ -63,6 +63,13 @@ assert.equal(stats.shadowRoot.querySelector("#estimate-chart svg").getAttribute(
 assert.equal(stats.shadowRoot.querySelector('#reduction-chart [data-part="value"]').textContent,"3%".replace("%","\u00a0%"));
 assert.equal(stats.shadowRoot.querySelector('#feeds-chart [data-part="value"]').textContent,"1 / 1");
 assert.equal(stats.shadowRoot.querySelectorAll('#feeds-chart [data-feed]').length,1,"One star per tracked feed");
+// The status line separates filtering now from filtering earlier since reset.
+const statusFor=(metrics,controls={})=>{stats._render({...copy(statistics),controls:{...statistics.controls,...controls},metrics:{...statistics.metrics,...metrics}});const state=stats.shadowRoot.getElementById("state");return [state.dataset.tone,state.textContent];};
+assert.deepEqual(statusFor({}),["active","Entity filtering is active"]);
+assert.deepEqual(statusFor({filtered_subscriptions:0}),["waiting","Entity filtering is on, but no open dashboard is being filtered right now. The totals include earlier filtering."]);
+assert.deepEqual(statusFor({filtered_subscriptions:0,avoided_updates:0}),["waiting","Entity filtering is on, but no open dashboard is being filtered right now. Open a selected dashboard with a selected account."]);
+assert.deepEqual(statusFor({filtered_subscriptions:0},{entity_filtering:false}),["idle","Entity filtering is disabled"]);
+stats._render(copy(statistics));
 assert.equal(stats.shadowRoot.querySelectorAll('#feeds-chart [data-feed][data-lit="true"]').length,1);
 assert.ok(stats.shadowRoot.querySelector('#estimate-chart [data-part="lit"]'));
 const streamPlot=stats.shadowRoot.querySelector("#stream-chart svg");
