@@ -99,13 +99,7 @@ function starPath(cx,cy,r) {
   const k=r*.17;
   return `M${fixed(cx)} ${fixed(cy-r)}Q${fixed(cx+k)} ${fixed(cy-k)} ${fixed(cx+r)} ${fixed(cy)}Q${fixed(cx+k)} ${fixed(cy+k)} ${fixed(cx)} ${fixed(cy+r)}Q${fixed(cx-k)} ${fixed(cy+k)} ${fixed(cx-r)} ${fixed(cy)}Q${fixed(cx-k)} ${fixed(cy-k)} ${fixed(cx)} ${fixed(cy-r)}Z`;
 }
-// Home Assistant's own pages are not dashboards; name the common ones rather than showing their URL path.
-function feedName(hass,feed) {
-  if (feed.dashboard) return feed.dashboard;
-  const names={config:"Settings","developer-tools":"Developer tools",history:"History",logbook:"Logbook",map:"Map",energy:"Energy",calendar:"Calendar",todo:"To-do lists"};
-  return Object.hasOwn(names,feed.panel) ? text(hass,names[feed.panel]) : feed.panel;
-}
-function feedChart(root,hass,filtered,total,feeds) {
+function feedChart(root,hass,feeds) {
   const width=chartWidth(root);
   if (!root.firstElementChild) {
     const chart=svg("svg",{viewBox:`0 0 ${width} 170`,role:"img","data-chart":"feeds"});
@@ -113,13 +107,13 @@ function feedChart(root,hass,filtered,total,feeds) {
       chartText(width/2,130,22,{"data-part":"value","text-anchor":"middle","font-weight":600}),chartText(width/2,150,12.5,{"data-part":"label","text-anchor":"middle",fill:"var(--secondary-text-color)"}));
     chart.__width=width; root.append(chart);
   }
-  const chart=root.firstElementChild, all=Math.max(0,Math.floor(Number(total)||0)), count=Math.min(all,Math.max(0,Math.floor(Number(filtered)||0)));
+  const chart=root.firstElementChild, all=feeds.length, count=feeds.filter(feed=>feed.filtered).length;
   setLabel(chart,text(hass,"Filtered connections"),width);
   chart.querySelector('[data-part="value"]').textContent=formatNumber(hass,count)+" / "+formatNumber(hass,all);
   // Beyond 48 stars the sky samples proportionally; the exact counts stay in the text.
   const shown=Math.min(all,48), lit=all>48 ? (count>0 ? Math.max(1,Math.round(48*count/all)) : 0) : count;
-  // Names apply star by star only while every tracked feed is drawn and the list matches the counts.
-  const named=Array.isArray(feeds) && feeds.length===all && all<=48 && feeds.filter(feed=>feed.filtered).length===count ? feeds : null;
+  // Names apply star by star only while every feed is drawn.
+  const named=all<=48 ? feeds : null;
   const area={x:10,y:6,w:width-20,h:98};
   let columns=1, size=0;
   for (let candidate=1;candidate<=Math.max(1,shown);candidate++) {
@@ -140,10 +134,9 @@ function feedChart(root,hass,filtered,total,feeds) {
       mark=svg("circle",{cx:fixed(cx),cy:fixed(cy),r:fixed(Math.min(5,Math.max(2.5,size*.1))),fill:"none",style:"stroke:var(--secondary-text-color);stroke-opacity:.6;stroke-width:1.25;pointer-events:all"});
     }
     const feed=named?.[index];
-    const name=feed && feedName(hass,feed);
-    if (name) {
+    if (feed?.dashboard) {
       const tip=svg("title",{});
-      tip.textContent=feed.filtered ? name : text(hass,"{name} (not filtered)",{name});
+      tip.textContent=feed.filtered ? feed.dashboard : text(hass,"{name} (not filtered)",{name:feed.dashboard});
       mark.append(tip);
     }
     mark.setAttribute("data-feed",""); mark.setAttribute("data-lit",String(isLit)); stars.push(mark);
@@ -409,7 +402,7 @@ function install() {
         </ha-card>`;
       hideBrokenMark(this.shadowRoot);
       this._get("rates-help").append(createHelp(this._hass,"Live updates","","interval"));
-      this._get("scope-help").append(createHelp(this._hass,"Totals and entities","A live connection is the link a dashboard tab keeps open to Home Assistant. Each open tab usually has one connection, sometimes more. 'Connections filtered / total' shows how many of them Loona is filtering. 'Estimated entities trimmed' is the percentage of Home Assistant's entities outside Loona's configured inclusion set. It describes potential entity reduction, not measured update reduction, and remains visible when filtering is off."));
+      this._get("scope-help").append(createHelp(this._hass,"Totals and entities","A live connection is the link a dashboard tab keeps open to Home Assistant. Each open tab usually has one connection, sometimes more. Tabs showing other Home Assistant pages, such as Settings, are not counted. 'Connections filtered / total' shows how many of them Loona is filtering. 'Estimated entities trimmed' is the percentage of Home Assistant's entities outside Loona's configured inclusion set. It describes potential entity reduction, not measured update reduction, and remains visible when filtering is off."));
       this._get("loads-help").append(createHelp(this._hass,"Recent page loads","Shows how many entities and card files were filtered out of those available for each dashboard's latest recorded page load. It does not measure loading time."));
       this._get("performance-help").append(createHelp(this._hass,"Browser performance","Lists the 20 entities with the most updates sent since reset, alongside browser reports of slow frames, script work and event subscriptions that may bypass filtering. These reports cover only part of the browser's work. Items marked 'before measuring' happened before Loona started watching."));
       this._get("reset-help").append(createHelp(this._hass,"Reset live statistics","Clears the live counters, recent page-load records and browser readings. Your Loona settings and Home Assistant's recorded history are untouched."));
@@ -571,7 +564,7 @@ function install() {
       streamChart(this._get("stream-chart"),this._hass,history,metrics,max);
       moonChart(this._get("reduction-chart"),this._hass,"Updates filtered out",metrics.update_reduction,metrics.forwarded_rate+metrics.avoided_rate>0);
       moonChart(this._get("estimate-chart"),this._hass,"Estimated entities trimmed",metrics.reduction_estimate,true);
-      feedChart(this._get("feeds-chart"),this._hass,metrics.filtered_subscriptions,metrics.managed_subscriptions,data.feeds);
+      feedChart(this._get("feeds-chart"),this._hass,data.feeds || []);
     }
     _render(data) {
       const metrics = data.metrics;
@@ -599,7 +592,8 @@ function install() {
         + " " + text(this._hass, "Each update counts once per connection, so opening more tabs increases the totals. These figures measure entity updates, not data size, bandwidth, CPU usage or loading speed.")
         + " " + text(this._hass,"Charts show up to 15 minutes of history and refresh along with the statistics. Chart history is kept only in memory and clears on reset or restart. Sent and filtered out share one scale.")
         + " " + text(this._hass,"On the moons, the lit part shows the percentage and the dark part is the rest.");
-      this._get("subscriptions").textContent = format(metrics.filtered_subscriptions) + " / " + format(metrics.managed_subscriptions);
+      const feeds = data.feeds || [];
+      this._get("subscriptions").textContent = format(feeds.filter(feed => feed.filtered).length) + " / " + format(feeds.length);
       this._get("scope").textContent = text(this._hass, metrics.current_scope === 1 ? "1 entity" : "{count} entities", { count: format(metrics.current_scope) });
       this._get("estimate").textContent = formatNumber(this._hass, metrics.reduction_estimate / 100, {style:"percent",maximumFractionDigits:1});
       this._get("reset-time").textContent = text(this._hass, "Since {time}", { time: formatDateTime(this._hass, data.reset_at) });

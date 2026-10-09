@@ -27,7 +27,7 @@ const copy=value=>JSON.parse(JSON.stringify(value));
 let conflict=false, holdSave=false, held, holdRead=false, heldRead;
 const requests=[];
 const services=[];
-const statistics={version:"1.0.1",controls:{enabled:true,entity_filtering:true},complete:true,metrics:{current_scope:1,filtered_subscriptions:1,managed_subscriptions:1,forwarded_rate:1,avoided_rate:2,update_reduction:3,forwarded_updates:4,avoided_updates:5,reduction_estimate:6},reset_at:"2026-10-02T01:00:00Z",rate_history:[{at:"2026-10-02T01:00:30Z",seconds:30,sent:0,filtered:0},{at:"2026-10-02T01:01:00Z",seconds:30,sent:.5,filtered:3},{at:"2026-10-02T01:01:30Z",seconds:30,sent:1,filtered:2}],page_loads:[],notices:[],interval_seconds:30};
+const statistics={version:"1.0.1",controls:{enabled:true,entity_filtering:true},complete:true,metrics:{current_scope:1,filtered_subscriptions:1,managed_subscriptions:1,forwarded_rate:1,avoided_rate:2,update_reduction:3,forwarded_updates:4,avoided_updates:5,reduction_estimate:6},reset_at:"2026-10-02T01:00:00Z",rate_history:[{at:"2026-10-02T01:00:30Z",seconds:30,sent:0,filtered:0},{at:"2026-10-02T01:01:00Z",seconds:30,sent:.5,filtered:3},{at:"2026-10-02T01:01:30Z",seconds:30,sent:1,filtered:2}],page_loads:[],feeds:[{dashboard:"Wall",filtered:true}],notices:[],interval_seconds:30};
 const hass={user:{id:"admin",is_admin:true},language:"en",connection:Object.assign(new window.EventTarget(),{connected:true}),locale:{language:"en",number_format:"decimal_comma",time_format:"24",time_zone:"server"},config:{time_zone:"UTC"},
   async callWS(request) {
     requests.push(request);
@@ -65,15 +65,15 @@ assert.equal(stats.shadowRoot.querySelector("#estimate-chart svg").getAttribute(
 assert.equal(stats.shadowRoot.querySelector('#reduction-chart [data-part="value"]').textContent,"3%".replace("%","\u00a0%"));
 assert.equal(stats.shadowRoot.querySelector('#feeds-chart [data-part="value"]').textContent,"1 / 1");
 assert.equal(stats.shadowRoot.querySelectorAll('#feeds-chart [data-feed]').length,1,"One star per tracked feed");
-// Hovering a star names the dashboard that feed belongs to.
-stats._render({...copy(statistics),feeds:[{dashboard:"Wall",panel:"wall-panel",filtered:true}]});
+// Only real dashboards are counted, and hovering a star names its dashboard.
+stats._render({...copy(statistics),feeds:[{dashboard:"Wall",filtered:true}]});
 assert.equal(stats.shadowRoot.querySelector('#feeds-chart [data-feed] title').textContent,"Wall");
-stats._render({...copy(statistics),metrics:{...statistics.metrics,filtered_subscriptions:0,managed_subscriptions:2},feeds:[{dashboard:"Wall",filtered:false},{dashboard:"Config",filtered:false}]});
-assert.deepEqual([...stats.shadowRoot.querySelectorAll('#feeds-chart [data-feed] title')].map(node=>node.textContent),["Wall (not filtered)","Config (not filtered)"]);
-stats._render({...copy(statistics),metrics:{...statistics.metrics,filtered_subscriptions:0,managed_subscriptions:2},feeds:[{dashboard:null,panel:"config",filtered:false},{dashboard:null,panel:"custom-panel",filtered:false}]});
-assert.deepEqual([...stats.shadowRoot.querySelectorAll('#feeds-chart [data-feed] title')].map(node=>node.textContent),["Settings (not filtered)","custom-panel (not filtered)"],"Built-in pages get names, never a bare URL path where a name exists");
-stats._render({...copy(statistics),feeds:[{dashboard:"Wall",filtered:false}]});
-assert.equal(stats.shadowRoot.querySelector('#feeds-chart [data-feed] title'),null,"A list that disagrees with the counts names nothing");
+stats._render({...copy(statistics),feeds:[{dashboard:"Wall",filtered:false},{dashboard:"Kitchen",filtered:false}]});
+assert.deepEqual([...stats.shadowRoot.querySelectorAll('#feeds-chart [data-feed] title')].map(node=>node.textContent),["Wall (not filtered)","Kitchen (not filtered)"]);
+assert.equal(stats.shadowRoot.querySelector('#feeds-chart [data-part="value"]').textContent,"0 / 2");
+assert.equal(stats.shadowRoot.getElementById("subscriptions").textContent,"0 / 2","The text row agrees with the chart");
+stats._render({...copy(statistics),feeds:[]});
+assert.equal(stats.shadowRoot.querySelector('#feeds-chart [data-part="value"]').textContent,"0 / 0");
 // Recent page loads report what was filtered out of what was available.
 stats._render({...copy(statistics),page_loads:[{dashboard:"wall-panel",title:"Wall",at:"2026-10-02T01:00:00Z",entities:{available:100,sent:30},resources:{available:10,sent:4}}]});
 const loadLines=[...stats.shadowRoot.querySelectorAll("#load-rows li p")].map(node=>node.textContent);

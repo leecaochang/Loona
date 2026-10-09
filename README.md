@@ -214,7 +214,7 @@ The **Loona statistics** dashboard card shows how much Loona is filtering, wheth
 - **Filtered out** is the number of entity updates Loona held back per second.
 - **Updates filtered out** is the percentage of updates held back during the latest sampling interval.
 - **Estimated entities trimmed** is the percentage of Home Assistant's entities outside Loona's configured inclusion set. It describes potential entity reduction, not measured update reduction, and remains visible when filtering is off.
-- **Totals and entities** shows updates sent and filtered out since reset, the number of entities currently included, and how many live connections are being filtered. Optional charts visualize the entity percentage and connection counts.
+- **Totals and entities** shows updates sent and filtered out since reset, the number of entities currently included, and how many live dashboard connections are being filtered. Tabs showing other Home Assistant pages, such as Settings, are not counted. Optional charts visualize the entity percentage and connection counts.
 - **Recent page loads** shows how many entities and card files were filtered out of those available for each dashboard's latest recorded page load. It does not measure loading time.
 - **Browser performance** lists the 20 entities with the most updates sent since reset, alongside browser reports of slow frames, script work and event subscriptions that may bypass filtering. These reports cover only part of the browser's work.
 - **Warnings and checks** explains detected problems and suggested actions. **Dismiss** hides that warning type for your account in this browser, including future occurrences. It does not resolve the problem or change Loona's behavior; other warning types can still appear.
