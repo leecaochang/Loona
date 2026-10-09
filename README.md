@@ -289,7 +289,7 @@ The Loona device in Home Assistant has these sensors:
 | --- | --- |
 | Included entities, Available included entities | How many entities Loona keeps, and how many of those currently have a state |
 | Estimated entities trimmed | The share of current entities outside that set |
-| Tracked connections, Filtered connections | Live connections Loona manages, and how many are currently narrowed |
+| Tracked connections, Filtered connections | Live dashboard connections Loona manages, and how many are currently narrowed. Tabs on other Home Assistant pages are not counted |
 | Entity updates sent per second, Entity updates filtered out per second | Average changes passed on and held back in the latest measured interval |
 | Share of updates filtered out | The share of counted changes held back in that interval |
 | Entity updates sent, Entity updates filtered out | Running totals since Home Assistant started or the last reset |

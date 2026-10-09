@@ -72,6 +72,7 @@ from .const import (
 from .graph_loading import GraphLoadingAdapter
 from .panels import PanelContext
 from .dashboard import (
+    dashboard_objects,
     dashboard_titles,
     discovery_context,
     load_dashboard,
@@ -882,10 +883,23 @@ class LoonaRuntime:
             add("stale_resources", report.get("stale_exceptions"), items=report.get("stale_exceptions", ()))
         return notices
 
+    def dashboard_feeds(self) -> list[tuple[str, bool]]:
+        """Tracked feeds on real dashboards as (dashboard path, filtered), filtered first.
+
+        Settings, History and other native pages are not dashboards, so they never count.
+        """
+        if self.adapter is None:
+            return []
+        dashboards = dashboard_objects(self.hass)
+        feeds = [(path, filtered) for connection, filtered in self.adapter.feed_report()
+                 if (path := self.panel_context.dashboard_for(connection)) in dashboards]
+        return sorted(feeds, key=lambda feed: not feed[1])
+
     def metrics(self) -> dict[str, Any]:
         """Entity count estimates use current state IDs, not transport bytes."""
         current = set(self.hass.states.async_entity_ids())
         scoped = len(current & self.entity_ids)
+        feeds = self.dashboard_feeds()
         return {
             **self.live_statistics.metrics(),
             "warnings": sum(item["severity"] == "warning" for item in self.notice_report()),
@@ -895,10 +909,8 @@ class LoonaRuntime:
             "reduction_estimate": round(100 * (1 - scoped / len(current)), 1)
             if current
             else 0,
-            "managed_subscriptions": self.adapter.managed_count if self.adapter else 0,
-            "filtered_subscriptions": self.adapter.filtered_count
-            if self.adapter
-            else 0,
+            "managed_subscriptions": len(feeds),
+            "filtered_subscriptions": sum(filtered for _, filtered in feeds),
             "last_scan": self.last_scan,
             "scan_duration": self.scan_duration,
         }

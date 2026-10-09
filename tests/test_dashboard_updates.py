@@ -131,6 +131,8 @@ async def test_runtime_opt_in_capability_dialogs_editors_navigation_and_rules(da
     command(connection, output, "loona/panel", dashboard="config", live_dashboard=True)
     assert runtime.adapter._records[(connection, 2)].scope is None
     assert statistics_report(runtime)["feeds"] == [], "Native pages are not dashboards, so they are not counted"
+    assert runtime.adapter.managed_count == 1 and runtime.metrics()["managed_subscriptions"] == 0
+    assert runtime.metrics()["filtered_subscriptions"] == 0
     assert "sensor.outside" in snapshot(output)
     command(connection, output, "loona/panel", dashboard="wall-panel")
     assert runtime.adapter._records[(connection, 2)].scope == frozenset(retained), "Old reporters remain union scoped"

@@ -26,11 +26,7 @@ def statistics_report(runtime: LoonaRuntime, include_rate_history: bool = False)
         row["label"] = entity_label(runtime.hass, row["entity_id"])
     reports = list(reversed(runtime.live_statistics.browser_reports.values()))
     titles = dashboard_titles(runtime.hass)
-    # Only live connections on real dashboards count; Settings, History and other native pages are not dashboards.
-    feeds = [{"dashboard": titles[path], "filtered": filtered}
-             for client, filtered in (runtime.adapter.feed_report() if runtime.adapter else [])
-             if (path := runtime.panel_context.dashboard_for(client)) in titles]
-    feeds.sort(key=lambda row: not row["filtered"])
+    feeds = [{"dashboard": titles.get(path, path), "filtered": filtered} for path, filtered in runtime.dashboard_feeds()]
     return {
         "version": VERSION,
         "notices": notices,

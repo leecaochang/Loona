@@ -209,7 +209,7 @@
     {"en": "8960ddf34612", "zh": "0c5c40918049", "text": "Estimated entities trimmed"},
     {"en": "801d68d2ba02", "zh": "bed2392a92af", "text": "The share of current entities outside that set"},
     {"en": "1cb4ed8a2cf0", "zh": "7994762e7db2", "text": "Tracked connections, Filtered connections"},
-    {"en": "e5f78c24bf20", "zh": "d7b9d96a14bf", "text": "Live connections Loona manages, and how many are currentl..."},
+    {"en": "811044a4c6eb", "zh": "eea813342999", "text": "Live dashboard connections Loona manages, and how many ar..."},
     {"en": "3766125ec11c", "zh": "378bba6f515d", "text": "Entity updates sent per second, Entity updates filtered o..."},
     {"en": "40992cfa0802", "zh": "d2ecaeced71b", "text": "Average changes passed on and held back in the latest mea..."},
     {"en": "13b9557304d4", "zh": "b05b0c1d0e4a", "text": "Share of updates filtered out"},
