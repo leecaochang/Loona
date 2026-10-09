@@ -297,7 +297,7 @@ The Loona device in Home Assistant has these sensors:
 | Last successful scan, Scan duration | When the latest full scan finished and how long it took |
 | Version, Warnings | The installed version, and the number of active warnings (not counting informational checks) |
 
-Each selected dashboard also has its own Loona device with **Referenced entities** and **Entities not found** counts. Not found means there is neither a current state nor a registry entry for it.
+Each selected dashboard also has its own Loona device with **Referenced entities** and **Entities not found** counts. Not found means there is neither a current state nor a registry entry for it. Deselecting a dashboard removes its device and deletes the long-term and short-term statistics of these two sensors.
 
 ## Troubleshooting
 

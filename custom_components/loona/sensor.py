@@ -15,6 +15,7 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .entity import LoonaEntity
+from .recorder import async_clear_retired_statistics
 from .runtime import LoonaConfigEntry, LoonaRuntime
 
 _METRICS = (
@@ -53,17 +54,21 @@ async def async_setup_entry(
         if key in runtime.selected_dashboards:
             removing.discard(key)
             return
+        removed = []
         for entity in entities:
             if entity.hass is not None:
                 await entity.async_remove(force_remove=True)
                 registry = er.async_get(hass)
                 if registry.async_get(entity.entity_id):
                     registry.async_remove(entity.entity_id)
+                removed.append(entity.entity_id)
         children.pop(key, None)
         device_id = runtime.dashboard_devices.get(key)
         if device_id and key not in runtime.selected_dashboards:
             runtime.dashboard_devices.pop(key)
             dr.async_get(hass).async_remove_device(device_id)
+        # Recorder keeps long-term statistics for removed sensors unless asked.
+        await async_clear_retired_statistics(hass, removed)
         removing.discard(key)
         sync()
 
