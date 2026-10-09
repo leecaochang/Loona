@@ -100,6 +100,8 @@ Loona filters a dashboard only when:
 
 All other dashboards, and the rest of the Home Assistant UI, remain unaffected.
 
+While you edit a dashboard, Loona sends it every entity. Filtering resumes when you stop editing.
+
 What gets sent to the dashboard is only what your selected dashboards actually use, plus whatever you add under **Entity rules**.
 
 Person, update and zone entities cannot be excluded, because the Home Assistant interface requires them.
@@ -115,7 +117,6 @@ Loona cannot always correctly guess every entity a custom card or pop-up require
 
 - A quick-bar search.
 - Pop-ups.
-- Dashboard editors.
 - Service pickers opened from a filtered dashboard.
 
 Resolve this by adding the missing entities under Entity rules, or switch filtering off while you work.

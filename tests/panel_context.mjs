@@ -129,10 +129,12 @@ location.search = "?edit=1";
 listeners.get("location-changed")();
 await new Promise(setImmediate);
 assert.equal(socket.sent.at(-1).expanded, true);
+assert.equal(socket.sent.at(-1).editing, true, "Edit mode asks for unfiltered delivery");
 location.search = "";
 listeners.get("location-changed")();
 await new Promise(setImmediate);
 assert.equal(socket.sent.at(-1).expanded, false);
+assert.equal(socket.sent.at(-1).editing, false, "Filtering resumes when editing ends");
 
 // Native reconnect replays the original context message after offline navigation.
 let rawCalls = 0;

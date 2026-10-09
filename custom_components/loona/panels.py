@@ -71,6 +71,7 @@ class _Panel:
     live_dashboard: bool = False
     expanded: bool = False
     view: str | None = None
+    editing: bool = False
     loading: dict[str, Any] | None = None
     idle: bool = False
     idle_settings: dict[str, Any] | None = None
@@ -135,9 +136,12 @@ class PanelContext:
         panel.timer = async_call_later(self.hass, panel.refresh_seconds, refresh)
 
     def active(self, connection: websocket_api.ActiveConnection) -> bool:
-        """Panel reports narrow performance filtering without granting access."""
+        """Panel reports narrow performance filtering without granting access.
+
+        A dashboard open in the native editor is unfiltered until editing ends.
+        """
         panel = self._connections.get(connection)
-        return bool(panel is not None and panel.dashboard in self.dashboards)
+        return bool(panel is not None and panel.dashboard in self.dashboards and not panel.editing)
 
     def delivery_dashboard(self, connection: websocket_api.ActiveConnection) -> str | None:
         """Old reporters and expanded native interfaces keep union delivery."""
@@ -171,6 +175,7 @@ class PanelContext:
             vol.Required("dashboard"): vol.Any(None, str),
             vol.Optional("live_dashboard", default=False): bool,
             vol.Optional("expanded", default=False): bool,
+            vol.Optional("editing", default=False): bool,
             vol.Optional("view", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
             vol.Optional("idle", default=False): bool,
         })
@@ -194,7 +199,7 @@ class PanelContext:
             if previous is not None:
                 connection.send_error(msg["id"], "already_subscribed", "Panel context is already subscribed")
                 return
-            self._connections[connection] = _Panel(msg["dashboard"], unsubscribe, msg["id"], msg["live_dashboard"], msg["expanded"], msg["view"])
+            self._connections[connection] = _Panel(msg["dashboard"], unsubscribe, msg["id"], msg["live_dashboard"], msg["expanded"], msg["view"], msg["editing"])
             self._connections[connection].idle = msg["idle"]
             connection.subscriptions[msg["id"]] = unsubscribe
             connection.send_result(msg["id"])
@@ -208,6 +213,7 @@ class PanelContext:
             vol.Required("dashboard"): vol.Any(None, str),
             vol.Optional("live_dashboard", default=False): bool,
             vol.Optional("expanded", default=False): bool,
+            vol.Optional("editing", default=False): bool,
             vol.Optional("view", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
             vol.Optional("idle", default=False): bool,
         })
@@ -216,13 +222,14 @@ class PanelContext:
             if panel is None:
                 connection.send_error(msg["id"], "not_subscribed", "Subscribe to panel context first")
                 return
-            before = (panel.dashboard, panel.live_dashboard, panel.expanded, panel.view, panel.idle)
+            before = (panel.dashboard, panel.live_dashboard, panel.expanded, panel.view, panel.editing, panel.idle)
             panel.dashboard = msg["dashboard"]
             panel.live_dashboard = msg["live_dashboard"]
             panel.expanded = msg["expanded"]
             panel.view = msg["view"]
+            panel.editing = msg["editing"]
             panel.idle = msg["idle"]
-            if before != (panel.dashboard, panel.live_dashboard, panel.expanded, panel.view, panel.idle):
+            if before != (panel.dashboard, panel.live_dashboard, panel.expanded, panel.view, panel.editing, panel.idle):
                 self.changed(connection)
             self.publish()
             connection.send_result(msg["id"])

@@ -77,10 +77,10 @@ if (!window.__loonaPanelContext) {
       if (parts.length === 3 && parts[2]) view = decodeURI(parts[2]);
       if (view?.length > 255) view = null;
     } catch { /* Unresolved routes retain dashboard delivery. */ }
-    return {dashboard:dashboard(), view, live_dashboard:true,
+    const editing = /[?&]edit(?:=|&|$)/.test(location.search || "");
+    return {dashboard:dashboard(), view, live_dashboard:true, editing,
       expanded:Boolean(dialogs.size || window.history?.state?.dialog
-        || view === "hass-unused-entities"
-        || /[?&]edit(?:=|&|$)/.test(location.search || ""))};
+        || view === "hass-unused-entities" || editing)};
   }
 
   function attach(connection) {

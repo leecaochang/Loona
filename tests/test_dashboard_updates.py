@@ -119,6 +119,11 @@ async def test_runtime_opt_in_capability_dialogs_editors_navigation_and_rules(da
     for expanded in (True, False):
         command(connection, output, "loona/panel", dashboard="wall-panel", live_dashboard=True, expanded=expanded)
         assert runtime.adapter._records[(connection, 2)].scope == (frozenset(retained) if expanded else frozenset({"sensor.wall", "sensor.rule", "person.interface"}))
+    command(connection, output, "loona/panel", dashboard="wall-panel", live_dashboard=True, expanded=True, editing=True)
+    assert runtime.adapter._records[(connection, 2)].scope is None, "The native editor sees every entity"
+    assert "sensor.outside" in snapshot(output)
+    command(connection, output, "loona/panel", dashboard="wall-panel", live_dashboard=True)
+    assert runtime.adapter._records[(connection, 2)].scope == frozenset({"sensor.wall", "sensor.rule", "person.interface"}), "Filtering resumes after editing"
     command(connection, output, "loona/panel", dashboard="lovelace", live_dashboard=True)
     assert runtime.adapter._records[(connection, 2)].scope == frozenset({"sensor.overview", "sensor.rule", "person.interface"})
     command(connection, output, "loona/panel", dashboard="config", live_dashboard=True)
