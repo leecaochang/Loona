@@ -1,6 +1,6 @@
 /* Same-tab, administrator-only comparisons. Exported SVG contains aggregate data only. */
-import {text, language, markHtml, markStyles, buttonStyles, makeButton, confirmAction, cancelConfirmation, helpStyles} from "./i18n.js?v=1.0.0";
-const VERSION="1.0.0", KEY="loona.benchmark", RESULT=KEY+".result", ERROR=KEY+".error";
+import {text, language, markHtml, markStyles, buttonStyles, makeButton, confirmAction, cancelConfirmation, helpStyles} from "./i18n.js?v=1.0.1";
+const VERSION="1.0.1", KEY="loona.benchmark", RESULT=KEY+".result", ERROR=KEY+".error";
 const ns="http://www.w3.org/2000/svg";
 const finite=value=>typeof value==="number" && Number.isFinite(value) && value>=0;
 const median=values=>{ const rows=values.filter(finite).sort((a,b)=>a-b); return rows.length ? (rows[Math.floor((rows.length-1)/2)]+rows[Math.floor(rows.length/2)])/2 : null; };

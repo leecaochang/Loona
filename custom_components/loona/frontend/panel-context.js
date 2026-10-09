@@ -1,5 +1,5 @@
 /* Report dashboard context and recover when Core reconnects before Loona. */
-import "./resource-loading.js?v=1.0.0";
+import "./resource-loading.js?v=1.0.1";
 
 if (!window.__loonaPanelContext) {
   window.__loonaPanelContext = true;
@@ -45,7 +45,7 @@ if (!window.__loonaPanelContext) {
     };
     return {
       policy(value) {
-        const valid=value?.version==="1.0.0" && typeof value.enabled==="boolean"
+        const valid=value?.version==="1.0.1" && typeof value.enabled==="boolean"
           && Number.isFinite(value.after_ms) && value.after_ms>0
           && Number.isInteger(value.refresh_seconds) && value.refresh_seconds>=0 && value.refresh_seconds<=60;
         const changed=JSON.stringify(policy)!==JSON.stringify(value);

@@ -105,7 +105,7 @@ const profiles = {
   "custom:mini-graph-card": { height: 150, size: 3, columns: 6, rows: 3 },
   "custom:apexcharts-card": { height: 250, size: 5, columns: 6, rows: 5 },
 };
-const initialPolicy = { version: "1.0.0", enabled: true, dashboards: ["wall-panel"],
+const initialPolicy = { version: "1.0.1", enabled: true, dashboards: ["wall-panel"],
   quiet_ms: 20, poll_ms: 5, trace_limit: 200, profiles };
 function makeHass(policy = initialPolicy) {
   const connection = {
