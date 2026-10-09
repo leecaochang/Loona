@@ -99,6 +99,12 @@ function starPath(cx,cy,r) {
   const k=r*.17;
   return `M${fixed(cx)} ${fixed(cy-r)}Q${fixed(cx+k)} ${fixed(cy-k)} ${fixed(cx+r)} ${fixed(cy)}Q${fixed(cx+k)} ${fixed(cy+k)} ${fixed(cx)} ${fixed(cy+r)}Q${fixed(cx-k)} ${fixed(cy+k)} ${fixed(cx-r)} ${fixed(cy)}Q${fixed(cx-k)} ${fixed(cy-k)} ${fixed(cx)} ${fixed(cy-r)}Z`;
 }
+// Home Assistant's own pages are not dashboards; name the common ones rather than showing their URL path.
+function feedName(hass,feed) {
+  if (feed.dashboard) return feed.dashboard;
+  const names={config:"Settings","developer-tools":"Developer tools",history:"History",logbook:"Logbook",map:"Map",energy:"Energy",calendar:"Calendar",todo:"To-do lists"};
+  return Object.hasOwn(names,feed.panel) ? text(hass,names[feed.panel]) : feed.panel;
+}
 function feedChart(root,hass,filtered,total,feeds) {
   const width=chartWidth(root);
   if (!root.firstElementChild) {
@@ -134,9 +140,10 @@ function feedChart(root,hass,filtered,total,feeds) {
       mark=svg("circle",{cx:fixed(cx),cy:fixed(cy),r:fixed(Math.min(5,Math.max(2.5,size*.1))),fill:"none",style:"stroke:var(--secondary-text-color);stroke-opacity:.6;stroke-width:1.25;pointer-events:all"});
     }
     const feed=named?.[index];
-    if (feed?.dashboard) {
+    const name=feed && feedName(hass,feed);
+    if (name) {
       const tip=svg("title",{});
-      tip.textContent=feed.filtered ? feed.dashboard : text(hass,"{name} (not filtered)",{name:feed.dashboard});
+      tip.textContent=feed.filtered ? name : text(hass,"{name} (not filtered)",{name});
       mark.append(tip);
     }
     mark.setAttribute("data-feed",""); mark.setAttribute("data-lit",String(isLit)); stars.push(mark);

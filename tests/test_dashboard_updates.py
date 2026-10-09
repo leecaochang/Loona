@@ -115,7 +115,7 @@ async def test_runtime_opt_in_capability_dialogs_editors_navigation_and_rules(da
     assert set(snapshot(output)) == retained
     assert runtime.adapter._records[(connection, 2)].scope == frozenset(retained)
     from custom_components.loona.preview import statistics_report
-    assert statistics_report(runtime)["feeds"] == [{"dashboard": "Wall", "filtered": True}]
+    assert statistics_report(runtime)["feeds"] == [{"dashboard": "Wall", "panel": "wall-panel", "filtered": True}]
     await runtime.async_set_control("current_dashboard_updates", True)
     assert runtime.adapter._records[(connection, 2)].scope == frozenset({"sensor.wall", "sensor.rule", "person.interface"})
     for expanded in (True, False):
@@ -130,6 +130,7 @@ async def test_runtime_opt_in_capability_dialogs_editors_navigation_and_rules(da
     assert runtime.adapter._records[(connection, 2)].scope == frozenset({"sensor.overview", "sensor.rule", "person.interface"})
     command(connection, output, "loona/panel", dashboard="config", live_dashboard=True)
     assert runtime.adapter._records[(connection, 2)].scope is None
+    assert statistics_report(runtime)["feeds"] == [{"dashboard": None, "panel": "config", "filtered": False}]
     assert "sensor.outside" in snapshot(output)
     command(connection, output, "loona/panel", dashboard="wall-panel")
     assert runtime.adapter._records[(connection, 2)].scope == frozenset(retained), "Old reporters remain union scoped"

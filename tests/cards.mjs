@@ -66,10 +66,12 @@ assert.equal(stats.shadowRoot.querySelector('#reduction-chart [data-part="value"
 assert.equal(stats.shadowRoot.querySelector('#feeds-chart [data-part="value"]').textContent,"1 / 1");
 assert.equal(stats.shadowRoot.querySelectorAll('#feeds-chart [data-feed]').length,1,"One star per tracked feed");
 // Hovering a star names the dashboard that feed belongs to.
-stats._render({...copy(statistics),feeds:[{dashboard:"Wall",filtered:true}]});
+stats._render({...copy(statistics),feeds:[{dashboard:"Wall",panel:"wall-panel",filtered:true}]});
 assert.equal(stats.shadowRoot.querySelector('#feeds-chart [data-feed] title').textContent,"Wall");
 stats._render({...copy(statistics),metrics:{...statistics.metrics,filtered_subscriptions:0,managed_subscriptions:2},feeds:[{dashboard:"Wall",filtered:false},{dashboard:"Config",filtered:false}]});
 assert.deepEqual([...stats.shadowRoot.querySelectorAll('#feeds-chart [data-feed] title')].map(node=>node.textContent),["Wall (not filtered)","Config (not filtered)"]);
+stats._render({...copy(statistics),metrics:{...statistics.metrics,filtered_subscriptions:0,managed_subscriptions:2},feeds:[{dashboard:null,panel:"config",filtered:false},{dashboard:null,panel:"custom-panel",filtered:false}]});
+assert.deepEqual([...stats.shadowRoot.querySelectorAll('#feeds-chart [data-feed] title')].map(node=>node.textContent),["Settings (not filtered)","custom-panel (not filtered)"],"Built-in pages get names, never a bare URL path where a name exists");
 stats._render({...copy(statistics),feeds:[{dashboard:"Wall",filtered:false}]});
 assert.equal(stats.shadowRoot.querySelector('#feeds-chart [data-feed] title'),null,"A list that disagrees with the counts names nothing");
 // Recent page loads report what was filtered out of what was available.

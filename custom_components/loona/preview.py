@@ -26,9 +26,9 @@ def statistics_report(runtime: LoonaRuntime, include_rate_history: bool = False)
         row["label"] = entity_label(runtime.hass, row["entity_id"])
     reports = list(reversed(runtime.live_statistics.browser_reports.values()))
     titles = dashboard_titles(runtime.hass)
-    feeds = sorted(({"dashboard": titles.get(path, path) if (path := runtime.panel_context.dashboard_for(client)) else None,
-                     "filtered": filtered}
-                    for client, filtered in (runtime.adapter.feed_report() if runtime.adapter else [])),
+    feeds = sorted(({"dashboard": titles.get(path or ""), "panel": path, "filtered": filtered}
+                    for client, filtered in (runtime.adapter.feed_report() if runtime.adapter else [])
+                    for path in (runtime.panel_context.dashboard_for(client),)),
                    key=lambda row: not row["filtered"])
     return {
         "version": VERSION,
