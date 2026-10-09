@@ -114,6 +114,8 @@ async def test_runtime_opt_in_capability_dialogs_editors_navigation_and_rules(da
     retained = {"sensor.wall", "sensor.overview", "sensor.rule", "person.interface"}
     assert set(snapshot(output)) == retained
     assert runtime.adapter._records[(connection, 2)].scope == frozenset(retained)
+    from custom_components.loona.preview import statistics_report
+    assert statistics_report(runtime)["feeds"] == [{"dashboard": "Wall", "filtered": True}]
     await runtime.async_set_control("current_dashboard_updates", True)
     assert runtime.adapter._records[(connection, 2)].scope == frozenset({"sensor.wall", "sensor.rule", "person.interface"})
     for expanded in (True, False):

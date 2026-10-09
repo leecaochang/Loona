@@ -99,7 +99,7 @@ function starPath(cx,cy,r) {
   const k=r*.17;
   return `M${fixed(cx)} ${fixed(cy-r)}Q${fixed(cx+k)} ${fixed(cy-k)} ${fixed(cx+r)} ${fixed(cy)}Q${fixed(cx+k)} ${fixed(cy+k)} ${fixed(cx)} ${fixed(cy+r)}Q${fixed(cx-k)} ${fixed(cy+k)} ${fixed(cx-r)} ${fixed(cy)}Q${fixed(cx-k)} ${fixed(cy-k)} ${fixed(cx)} ${fixed(cy-r)}Z`;
 }
-function feedChart(root,hass,filtered,total) {
+function feedChart(root,hass,filtered,total,feeds) {
   const width=chartWidth(root);
   if (!root.firstElementChild) {
     const chart=svg("svg",{viewBox:`0 0 ${width} 170`,role:"img","data-chart":"feeds"});
@@ -112,6 +112,8 @@ function feedChart(root,hass,filtered,total) {
   chart.querySelector('[data-part="value"]').textContent=formatNumber(hass,count)+" / "+formatNumber(hass,all);
   // Beyond 48 stars the sky samples proportionally; the exact counts stay in the text.
   const shown=Math.min(all,48), lit=all>48 ? (count>0 ? Math.max(1,Math.round(48*count/all)) : 0) : count;
+  // Names apply star by star only while every tracked feed is drawn and the list matches the counts.
+  const named=Array.isArray(feeds) && feeds.length===all && all<=48 && feeds.filter(feed=>feed.filtered).length===count ? feeds : null;
   const area={x:10,y:6,w:width-20,h:98};
   let columns=1, size=0;
   for (let candidate=1;candidate<=Math.max(1,shown);candidate++) {
@@ -129,7 +131,13 @@ function feedChart(root,hass,filtered,total) {
       mark=svg("path",{d:starPath(cx,cy,Math.min(13,Math.max(5,size*.32))),style:"fill:var(--primary-color);transform-box:fill-box;transform-origin:center"});
       centers.push([cx,cy]);
     } else {
-      mark=svg("circle",{cx:fixed(cx),cy:fixed(cy),r:fixed(Math.min(5,Math.max(2.5,size*.1))),fill:"none",style:"stroke:var(--secondary-text-color);stroke-opacity:.6;stroke-width:1.25"});
+      mark=svg("circle",{cx:fixed(cx),cy:fixed(cy),r:fixed(Math.min(5,Math.max(2.5,size*.1))),fill:"none",style:"stroke:var(--secondary-text-color);stroke-opacity:.6;stroke-width:1.25;pointer-events:all"});
+    }
+    const feed=named?.[index];
+    if (feed?.dashboard) {
+      const tip=svg("title",{});
+      tip.textContent=feed.filtered ? feed.dashboard : text(hass,"{name} (not filtered)",{name:feed.dashboard});
+      mark.append(tip);
     }
     mark.setAttribute("data-feed",""); mark.setAttribute("data-lit",String(isLit)); stars.push(mark);
   }
@@ -395,7 +403,7 @@ function install() {
       hideBrokenMark(this.shadowRoot);
       this._get("rates-help").append(createHelp(this._hass,"Live updates","","interval"));
       this._get("scope-help").append(createHelp(this._hass,"Totals and entities","A live connection is the link a dashboard tab keeps open to Home Assistant. Each open tab usually has one connection, sometimes more. 'Connections filtered / total' shows how many of them Loona is filtering. 'Estimated entities trimmed' is the percentage of Home Assistant's entities outside Loona's configured inclusion set. It describes potential entity reduction, not measured update reduction, and remains visible when filtering is off."));
-      this._get("loads-help").append(createHelp(this._hass,"Recent page loads","Shows how many entities and card files were sent versus available for each dashboard's latest recorded page load. It does not measure loading time."));
+      this._get("loads-help").append(createHelp(this._hass,"Recent page loads","Shows how many entities and card files were filtered out of those available for each dashboard's latest recorded page load. It does not measure loading time."));
       this._get("performance-help").append(createHelp(this._hass,"Browser performance","Lists the 20 entities with the most updates sent since reset, alongside browser reports of slow frames, script work and event subscriptions that may bypass filtering. These reports cover only part of the browser's work. Items marked 'before measuring' happened before Loona started watching."));
       this._get("reset-help").append(createHelp(this._hass,"Reset live statistics","Clears the live counters, recent page-load records and browser readings. Your Loona settings and Home Assistant's recorded history are untouched."));
       this._get("refresh").addEventListener("click", () => this._fetch());
@@ -556,7 +564,7 @@ function install() {
       streamChart(this._get("stream-chart"),this._hass,history,metrics,max);
       moonChart(this._get("reduction-chart"),this._hass,"Updates filtered out",metrics.update_reduction,metrics.forwarded_rate+metrics.avoided_rate>0);
       moonChart(this._get("estimate-chart"),this._hass,"Estimated entities trimmed",metrics.reduction_estimate,true);
-      feedChart(this._get("feeds-chart"),this._hass,metrics.filtered_subscriptions,metrics.managed_subscriptions);
+      feedChart(this._get("feeds-chart"),this._hass,metrics.filtered_subscriptions,metrics.managed_subscriptions,data.feeds);
     }
     _render(data) {
       const metrics = data.metrics;
@@ -587,14 +595,15 @@ function install() {
       this._get("subscriptions").textContent = format(metrics.filtered_subscriptions) + " / " + format(metrics.managed_subscriptions);
       this._get("scope").textContent = text(this._hass, metrics.current_scope === 1 ? "1 entity" : "{count} entities", { count: format(metrics.current_scope) });
       this._get("estimate").textContent = formatNumber(this._hass, metrics.reduction_estimate / 100, {style:"percent",maximumFractionDigits:1});
-      this._get("reset-time").textContent = text(this._hass, "Counting since {time}", { time: formatDateTime(this._hass, data.reset_at) });
+      this._get("reset-time").textContent = text(this._hass, "Since {time}", { time: formatDateTime(this._hass, data.reset_at) });
       this._get("reset").disabled = !data.reset_entity || this._resetting;
       this._get("load-count").textContent = "(" + data.page_loads.length + ")";
       this._get("load-rows").replaceChildren(...(data.page_loads.length ? data.page_loads.map(row => {
         const item = node("li"); item.append(node("strong", row.title));
         item.append(node("p", formatDateTime(this._hass, row.at)));
-        item.append(node("p", text(this._hass, "Entities sent: {sent} out of {available}", row.entities)));
-        item.append(node("p", row.resources ? text(this._hass, "Card files sent: {sent} out of {available}", row.resources) : text(this._hass, "No card file count was recorded for this load.")));
+        const filteredOf = counts => ({filtered: Math.max(0, counts.available - counts.sent), available: counts.available});
+        item.append(node("p", text(this._hass, "Entities filtered: {filtered} out of {available}", filteredOf(row.entities))));
+        item.append(node("p", row.resources ? text(this._hass, "Card files filtered: {filtered} out of {available}", filteredOf(row.resources)) : text(this._hass, "No card file count was recorded for this load.")));
         return item;
       }) : [node("li", text(this._hass, "No page loads recorded yet. Reload one of your dashboards."))]));
       this._get("noisy-rows").replaceChildren(...(data.noisy_entities?.entities || []).map(row => {

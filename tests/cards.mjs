@@ -65,6 +65,18 @@ assert.equal(stats.shadowRoot.querySelector("#estimate-chart svg").getAttribute(
 assert.equal(stats.shadowRoot.querySelector('#reduction-chart [data-part="value"]').textContent,"3%".replace("%","\u00a0%"));
 assert.equal(stats.shadowRoot.querySelector('#feeds-chart [data-part="value"]').textContent,"1 / 1");
 assert.equal(stats.shadowRoot.querySelectorAll('#feeds-chart [data-feed]').length,1,"One star per tracked feed");
+// Hovering a star names the dashboard that feed belongs to.
+stats._render({...copy(statistics),feeds:[{dashboard:"Wall",filtered:true}]});
+assert.equal(stats.shadowRoot.querySelector('#feeds-chart [data-feed] title').textContent,"Wall");
+stats._render({...copy(statistics),metrics:{...statistics.metrics,filtered_subscriptions:0,managed_subscriptions:2},feeds:[{dashboard:"Wall",filtered:false},{dashboard:"Config",filtered:false}]});
+assert.deepEqual([...stats.shadowRoot.querySelectorAll('#feeds-chart [data-feed] title')].map(node=>node.textContent),["Wall (not filtered)","Config (not filtered)"]);
+stats._render({...copy(statistics),feeds:[{dashboard:"Wall",filtered:false}]});
+assert.equal(stats.shadowRoot.querySelector('#feeds-chart [data-feed] title'),null,"A list that disagrees with the counts names nothing");
+// Recent page loads report what was filtered out of what was available.
+stats._render({...copy(statistics),page_loads:[{dashboard:"wall-panel",title:"Wall",at:"2026-10-02T01:00:00Z",entities:{available:100,sent:30},resources:{available:10,sent:4}}]});
+const loadLines=[...stats.shadowRoot.querySelectorAll("#load-rows li p")].map(node=>node.textContent);
+assert.deepEqual(loadLines.slice(1),["Entities filtered: 70 out of 100","Card files filtered: 6 out of 10"]);
+assert.match(stats.shadowRoot.getElementById("reset-time").textContent,/^Since /);
 // The status line separates filtering now from filtering earlier since reset.
 const statusFor=(metrics,controls={})=>{stats._render({...copy(statistics),controls:{...statistics.controls,...controls},metrics:{...statistics.metrics,...metrics}});const state=stats.shadowRoot.getElementById("state");return [state.dataset.tone,state.textContent];};
 assert.deepEqual(statusFor({}),["active","Entity filtering is active"]);

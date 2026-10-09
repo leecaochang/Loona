@@ -143,6 +143,11 @@ class PanelContext:
         panel = self._connections.get(connection)
         return bool(panel is not None and panel.dashboard in self.dashboards and not panel.editing)
 
+    def dashboard_for(self, connection: websocket_api.ActiveConnection) -> str | None:
+        """The panel path this connection last reported, if any."""
+        panel = self._connections.get(connection)
+        return panel.dashboard if panel else None
+
     def delivery_dashboard(self, connection: websocket_api.ActiveConnection) -> str | None:
         """Old reporters and expanded native interfaces keep union delivery."""
         panel = self._connections.get(connection)

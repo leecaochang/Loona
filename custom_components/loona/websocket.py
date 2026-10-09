@@ -152,6 +152,10 @@ class SubscriptionAdapter:
         """Tracked subscriptions with a nonempty restricted scope."""
         return sum(record.scope is not None for record in self._records.values())
 
+    def feed_report(self) -> list[tuple[websocket_api.ActiveConnection, bool]]:
+        """Each tracked subscription's connection and whether it is filtered."""
+        return [(record.connection, record.scope is not None) for record in self._records.values()]
+
     @callback
     def install(self) -> None:
         """Install after native registration, without replacing another owner."""
