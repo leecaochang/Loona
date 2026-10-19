@@ -228,6 +228,9 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
                 references(value, path)
             if key in TARGET_KEYS:
                 target(key, value, path)
+            # Device cards name their device by registry ID and read every entity it owns.
+            if key == "device" and card_type.startswith("custom:"):
+                target("device_id", value, path)
             if card_type == "area" and key == "area":
                 target("area_id", value, path)
                 for sensor in context.area_sensors.get(value, ()) if isinstance(value, str) else ():
@@ -242,7 +245,9 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
                 entity_id,
                 key in ENTITY_KEYS | TARGET_KEYS | {"type"}
                 or card_type == "area"
-                and key == "area",
+                and key == "area"
+                or key == "device"
+                and card_type.startswith("custom:"),
                 parent_type,
                 server_rendered or display,
                 inherited,

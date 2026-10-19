@@ -311,6 +311,28 @@ def test_unknown_custom_card_reports_warning_without_blanket_bypass():
     assert result.entity_ids == {"sensor.example"}
 
 
+def test_custom_device_card_includes_every_entity_of_its_device():
+    # Device dashboards built from custom cards resolve entities from hass.entities by device.
+    context = DiscoveryContext(
+        frozenset({"sensor.car_range", "lock.car_doors", "sensor.other"}),
+        targets={"device_id": {"car": frozenset({"sensor.car_range", "lock.car_doors"})}},
+    )
+    result = discover(
+        {"views": [{"cards": [
+            {"type": "custom:vehicle-card", "device": "car"},
+            {"type": "custom:browser-card", "device": "not-a-registry-id"},
+        ]}]},
+        context,
+    )
+    assert result.complete
+    assert result.entity_ids == {"sensor.car_range", "lock.car_doors"}
+    assert result.targets["device_id"] == {"car", "not-a-registry-id"}
+    # A native card's own device key is not a registry target.
+    assert not discover({"type": "tile", "device": "car"}, context).entity_ids
+    templated = discover({"type": "custom:vehicle-card", "device": "[[[ return variables.car ]]]"}, context)
+    assert not templated.complete
+
+
 def test_sunsynk_entity_mapping_includes_all_explicit_dependencies():
     # Sunsynk 7.3.3 maps logical names to IDs instead of using entity rows.
     result = discover(
