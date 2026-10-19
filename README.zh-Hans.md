@@ -142,6 +142,7 @@ Loona 不一定能准确判断自定义卡片或弹窗所需的每个实体。�
 - Markdown 卡片、Mushroom 模板卡片、标签、徽章和标题中的模板，以及 card-mod 或 UIX 样式中的模板。这些内容由 Home Assistant 自己填入，因此你的浏览器不需要其中的实体。
 - 按 `domain`、`entity_id` 或 `area` 筛选的 auto-entities 规则，即使同时按 `state` 或 `attributes` 筛选。
 - 直接写明实体的 button-card 和 Bubble Card 模板，例如 `states['light.kitchen']`。
+- Wallpanel 屏保设置，包括 `${browser_id}` 和 `${entity:sensor.outside}` 等占位符。Loona 还会发送 Wallpanel 读取的实体，例如它的 `screensaver_entity`、`profile_entity` 和 `media-entity://` 图片。
 
 仅仅是实体 ID 不存在，不会暂停筛选。
 
@@ -193,11 +194,15 @@ Loona 能够理解 button-card、Mushroom、Bubble Card、card-mod 和 UIX 所�
 
 如果 Loona 无法确定你正在查看哪个选项卡，它会忽略此设置，让整个仪表盘保持实时更新。从隐藏选项卡读取实体的自定义弹窗可能显示旧数值，因此请在“实体规则”中添加这些实体，或者干脆保持此选项关闭。
 
+Wallpanel 的 `views` 选项会在屏保上显示其他选项卡，启用此设置时，这些选项卡也可能显示旧数值。
+
 ### 空闲模式
 
 开启空闲模式后，如果你在空闲等待时间（默认 5 分钟）内没有操作页面，实时更新就会暂停。不建议用于信息展示型的仪表盘，因为仪表盘内容会“冻结”，直到被刷新或再次有操作。
 
 这只影响普通的实时连接，摄像头、独立的时钟、卡片计时器和原始事件监听器仍会继续运行。
+
+Wallpanel 等屏保同样会在一段时间无操作后启动，因此空闲模式通常会在屏保显示期间开始。此后，屏保上的卡片和图片只会按空闲刷新间隔更新；自动化通过 `screensaver_entity` 关闭屏保时，要等到下一次刷新才生效，空闲刷新间隔设为 0 时则完全不会生效。如果仪表盘的屏保显示实时信息或由自动化控制，请保持空闲模式关闭。
 
 #### 空闲等待时间
 - 页面在多长时间不操作后进入空闲模式，范围为 1 至 60 分钟（默认 5 分钟）。

@@ -6,7 +6,10 @@ from typing import Any
 
 from homeassistant.core import valid_entity_id
 
-from .const import ENTITY_KEYS, MAX_RULE_PATTERN_LENGTH, SERVER_TEMPLATE_CHIP_FIELDS, SERVER_TEMPLATE_FIELDS, TARGET_KEYS
+from .const import (
+    ENTITY_KEYS, MAX_RULE_PATTERN_LENGTH, SERVER_TEMPLATE_CHIP_FIELDS, SERVER_TEMPLATE_FIELDS, TARGET_KEYS,
+    WALLPANEL_CARD_OPTIONS, WALLPANEL_ENTITY_OPTIONS,
+)
 from .templates import bubble_dependencies, template_dependencies, unparsed_dependencies
 
 
@@ -74,6 +77,33 @@ def button_card_templates(config: dict[str, Any]) -> tuple[dict[str, Any], dict[
         return config, {}
     rest = {key: value for key, value in config.items() if key != "button_card_templates"}
     return rest, {name: definition for name, definition in templates.items() if isinstance(definition, dict)}
+
+
+def wallpanel_layers(config: dict[str, Any]) -> tuple[dict[str, Any], list[tuple[str, dict[str, Any]]]]:
+    """Separate Wallpanel's screensaver options and every profile, which may replace them."""
+    options = config.get("wallpanel")
+    if not isinstance(options, dict):
+        return config, []
+    rest = {key: value for key, value in config.items() if key != "wallpanel"}
+    layers = [("dashboard.wallpanel", options)]
+    profiles = options.get("profiles")
+    if isinstance(profiles, dict):
+        layers.extend((f"dashboard.wallpanel.profiles.{name}", profile)
+                      for name, profile in profiles.items() if isinstance(profile, dict))
+    return rest, layers
+
+
+# Wallpanel fills these in its options as text when it loads them; other ${} names are media details.
+_WALLPANEL_ENTITY = re.compile(r"\$\{entity:\s*([^}]+\.[^}]+)\}")
+_WALLPANEL_BROWSER = "${browser_id}"
+_WALLPANEL_MEDIA = re.compile(r"media-entity(?:-image|-video)?://")
+
+
+def _strings(node: Any) -> list[str]:
+    if isinstance(node, str):
+        return [node]
+    values = node.values() if isinstance(node, dict) else node if isinstance(node, list) else ()
+    return [text for value in values for text in _strings(value)]
 
 
 def auto_entities_matcher(value: Any) -> Any:
@@ -161,6 +191,40 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
                        for key in ("entity_id", "domain") if key in matchers):
                     add(entity_id, f"{location}.filter.include[{index}]")
         # Exclude, attribute and state filters cannot remove dependencies from the safe superset.
+
+    def wallpanel(options: dict[str, Any], location: str) -> None:
+        for key, value in options.items():
+            path = f"{location}.{key}"
+            if key in WALLPANEL_CARD_OPTIONS:
+                walk({key: value}, location)
+                continue
+            # Profiles are scanned as their own layers; views only name dashboard views.
+            if key in {"profiles", "views"}:
+                continue
+            for text in _strings(value):
+                for identifier in _WALLPANEL_ENTITY.findall(text):
+                    add(identifier.strip(), path)
+            if key not in WALLPANEL_ENTITY_OPTIONS or not isinstance(value, str):
+                continue
+            if key == "image_url":
+                if media := _WALLPANEL_MEDIA.match(value):
+                    value = value[media.end():]
+                elif value.startswith("${"):
+                    # A filled-in scheme could become media-entity:// and name any entity.
+                    problems.add(f"{path}: template dependencies cannot be scoped")
+                    continue
+                else:
+                    continue
+            if "${" in value.replace(_WALLPANEL_BROWSER, ""):
+                problems.add(f"{path}: template dependencies cannot be scoped")
+            elif _WALLPANEL_BROWSER in value:
+                # Each browser fills in its own ID, so keep every entity the pattern can name.
+                pattern = re.compile(".+".join(re.escape(part) for part in value.split(_WALLPANEL_BROWSER)))
+                for entity_id in context.entity_ids:
+                    if pattern.fullmatch(entity_id):
+                        add(entity_id, path)
+            else:
+                add(value.strip(), path)
 
     def walk(
         node: Any,
@@ -254,7 +318,10 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
             )
 
     config, templates = button_card_templates(config)
+    config, screensaver = wallpanel_layers(config)
     walk(config, "dashboard")
+    for location, options in screensaver:
+        wallpanel(options, location)
     for name, definition in templates.items():
         own = definition.get("entity")
         walk(

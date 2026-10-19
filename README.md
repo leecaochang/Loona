@@ -143,6 +143,7 @@ These do not stop filtering:
 - Templates in markdown cards, in Mushroom template cards, chips, badges and titles, and in card-mod or UIX styles. Home Assistant fills these in itself, so your browser does not need their entities.
 - auto-entities rules that filter by `domain`, `entity_id` or `area`, even if they also filter by `state` or `attributes`.
 - button-card and Bubble Card templates that name their entities directly, such as `states['light.kitchen']`.
+- Wallpanel screensaver settings, including placeholders such as `${browser_id}` and `${entity:sensor.outside}`. Loona also sends the entities Wallpanel reads, such as its `screensaver_entity`, `profile_entity` and `media-entity://` images.
 
 Missing entity IDs alone do not pause filtering.
 
@@ -194,11 +195,15 @@ Opening a tab, opening a pop-up, or editing a dashboard refreshes values right a
 
 If Loona cannot determine which tab you are looking at, it will ignore this setting and keep the entire dashboard live. Custom pop-ups that read entities from hidden tabs may show old values, so add those entities under Entity rules, or just leave this option off.
 
+Wallpanel's `views` option shows other tabs on its screensaver, and those tabs may also show old values while this setting is on.
+
 ### Idle mode
 
 When Idle mode is on and you have not touched the page for the Idle after time (default 5 minutes), live updates pause. This is not recommended for informational dashboard displays, as the dashboard contents will "freeze" until refreshed or interacted with again.
 
 This affects ordinary live connections only - cameras, independent clocks, card timers and raw event listeners will keep going.
+
+A screensaver such as Wallpanel also starts after a period of no activity, so Idle mode usually starts while the screensaver is showing. Cards and images on the screensaver then update only at the Idle refresh interval, and an automation that turns the screensaver off through its `screensaver_entity` takes effect only at the next refresh, or not at all when Idle refresh is 0. Keep Idle mode off on dashboards whose screensaver shows live information or is controlled by an automation.
 
 #### Idle after
 - How long the page can go untouched before Idle mode starts, from 1 to 60 minutes (default 5).

@@ -333,6 +333,45 @@ def test_custom_device_card_includes_every_entity_of_its_device():
     assert not templated.complete
 
 
+def test_wallpanel_options_profiles_and_placeholders_name_their_entities():
+    # Wallpanel 4.67 reads these from hass.states and silently skips any it cannot find.
+    context = DiscoveryContext(frozenset({
+        "input_boolean.wallpanel_kitchen", "input_boolean.wallpanel_hall", "input_boolean.other",
+        "sensor.outside", "light.kitchen",
+    }))
+    wallpanel = {
+        "screensaver_entity": "input_boolean.wallpanel_${browser_id}",
+        "profile_entity": "input_select.wallpanel_profile",
+        "image_url_entity": "input_text.wallpanel_url",
+        "camera_motion_detection_set_entity": "input_boolean.motion",
+        "image_url": "media-entity://camera.door",
+        "image_info_template": "${DateTimeOriginal} ${entity:sensor.outside}",
+        "cards": [{"type": "tile", "entity": "light.kitchen"}],
+        "badges": ["sensor.badge"],
+        "views": [{"title": "Home"}],
+        "profiles": {"device.photos": {"image_url": "media-entity-video://image.photo"}},
+    }
+    result = discover({"wallpanel": wallpanel, "views": [{"cards": []}]}, context)
+    assert result.complete
+    assert result.entity_ids == {
+        "input_boolean.wallpanel_kitchen", "input_boolean.wallpanel_hall", "input_select.wallpanel_profile",
+        "input_text.wallpanel_url", "input_boolean.motion", "camera.door", "sensor.outside",
+        "light.kitchen", "sensor.badge", "image.photo",
+    }
+
+
+@pytest.mark.parametrize("options", [
+    {"screensaver_entity": "${entity:input_text.which}"},
+    {"image_url": "${entity:input_text.url}"},
+    {"profiles": {"night": {"image_url": "media-entity://camera.${entity:input_text.camera}"}}},
+    {"cards": [{"type": "custom:button-card", "entity": "${entity:input_text.which}"}]},
+])
+def test_wallpanel_entities_filled_in_from_state_bypass(options):
+    result = discover({"wallpanel": options}, DiscoveryContext())
+    assert not result.complete
+    assert describe_problem({"wallpanel": options}, result.problems[0])[1] == "template"
+
+
 def test_sunsynk_entity_mapping_includes_all_explicit_dependencies():
     # Sunsynk 7.3.3 maps logical names to IDs instead of using entity rows.
     result = discover(

@@ -331,6 +331,11 @@ ENTITY_KEYS: Final = frozenset(
     {"entity", "entity_id", "entities", "badges", "camera_image", "image_entity"}
 )
 TARGET_KEYS: Final = frozenset({"device_id", "area_id", "floor_id", "label_id"})
+# Wallpanel reads these screensaver options as entity IDs; image_url names one after a media-entity scheme.
+WALLPANEL_ENTITY_OPTIONS: Final = frozenset(
+    {"screensaver_entity", "profile_entity", "image_url_entity", "camera_motion_detection_set_entity", "image_url"}
+)
+WALLPANEL_CARD_OPTIONS: Final = frozenset({"cards", "badges"})
 RULE_KEYS: Final = (CONF_INCLUDE_DOMAINS, CONF_INCLUDE_GLOBS, CONF_EXCLUDE_GLOBS)
 # Core's entity ID limit also bounds typed include and exclude patterns.
 MAX_RULE_PATTERN_LENGTH: Final = 255

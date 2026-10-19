@@ -19,11 +19,11 @@ from .compatibility import (
 from .const import (
     BUNDLED_CARD_TYPES, RESOURCE_CARDS, RESOURCE_COMMANDS,
     RESOURCE_SHARED, RESOURCE_SHARED_PATHS, RESOURCE_NATIVE_STRATEGIES,
-    RESOURCE_VALUE_FIELDS, RESOURCE_SHARED_TYPES,
+    RESOURCE_VALUE_FIELDS, RESOURCE_SHARED_TYPES, WALLPANEL_CARD_OPTIONS,
     MAX_TEMPLATE_LENGTH, SERVER_TEMPLATE_CHIP_FIELDS, SERVER_TEMPLATE_FIELDS,
 )
 from .templates import bubble_dependencies, template_dependencies
-from .dependencies import button_card_templates, saved_view_routes
+from .dependencies import button_card_templates, saved_view_routes, wallpanel_layers
 from .websocket import ScopePolicy
 
 
@@ -93,7 +93,11 @@ def resource_dependencies(configs: Iterable[dict[str, Any]]) -> ResourceDependen
 
     for config in configs:
         config, templates = button_card_templates(config)
+        config, screensaver = wallpanel_layers(config)
         walk(config)
+        # Wallpanel's other options are plain text; only its cards and badges need card files.
+        for _, options in screensaver:
+            walk({key: value for key, value in options.items() if key in WALLPANEL_CARD_OPTIONS})
         for definition in templates.values():
             # A definition's own type is a dashboard-wide declaration, not the context of its fields.
             if "type" in definition:

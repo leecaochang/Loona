@@ -267,6 +267,21 @@ def test_constructible_or_browser_templates_keep_card_files_dynamic(card):
     assert resource_dependencies([{"views": [{"cards": [card]}]}]).dynamic
 
 
+def test_wallpanel_placeholders_are_text_but_its_cards_need_card_files():
+    # Wallpanel 4.67 replaces ${} in its own options with plain text, never JavaScript.
+    wallpanel = {
+        "image_url": "https://picsum.photos/${width}/${height}?random=${timestamp}",
+        "image_info_template": "${DateTimeOriginal}", "profile": "${browser_id}",
+        "cards": [{"type": "custom:mushroom-template-card"}],
+        "profiles": {"night": {"badges": [{"type": "custom:mushroom-chips-card"}]}},
+    }
+    dependencies = resource_dependencies([{"wallpanel": wallpanel, "views": [{"cards": []}]}])
+    assert not dependencies.dynamic
+    assert dependencies.custom_types == {"mushroom-template-card", "mushroom-chips-card"}
+    wallpanel["cards"].append({"type": "markdown", "content": "[[[ return 'x' ]]]"})
+    assert resource_dependencies([{"wallpanel": wallpanel}]).dynamic
+
+
 def test_card_table_never_lets_two_files_claim_one_type():
     # A type claimed twice could mark its real provider unused and skip a needed file.
     owners = {}
