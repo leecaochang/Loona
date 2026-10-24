@@ -5,7 +5,7 @@
   "devDependencies": {
     "@webcomponents/scoped-custom-element-registry": "0.0.10",
     "esbuild": "0.28.2",
-    "happy-dom": "20.14.5",
+    "happy-dom": "21.0.4",
     "home-assistant-js-websocket": "9.7.1",
     "lit": "3.3.3"
   }
