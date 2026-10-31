@@ -10,7 +10,7 @@ test = [
     "home-assistant-frontend==20260930.2",
     "pytest==9.0.3",
     "pytest-homeassistant-custom-component==0.13.371",
-    "pytest-asyncio==1.4.0",
+    "pytest-asyncio==1.4.1",
     "pyflakes==4.0.3",
     "mypy==2.4.0",
     "aiohttp==3.14.4",
