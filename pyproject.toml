@@ -6,19 +6,22 @@ dependencies = []
 
 [project.optional-dependencies]
 test = [
-    "homeassistant==2026.10.0",
-    "home-assistant-frontend==20260930.2",
+    "homeassistant==2026.11.0",
+    "home-assistant-frontend==20261028.4",
     "pytest==9.0.3",
-    "pytest-homeassistant-custom-component==0.13.371",
+    "pytest-homeassistant==2026.11.0",
     "pytest-asyncio==1.4.0",
     "pyflakes==4.0.3",
     "mypy==2.4.0",
-    "aiohttp==3.14.4",
+    "aiohttp==3.14.5",
     "PyYAML==6.0.3",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+# Let Home Assistant install its httpx alias before respx is imported.
+addopts = "-p no:respx"
 testpaths = ["tests"]
 pythonpath = ["."]
 

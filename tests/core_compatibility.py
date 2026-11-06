@@ -33,7 +33,7 @@ from homeassistant.components.websocket_api import commands, messages  # noqa: E
 from homeassistant.components.websocket_api.connection import ActiveConnection  # noqa: E402
 from homeassistant.core import HomeAssistant  # noqa: E402
 from homeassistant.helpers.storage import Store  # noqa: E402
-from homeassistant.helpers import entity as entity_helper, restore_state, template, translation  # noqa: E402
+from homeassistant.helpers import entity as entity_helper, frame, restore_state, template, translation  # noqa: E402
 from homeassistant.helpers import (  # noqa: E402
     area_registry as ar, device_registry as dr, entity_registry as er,
     floor_registry as fr, issue_registry as ir, label_registry as lr,
@@ -49,14 +49,17 @@ from custom_components.loona.websocket import ScopePolicy  # noqa: E402
 
 async def check(hass: HomeAssistant) -> None:
     """Use real Core loading, platforms, storage, auth and websocket dispatch."""
+    frame_setup = getattr(frame, "async_setup", None)
+    if frame_setup is not None:
+        frame_setup(hass)
+    hass.config_entries = config_entries.ConfigEntries(hass, {})
+    await hass.config_entries.async_initialize()
     for module in (dr, er, fr, lr, ar, ir):
         setup = getattr(module, "async_setup", None)
         if setup is not None:
             setup(hass)
         await module.async_load(hass)
     hass.auth = await auth.auth_manager_from_config(hass, [], [])
-    hass.config_entries = config_entries.ConfigEntries(hass, {})
-    await hass.config_entries.async_initialize()
     Path(hass.config.path("custom_components")).symlink_to(
         Path(__file__).resolve().parents[1] / "custom_components", target_is_directory=True
     )
@@ -580,7 +583,9 @@ async def check(hass: HomeAssistant) -> None:
 
 
 async def main() -> None:
-    # Match the pinned Fragment heap-type lifetime workaround in conftest.py.
+    # Fragment instances do not retain their heap type in orjson 3.11.9, which
+    # older matrix releases pin, and native registry storage can outlive module
+    # cleanup. A process-lifetime reference avoids dereferencing a freed type.
     if sys.implementation.name == "cpython" and orjson.__version__ == "3.11.9":
         incref = ctypes.pythonapi.Py_IncRef
         incref.argtypes = [ctypes.py_object]

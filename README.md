@@ -342,7 +342,7 @@ venv/bin/python -m pyflakes custom_components/loona/ tests/
 venv/bin/python -m mypy custom_components/loona/
 ```
 
-The full development suite is pinned to Core 2026.10.0 and needs Python 3.14.2 or newer. Loona itself only needs the Python version your Home Assistant requires.
+The full development suite is pinned to Core 2026.11.0 and needs Python 3.14.2 or newer. Loona itself only needs the Python version your Home Assistant requires.
 
 ## License
 

@@ -241,7 +241,7 @@
     {"en": "0cb5d0cdd6ae", "zh": "9a600485d6e9", "text": "The browser animation test also needs Chrome or Chromium ..."},
     {"en": "f52744d5d6d9", "zh": "5fd2cecdba59", "text": "Run the full test suite, pyflakes and mypy like this:"},
     {"en": "25b23078ac0d", "zh": "25b23078ac0d", "text": "```sh venv/bin/python -m pytest tests/ -q venv/bin/python..."},
-    {"en": "f1889d1af631", "zh": "8dba74c605d3", "text": "The full development suite is pinned to Core 2026.10.0 an..."},
+    {"en": "f15cf36b327c", "zh": "57efc9b9957d", "text": "The full development suite is pinned to Core 2026.11.0 an..."},
     {"en": "c011d6097bfb", "zh": "1b2ad79bbbda", "text": "License"},
     {"en": "e2f2cbcf28ae", "zh": "13661e306db1", "text": "[MIT](LICENSE)."}
   ],

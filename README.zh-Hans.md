@@ -339,7 +339,7 @@ venv/bin/python -m pyflakes custom_components/loona/ tests/
 venv/bin/python -m mypy custom_components/loona/
 ```
 
-完整的开发测试套件固定使用 Core 2026.10.0，并要求 Python 3.14.2 或更高版本。Loona 本身只需要你的 Home Assistant 所要求的 Python 版本。
+完整的开发测试套件固定使用 Core 2026.11.0，并要求 Python 3.14.2 或更高版本。Loona 本身只需要你的 Home Assistant 所要求的 Python 版本。
 
 ## 许可证
 

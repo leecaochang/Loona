@@ -1,15 +1,13 @@
 """Use real HA state, permission, schema, dispatch, and connection classes."""
 
-import ctypes
 import json
 import logging
 from pathlib import Path
-import sys
 from types import MappingProxyType
 
 import pytest
-import orjson
 
+from homeassistant import config_entries
 from homeassistant.auth.models import Group, User
 from homeassistant.auth.permissions.models import PermissionLookup
 from homeassistant.components import websocket_api
@@ -26,6 +24,8 @@ async def hass(tmp_path):
     """Create a genuine Core with its native websocket command table."""
     instance = HomeAssistant(str(tmp_path))
     instance.config.skip_pip = True
+    instance.config_entries = config_entries.ConfigEntries(instance, {})
+    await instance.config_entries.async_initialize()
     dr.async_setup(instance)
     await dr.async_load(instance, load_empty=True)
     await er.async_load(instance, load_empty=True)
@@ -33,21 +33,6 @@ async def hass(tmp_path):
     yield instance
     await instance.async_block_till_done()
     await instance.async_stop(force=True)
-
-
-def pytest_configure():
-    """Keep orjson 3.11.9's heap type alive until the test process exits.
-
-    Fragment instances do not retain their heap type in this pinned release.
-    Native registry storage can outlive module cleanup during focused tests.
-    A process-lifetime type reference avoids dereferencing a freed type without
-    replacing native serialization or changing production dependencies.
-    """
-    if sys.implementation.name == "cpython" and orjson.__version__ == "3.11.9":
-        incref = ctypes.pythonapi.Py_IncRef
-        incref.argtypes = [ctypes.py_object]
-        incref.restype = None
-        incref(orjson.Fragment)
 
 
 @pytest.fixture
@@ -98,7 +83,7 @@ def make_connection(hass):
 @pytest.fixture
 async def loona_hass(hass):
     """Initialize real auth, entries, and registries for integration lifecycle tests."""
-    from homeassistant import auth, config_entries, loader
+    from homeassistant import auth, loader
     from homeassistant.helpers import (
         area_registry as ar,
         floor_registry as fr,
@@ -111,8 +96,6 @@ async def loona_hass(hass):
     await ar.async_load(hass, load_empty=True)
     await ir.async_load(hass, load_empty=True)
     hass.auth = await auth.auth_manager_from_config(hass, [], [])
-    hass.config_entries = config_entries.ConfigEntries(hass, {})
-    await hass.config_entries.async_initialize()
     from homeassistant.components.config import (
         area_registry,
         device_registry,

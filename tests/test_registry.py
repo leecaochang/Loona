@@ -341,7 +341,7 @@ async def test_response_error_and_concurrent_native_requests_do_not_interfere(
     sender = connection.send_message
     try:
         request(connection, output, "config/entity_registry/list_for_display")
-        assert connection.send_message is sender
+        assert connection.send_message == sender
         connection.async_handle(
             {
                 "id": connection.last_id + 1,
