@@ -253,6 +253,32 @@ async def test_word_search_entity_priority_and_display_names(settings_runtime):
         {"value": "benchmark", "label": "Loona benchmark"}]
 
 
+async def test_marketplace_labels_replace_hacs_metadata(settings_runtime):
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    from custom_components.loona.presentation import resource_labels
+    runtime = settings_runtime
+    url = "/local/community/example/card.js?v=2"
+    repository = SimpleNamespace(
+        data=SimpleNamespace(category="plugin"), display_name="Example Card",
+        generate_dashboard_resource_url=lambda: "/local/community/example/card.js?v=1")
+    manager = SimpleNamespace(repositories=SimpleNamespace(list_installed=[repository]))
+    with patch.object(runtime.hass.config_entries, "async_entries", return_value=[SimpleNamespace(runtime_data=manager)]):
+        assert resource_labels(runtime.hass, [url]) == {url: "Example Card"}
+
+
+async def test_marketplace_without_loaded_data_keeps_urls(settings_runtime):
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    from custom_components.loona.presentation import resource_labels
+    runtime = settings_runtime
+    url = "/local/community/example/card.js?v=2"
+    with patch.object(runtime.hass.config_entries, "async_entries", return_value=[SimpleNamespace()]):
+        assert resource_labels(runtime.hass, [url]) == {url: url}
+
+
 async def test_optional_hacs_labels_are_read_only_and_exact(settings_runtime):
     """Metadata names never alter URLs or label foreign resources."""
     from types import SimpleNamespace

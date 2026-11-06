@@ -17,11 +17,15 @@ def entity_label(hass: HomeAssistant, entity_id: str) -> str:
 
 
 def resource_labels(hass: HomeAssistant, urls: list[str]) -> dict[str, str]:
-    """Use optional local HACS metadata; unknown resources keep their URL."""
+    """Use optional local Marketplace or HACS metadata; unknown resources keep their URL."""
     names: dict[str, str] = {}
     try:
-        hacs = hass.data.get("hacs")
-        repositories = hacs.repositories.list_downloaded if hacs is not None else ()
+        # The Marketplace replaces HACS from Core 2026.11 and keeps its repository model.
+        if entries := hass.config_entries.async_entries("marketplace"):
+            repositories = entries[0].runtime_data.repositories.list_installed
+        else:
+            hacs = hass.data.get("hacs")
+            repositories = hacs.repositories.list_downloaded if hacs is not None else ()
     except (AttributeError, TypeError):
         repositories = ()
     for repository in repositories:
