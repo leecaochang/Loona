@@ -169,6 +169,17 @@ def test_native_section_strategies_use_built_in_cards(strategy):
     assert not resource_dependencies([config]).dynamic
 
 
+@pytest.mark.parametrize("strategy", [
+    "energy-overview", "energy", "water", "gas", "power", "light", "security", "climate", "maintenance",
+])
+def test_native_view_strategies_use_built_in_cards(strategy):
+    assert not resource_dependencies([{"views": [{"strategy": {"type": strategy}}]}]).dynamic
+
+
+def test_native_energy_dashboard_strategy_uses_built_in_cards():
+    assert not resource_dependencies([{"strategy": {"type": "energy"}}]).dynamic
+
+
 def test_uix_resolves_legacy_wrapper_without_trusting_remote_names():
     dependencies = resource_dependencies([{"type": "custom:mod-card"}])
     for url, resolved in [("/uix/uix.js?v=8.3.1", True), ("https://other.invalid/uix/uix.js", False)]:

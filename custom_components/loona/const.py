@@ -27,7 +27,8 @@ TARGET_ALL: Final = "all"
 TARGET_MODES: Final = (TARGET_SELECTED, TARGET_ALL)
 DEFAULT_DASHBOARD: Final = "lovelace"
 # Native strategies generate built-in cards; unknown strategies retain all files.
-RESOURCE_NATIVE_STRATEGIES: Final = frozenset({"common-controls", "device", "entities", "map", "iframe", "original-states", "areas", "area", "areas-overview", "home", "home-overview", "home-area", "home-media-players", "home-other-devices"})
+# The energy dashboard's custom:energy-setup-wizard-card is shipped and loaded by the frontend.
+RESOURCE_NATIVE_STRATEGIES: Final = frozenset({"climate", "common-controls", "device", "energy", "energy-overview", "entities", "gas", "light", "maintenance", "power", "security", "water", "map", "iframe", "original-states", "areas", "area", "areas-overview", "home", "home-overview", "home-area", "home-media-players", "home-other-devices"})
 CONTROL_MASTER: Final = "enabled"
 CONTROL_ENTITIES: Final = "entity_filtering"
 CONTROL_DASHBOARD_LIVE: Final = "current_dashboard_updates"
