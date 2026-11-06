@@ -27,7 +27,7 @@ TARGET_ALL: Final = "all"
 TARGET_MODES: Final = (TARGET_SELECTED, TARGET_ALL)
 DEFAULT_DASHBOARD: Final = "lovelace"
 # Native strategies generate built-in cards; unknown strategies retain all files.
-RESOURCE_NATIVE_STRATEGIES: Final = frozenset({"map", "iframe", "original-states", "areas", "area", "areas-overview", "home", "home-overview", "home-area", "home-media-players", "home-other-devices"})
+RESOURCE_NATIVE_STRATEGIES: Final = frozenset({"common-controls", "device", "entities", "map", "iframe", "original-states", "areas", "area", "areas-overview", "home", "home-overview", "home-area", "home-media-players", "home-other-devices"})
 CONTROL_MASTER: Final = "enabled"
 CONTROL_ENTITIES: Final = "entity_filtering"
 CONTROL_DASHBOARD_LIVE: Final = "current_dashboard_updates"
@@ -331,6 +331,8 @@ ENTITY_KEYS: Final = frozenset(
     {"entity", "entity_id", "entities", "badges", "camera_image", "image_entity"}
 )
 TARGET_KEYS: Final = frozenset({"device_id", "area_id", "floor_id", "label_id"})
+# Native automatic sections whose entities all come from their saved device or target.
+SCOPED_SECTION_STRATEGIES: Final = frozenset({"device", "entities"})
 # Wallpanel reads these screensaver options as entity IDs; image_url names one after a media-entity scheme.
 WALLPANEL_ENTITY_OPTIONS: Final = frozenset(
     {"screensaver_entity", "profile_entity", "image_url_entity", "camera_motion_detection_set_entity", "image_url"}

@@ -2,7 +2,7 @@
 
 [English](README.md) | 简体中文
 
-[![CI](https://github.com/leecaochang/Loona/actions/workflows/compatibility.yml/badge.svg)](https://github.com/leecaochang/Loona/actions/workflows/compatibility.yml) [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz) [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.6%2B-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io)
+[![CI](https://github.com/leecaochang/Loona/actions/workflows/compatibility.yml/badge.svg)](https://github.com/leecaochang/Loona/actions/workflows/compatibility.yml) [![Marketplace Custom](https://img.shields.io/badge/Marketplace-Custom-41BDF5.svg)](https://www.home-assistant.io/integrations/marketplace) [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.6%2B-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io)
 
 Loona 帮助你的 Home Assistant Lovelace 仪表盘更轻量地加载和运行。Loona 的工作对你是透明的：你的仪表盘、登录方式和 Home Assistant 地址都保持不变。支持任何设备，只要浏览器是较新的版本。无需代理，也无需额外软件。几秒钟即可安装。**设置好就不用管了。**
 
@@ -29,7 +29,9 @@ Loona 帮助你的 Home Assistant Lovelace 仪表盘更轻量地加载和运行�
 
 手动安装：把 `custom_components/loona` 复制到 Home Assistant 配置文件夹中的 `custom_components` 文件夹里，然后重启 Home Assistant。
 
-HACS：把 [https://github.com/leecaochang/Loona](https://github.com/leecaochang/Loona) 添加为自定义存储库，类别选择 **集成**，下载 Loona，然后重启 Home Assistant。
+市场：打开 **设置 > 市场**，选择 **从链接添加**，输入 [https://github.com/leecaochang/Loona](https://github.com/leecaochang/Loona) 并将类型选择为 **集成**，然后选择 **安装**。Loona 不在市场目录中，因此添加它需要连接 GitHub。
+
+从 Home Assistant 2026.11 起，首次安装后无需重启，市场会直接进入下面的第 2 步。更新仍需要重启。在较旧版本上，请把 Loona 添加为 HACS 的自定义存储库，类别选择 **集成**，下载后重启 Home Assistant。
 
 然后进行设置：
 
@@ -133,9 +135,11 @@ Loona 不一定能准确判断自定义卡片或弹窗所需的每个实体。�
 | 未选择该仪表盘或用户 | 查看你未选择的仪表盘 | 在“配置”中选择该仪表盘和用户。 |
 | 在运行时才决定要读取哪些实体的模板 | 例如使用 `hass.states[variables.room]` 的 button-card 模板 | 在模板中直接写明实体，例如 `states['light.kitchen']`，或把计算移到模板传感器中，然后显示该传感器。在“配置”中添加这些实体无济于事，因为 Loona 仍无法判断该模板还可能读取哪些实体。 |
 | Loona 无法读取的 auto-entities 规则 | `template` 筛选、`/regex/` 模式，或只按 `state` 或 `attributes` 筛选的规则 | 在规则中添加 `domain`、`entity_id` 或 `area`。 |
-| 仪表盘策略 | 地图仪表盘，或由自定义策略生成的仪表盘 | 不要选择它，或编辑它并保存其卡片。 |
+| 仪表盘策略 | 地图仪表盘、由自定义策略生成的仪表盘，或 **常用控件** 部件 | 不要选择它，或编辑它并保存其卡片。 |
 | 尚未保存的自动生成的“概览”仪表盘 | 你编辑之前的默认“概览” | 编辑“概览”并保存其卡片。 |
 | 所选仪表盘或用户已不存在 | 选择后又被删除的仪表盘 | 在“配置”中重新更新仪表盘和用户选择。 |
+
+**设备** 和 **实体** 自动部件不算仪表盘策略。Loona 会读取部件中保存的设备或目标，因此该仪表盘仍会被筛选。
 
 以下情况不会让筛选停止：
 
@@ -148,7 +152,7 @@ Loona 不一定能准确判断自定义卡片或弹窗所需的每个实体。�
 
 ## 卡片文件
 
-这些文件通常是通过 HACS 安装的 JavaScript 库。每个仪表盘都会加载 Home Assistant 仪表盘资源中注册的全部卡片文件，即使该仪表盘并不使用它们。Home Assistant 自动生成的仪表盘和地图不使用自定义卡片文件。
+这些文件通常是通过市场安装的 JavaScript 库。每个仪表盘都会加载 Home Assistant 仪表盘资源中注册的全部卡片文件，即使该仪表盘并不使用它们。Home Assistant 自动生成的仪表盘和地图不使用自定义卡片文件。
 
 选择 **跳过未使用的卡片文件** 后，只会加载你的仪表盘需要的卡片文件。
 
@@ -317,7 +321,7 @@ Home Assistant 中的 Loona 设备包含以下传感器：
 
 ## 卸载
 
-在 **设置 > 设备与服务** 中移除 Loona。这会移除它的卡片文件和已保存的设置，删除 Loona 传感器的长期和短期统计数据，并在你没有编辑过 Loona 仪表盘时将其删除。请移除你自己手动放置的 Loona 卡片。如果你是通过 HACS 安装的，之后请在 HACS 中移除它的文件。
+在 **设置 > 设备与服务** 中移除 Loona。这会移除它的卡片文件和已保存的设置，删除 Loona 传感器的长期和短期统计数据，并在你没有编辑过 Loona 仪表盘时将其删除。请移除你自己手动放置的 Loona 卡片。如果你是通过市场安装的，之后请在市场中卸载它。
 
 ## 开发测试
 

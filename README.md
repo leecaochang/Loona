@@ -3,7 +3,7 @@
 
 English | [简体中文](README.zh-Hans.md)
 
-[![CI](https://github.com/leecaochang/Loona/actions/workflows/compatibility.yml/badge.svg)](https://github.com/leecaochang/Loona/actions/workflows/compatibility.yml) [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz) [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.6%2B-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io)
+[![CI](https://github.com/leecaochang/Loona/actions/workflows/compatibility.yml/badge.svg)](https://github.com/leecaochang/Loona/actions/workflows/compatibility.yml) [![Marketplace Custom](https://img.shields.io/badge/Marketplace-Custom-41BDF5.svg)](https://www.home-assistant.io/integrations/marketplace) [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.6%2B-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io)
 
 Loona helps your Home Assistant Lovelace dashboards load and run lighter. Loona acts transparently - your dashboards, login, and Home Assistant URL all stay exactly the same. Works on any device with a current browser. No proxies - no extra software. Installs in seconds. **Set it and forget it.**
 
@@ -30,7 +30,9 @@ Certain features are not supported on older versions of Home Assistant; it is re
 
 Manual install: copy `custom_components/loona` into the `custom_components` folder in your Home Assistant configuration folder, then restart Home Assistant.
 
-HACS: add [https://github.com/leecaochang/Loona](https://github.com/leecaochang/Loona) as a custom repository with category **Integration**, download Loona, then restart Home Assistant.
+Marketplace: open **Settings > Marketplace**, select **Add from link**, enter [https://github.com/leecaochang/Loona](https://github.com/leecaochang/Loona) and choose the type **Integration**, then select **Install**. Loona is not in the Marketplace catalog, so adding it needs a GitHub connection.
+
+From Home Assistant 2026.11, you do not need to restart after the first install, and the Marketplace goes straight to step 2 below. Updates still need a restart. On older versions, add Loona to HACS as a custom repository with category **Integration**, download it, then restart Home Assistant.
 
 Then set it up:
 
@@ -134,9 +136,11 @@ If none of your selected dashboards can be read, or a selected account no longer
 | The dashboard or account is not selected | Viewing a dashboard you did not select | Select the dashboard and account in Configure. |
 | A template that works out which entities to read as it runs | A button-card template such as `hass.states[variables.room]` | Name the entities directly in the template, such as `states['light.kitchen']`, or move the calculation into a template sensor and show that sensor. Adding the entities in Configure does not help, because Loona still cannot tell what else the template might read. |
 | An auto-entities rule Loona cannot read | A `template` filter, a `/regex/` pattern, or a rule that filters only by `state` or `attributes` | Add a `domain`, `entity_id` or `area` to the rule. |
-| A dashboard strategy | The Map dashboard, or a dashboard built by a custom strategy | Do not select it, or edit it and save its cards. |
+| A dashboard strategy | The Map dashboard, a dashboard built by a custom strategy, or a **Common controls** section | Do not select it, or edit it and save its cards. |
 | An unsaved auto-generated Overview | The default Overview before you edit it | Edit the Overview and save its cards. |
 | A selected dashboard or account no longer exists | A dashboard you deleted after selecting it | Update your dashboard and account choices again in Configure. |
+
+**Device** and **Entities** automatic sections do not count as dashboard strategies. Loona reads the device or target saved in the section, so that dashboard stays filtered.
 
 These do not stop filtering:
 
@@ -149,7 +153,7 @@ Missing entity IDs alone do not pause filtering.
 
 ## Card files
 
-These files are typically JavaScript libraries installed via HACS. Every dashboard loads all the card files registered in Home Assistant's dashboard resources, even if that dashboard does not use them. Home Assistant's automatically generated dashboards and maps do not use custom card files.
+These files are typically JavaScript libraries installed via the Marketplace. Every dashboard loads all the card files registered in Home Assistant's dashboard resources, even if that dashboard does not use them. Home Assistant's automatically generated dashboards and maps do not use custom card files.
 
 Selecting **Skip unused card files** will load only the card files your dashboards need.
 
@@ -320,7 +324,7 @@ Report problems at [Loona issues](https://github.com/leecaochang/Loona/issues) w
 
 ## Uninstall
 
-Remove Loona from **Settings > Devices & services**. This removes its card files and its saved settings, deletes the long-term and short-term statistics of the Loona sensors, and deletes the Loona dashboard if you have not edited it. Remove any Loona cards you manually placed yourself. If you installed through HACS, remove its files there afterward.
+Remove Loona from **Settings > Devices & services**. This removes its card files and its saved settings, deletes the long-term and short-term statistics of the Loona sensors, and deletes the Loona dashboard if you have not edited it. Remove any Loona cards you manually placed yourself. If you installed through the Marketplace, uninstall it there afterward.
 
 ## Development tests
 

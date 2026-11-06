@@ -7,7 +7,8 @@ from typing import Any
 from homeassistant.core import valid_entity_id
 
 from .const import (
-    ENTITY_KEYS, MAX_RULE_PATTERN_LENGTH, SERVER_TEMPLATE_CHIP_FIELDS, SERVER_TEMPLATE_FIELDS, TARGET_KEYS,
+    ENTITY_KEYS, MAX_RULE_PATTERN_LENGTH, SCOPED_SECTION_STRATEGIES, SERVER_TEMPLATE_CHIP_FIELDS,
+    SERVER_TEMPLATE_FIELDS, TARGET_KEYS,
     WALLPANEL_CARD_OPTIONS, WALLPANEL_ENTITY_OPTIONS,
 )
 from .templates import bubble_dependencies, template_dependencies, unparsed_dependencies
@@ -235,13 +236,14 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
         parent_type: str = "",
         server_rendered: bool = False,
         inherited: bool = False,
+        section: bool = False,
     ) -> None:
         nonlocal unknown_cards
         if isinstance(node, list):
             for index, item in enumerate(node):
                 walk(
                     item, f"{location}[{index}]", card_type, entity_id, dependency_value,
-                    parent_type, server_rendered, inherited,
+                    parent_type, server_rendered, inherited, section,
                 )
             return
         if isinstance(node, str):
@@ -266,7 +268,9 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
             return
         if not isinstance(node, dict):
             return
-        if "strategy" in node:
+        strategy = node.get("strategy")
+        if "strategy" in node and not (section and isinstance(strategy, dict)
+                                       and strategy.get("type") in SCOPED_SECTION_STRATEGIES):
             problems.add(f"{location}: dashboard strategy cannot be scoped")
         node_type = node.get("type")
         if isinstance(node_type, str):
@@ -315,6 +319,7 @@ def discover(config: dict[str, Any], context: DiscoveryContext) -> DiscoveryResu
                 parent_type,
                 server_rendered or display,
                 inherited,
+                key == "sections" and card_type in {"", "sections"},
             )
 
     config, templates = button_card_templates(config)

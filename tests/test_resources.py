@@ -152,6 +152,7 @@ def test_value_templates_keep_static_resource_dependencies():
     {"type": "custom:unknown", "styles": "{{ 'unknown contract' }}"},
     {"type": "custom:button-card", "styles": {"nested": {"type": "${vars[0]}"}}},
     {"strategy": {"type": "custom:generated"}},
+    {"views": [{"sections": [{"strategy": {"type": "custom:generated"}}]}]},
     {"type": "custom:config-template-card", "card": "${vars[0]}"},
     {"type": "custom:decluttering-card", "template": "[[template_name]]"},
     {"type": "custom:bubble-card", "styles": ".bubble { color: ${document.createElement('other-card')}; }"},
@@ -160,6 +161,12 @@ def test_value_templates_keep_static_resource_dependencies():
 ])
 def test_card_generating_and_unknown_templates_remain_dynamic(config):
     assert resource_dependencies([config]).dynamic
+
+
+@pytest.mark.parametrize("strategy", ["common-controls", "device", "entities"])
+def test_native_section_strategies_use_built_in_cards(strategy):
+    config = {"views": [{"sections": [{"strategy": {"type": strategy}}]}]}
+    assert not resource_dependencies([config]).dynamic
 
 
 def test_uix_resolves_legacy_wrapper_without_trusting_remote_names():

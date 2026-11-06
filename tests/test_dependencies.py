@@ -6,6 +6,7 @@ from custom_components.loona.dependencies import (
     DiscoveryContext,
     describe_problem,
     discover,
+    discover_views,
     valid_glob,
 )
 from custom_components.loona.resources import resource_dependencies
@@ -309,6 +310,50 @@ def test_unknown_custom_card_reports_warning_without_blanket_bypass():
     )
     assert result.complete and result.warnings
     assert result.entity_ids == {"sensor.example"}
+
+
+def test_automatic_sections_are_scoped_from_their_saved_device_and_target():
+    context = DiscoveryContext(
+        frozenset({"sensor.car", "light.kitchen", "light.spare", "sensor.other"}),
+        targets={
+            "device_id": {"car": frozenset({"sensor.car"})},
+            "area_id": {"kitchen": frozenset({"light.kitchen"})},
+        },
+    )
+    config = {"views": [
+        {"path": "device", "type": "sections", "sections": [
+            {"strategy": {"type": "device", "device_id": "car", "categories": ["control"]}},
+        ]},
+        {"path": "lights", "sections": [
+            {"strategy": {"type": "entities", "entity_types": ["light"],
+                          "target": {"area_id": ["kitchen"], "entity_id": ["light.spare"]}}},
+        ]},
+    ]}
+    result = discover(config, context)
+    assert result.complete and not result.problems
+    assert result.entity_ids == {"sensor.car", "light.kitchen", "light.spare"}
+    assert result.targets["device_id"] == {"car"} and result.targets["area_id"] == {"kitchen"}
+    assert discover_views(config, context) == {
+        "0": frozenset({"sensor.car"}), "device": frozenset({"sensor.car"}),
+        "1": frozenset({"light.kitchen", "light.spare"}), "lights": frozenset({"light.kitchen", "light.spare"}),
+    }
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        # Usage predictions come from the backend when the section renders.
+        {"views": [{"sections": [{"strategy": {"type": "common-controls"}}]}]},
+        {"views": [{"sections": [{"strategy": {"type": "custom:rooms", "device_id": "car"}}]}]},
+        {"views": [{"sections": [{"strategy": "device"}]}]},
+        # These names only mean automatic sections in a view's sections.
+        {"views": [{"strategy": {"type": "device", "device_id": "car"}}]},
+        {"strategy": {"type": "entities"}},
+        {"views": [{"cards": [{"type": "custom:tabs", "sections": [{"strategy": {"type": "device"}}]}]}]},
+    ],
+)
+def test_other_strategies_stay_unreadable(config):
+    assert "strategy" in " ".join(discover(config, DiscoveryContext()).problems)
 
 
 def test_custom_device_card_includes_every_entity_of_its_device():

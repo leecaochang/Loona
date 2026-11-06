@@ -14,6 +14,7 @@ from homeassistant.helpers import (
 )
 
 from custom_components.loona.const import DOMAIN
+from custom_components.loona.dashboard import discovery_context
 from custom_components.loona.diagnostics import async_get_config_entry_diagnostics
 from custom_components.loona.runtime import LoonaRuntime
 
@@ -387,6 +388,16 @@ async def test_diagnostics_redact_identifiers_and_patterns(runtime, loona_hass):
 async def test_dashboard_devices_are_actual_children(runtime, loona_hass):
     child = dr.async_get(loona_hass).async_get(runtime.dashboard_devices["wall-panel"])
     assert child.parent_device_id == runtime.device_id
+
+
+async def test_device_targets_cover_their_direct_child_devices(runtime, loona_hass):
+    child = runtime.dashboard_devices["wall-panel"]
+    entry = er.async_get(loona_hass).async_get_or_create(
+        "sensor", "test", "child-device-entity", device_id=child
+    )
+    targets = discovery_context(loona_hass).targets["device_id"]
+    assert entry.entity_id in targets[child]
+    assert entry.entity_id in targets[runtime.device_id]
 
 
 async def test_later_command_owner_preserved_and_known_connections_bypass(

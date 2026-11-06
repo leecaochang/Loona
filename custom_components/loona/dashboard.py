@@ -91,6 +91,9 @@ def discovery_context(hass: HomeAssistant) -> DiscoveryContext:
         if entry.device_id:
             targets["device_id"][entry.device_id].add(entry.entity_id)
         device = devices.async_get(entry.device_id) if entry.device_id else None
+        # A device target also covers its direct child devices.
+        if parent_id := getattr(device, "parent_device_id", None):
+            targets["device_id"][parent_id].add(entry.entity_id)
         area_id = (
             area_helper(hass, entry) if area_helper is not None
             else entry.area_id or (device.area_id if device else None)
